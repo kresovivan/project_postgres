@@ -6804,4 +6804,4 @@ SELECT
     dt::date - extract(isodow FROM dt::date)::integer as result
 FROM generate_series('2024-03-11'::date, '2024-03-31'::date, '1 day') as dt;
 
-/*Теория принятия решениу rewrewrw             й*/
+/*Теория принятия решений */
