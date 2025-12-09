@@ -40,33 +40,31 @@ LIMIT для получения N записей на группу
 Функциями, возвращающими таблицы (например, unnest())
 */
 
-CREATE TABLE projects (
-    id int,
-    name text,
+CREATE TABLE projects
+(
+    id         int,
+    name       text,
     start_date date,
-    end_date date
+    end_date   date
 );
 
-INSERT INTO projects VALUES
-(1, 'Проект А', '2024-01-01', '2024-01-10'),
-(2, 'Проект Б', '2024-02-01', '2024-02-05');
+INSERT INTO projects
+VALUES (1, 'Проект А', '2024-01-01', '2024-01-10'),
+       (2, 'Проект Б', '2024-02-01', '2024-02-05');
 /*Календарь*/
-SELECT
-	p.name,
-	d.day_date
-FROM
-	projects p
-CROSS JOIN LATERAL (
-	SELECT
-		generate_series(
-        p.start_date, -- видим p.start_date!
-		p.end_date, -- видим p.end_date!
-        INTERVAL '1 day')::date AS day_date) d;
+SELECT p.name,
+       d.day_date
+FROM projects p
+         CROSS JOIN LATERAL (
+    SELECT generate_series(
+                   p.start_date, -- видим p.start_date!
+                   p.end_date, -- видим p.end_date!
+                   INTERVAL '1 day')::date AS day_date) d;
 
- /* 
- * 
+/*
  *
- * 
+ *
+ *
 1. "Какая цель этого отчета?" (мониторинг, отчетность, принятие решений)
 2. "Как часто нужны данные?" (ежедневно, еженедельно, в реальном времени)
 3. "Кто будет использовать?" (топ-менеджмент, аналитики, регуляторы)
@@ -74,7 +72,7 @@ CROSS JOIN LATERAL (
 5. "Есть ли ограничения по производительности?" (время выполнения запроса)
 
 ✅ 1. Цель и бизнес-задача
-✅ 2. Пользователи и их потребности  
+✅ 2. Пользователи и их потребности
 ✅ 3. Периодичность и сроки
 ✅ 4. Источники данных
 ✅ 5. Метрики и KPI
@@ -86,11 +84,7 @@ CROSS JOIN LATERAL (
 */
 
 
-
-
-
-
-/*Моргунов Евгений 
+/*Моргунов Евгений
  Общие табличные выражения
  Компания хочет определить пассажиропоток (количество
  пассажиров в единицу времени), проходящий через все аэропорты,
@@ -98,54 +92,48 @@ CROSS JOIN LATERAL (
  зависит необходимая численность персонала и размеры платежей за
  использование наземных служб.
  Пассажиропоток идет в двух направлениях - вылет пассажиров и их
- прибытие, - поэтому для каждого аэропорта нам нужно получить общее 
+ прибытие, - поэтому для каждого аэропорта нам нужно получить общее
  количество как вылетевших пассажиров, так и прибывших.
  Для нас не имеет значения, каким рейсом вылетает пассажир, а важно лишь то,
  откуда и куда он летит.
  Установить это можно, соединив таблицы flights и boarding_passes по столбцу
  flight_id.
- Первая таблица содержит сведения об аэрпортах вылета и прибытия для каждого 
+ Первая таблица содержит сведения об аэрпортах вылета и прибытия для каждого
  пассажира.
  Если теперь сгрупиировать полученные строки по коду аэропорта отправления или
  прибытия и подсчитать их, то мы решим поставленную задачу.
- 
+
  **/
 
 /*Запрос выполняется 300 миллисекунд*/
-EXPLAIN ANALYZE 
-SELECT 
-td.departure_airport AS "Код а/п",
-a.airport_name AS "Аэропорт",
-td.dep_pass_count AS "Вылетели",
-ta.arr_pass_count AS "Прибыли",
-td.dep_pass_count + ta.arr_pass_count AS "Всего"
-FROM (
-SELECT 
-f.departure_airport,
-count(*) AS dep_pass_count
-FROM boarding_passes AS bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived', 'Departed')
-AND f.scheduled_departure  >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.departure_airport
-) AS td --total_departed_pass_counts
-JOIN 
-(SELECT 
-f.arrival_airport, 
-count(*) AS arr_pass_count
-FROM boarding_passes AS bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived','Departed')
-AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.arrival_airport 
-) AS ta --total_arrived_pass_counts
-ON td.departure_airport = ta.arrival_airport 
-JOIN airports AS a ON a.airport_code = td.departure_airport 
-ORDER BY "Всего" DESC
+EXPLAIN ANALYZE
+SELECT td.departure_airport                  AS "Код а/п",
+       a.airport_name                        AS "Аэропорт",
+       td.dep_pass_count                     AS "Вылетели",
+       ta.arr_pass_count                     AS "Прибыли",
+       td.dep_pass_count + ta.arr_pass_count AS "Всего"
+FROM (SELECT f.departure_airport,
+             count(*) AS dep_pass_count
+      FROM boarding_passes AS bp
+               JOIN flights AS f ON f.flight_id = bp.flight_id
+      WHERE f.status IN ('Arrived', 'Departed')
+        AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+      GROUP BY f.departure_airport) AS td --total_departed_pass_counts
+         JOIN
+     (SELECT f.arrival_airport,
+             count(*) AS arr_pass_count
+      FROM boarding_passes AS bp
+               JOIN flights AS f ON f.flight_id = bp.flight_id
+      WHERE f.status IN ('Arrived', 'Departed')
+        AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+      GROUP BY f.arrival_airport) AS ta --total_arrived_pass_counts
+     ON td.departure_airport = ta.arrival_airport
+         JOIN airports AS a ON a.airport_code = td.departure_airport
+ORDER BY "Всего" DESC;
 
-/*Для уменьшения времени выполнения запроса можно заранее 
+/*Для уменьшения времени выполнения запроса можно заранее
  *сгруппировать строки таблицы "Посадочные талоны" по идентификаторам
- *рейсов flight_id во вложенном подзапросе. Для каждого рейcа эта группировка будет 
+ *рейсов flight_id во вложенном подзапросе. Для каждого рейcа эта группировка будет
  *содержать ровно одну строку с количеством пассажиров. После этого каждая строка
  *таблицы "Рейсы" flights, отобранная в предложении where, будет соединятся только
  *с одной строкой полученной группировки. Конечно, в подзапросах первого уровня
@@ -156,91 +144,79 @@ ORDER BY "Всего" DESC
  **/
 
 /*180 миллисекунд*/
-EXPLAIN ANALYZE 
-SELECT 
-td.departure_airport AS "Код а/п",
-a.airport_name AS "Аэропорт",
-td.dep_pass_count AS "Вылетели",
-td.dep_pass_count + ta.arr_pass_count AS "Всего"
-FROM (
-SELECT 
-f.departure_airport,
-sum(pass_count) AS dep_pass_count
-FROM (SELECT flight_id, count(*) AS pass_count
-FROM boarding_passes
-GROUP BY flight_id) AS bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived', 'Departed')
-AND f.scheduled_departure  >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.departure_airport
-) AS td --total_departed_pass_counts
-JOIN 
-(SELECT 
-f.arrival_airport, sum(pass_count) AS arr_pass_count
-FROM (SELECT flight_id, count(*) AS pass_count
-FROM boarding_passes
-GROUP BY flight_id) AS bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived','Departed')
-AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.arrival_airport 
-) AS ta --total_arrived_pass_counts
-ON td.departure_airport = ta.arrival_airport 
-JOIN airports AS a ON a.airport_code = td.departure_airport 
-ORDER BY "Всего" DESC
+EXPLAIN ANALYZE
+SELECT td.departure_airport                  AS "Код а/п",
+       a.airport_name                        AS "Аэропорт",
+       td.dep_pass_count                     AS "Вылетели",
+       td.dep_pass_count + ta.arr_pass_count AS "Всего"
+FROM (SELECT f.departure_airport,
+             sum(pass_count) AS dep_pass_count
+      FROM (SELECT flight_id, count(*) AS pass_count
+            FROM boarding_passes
+            GROUP BY flight_id) AS bp
+               JOIN flights AS f ON f.flight_id = bp.flight_id
+      WHERE f.status IN ('Arrived', 'Departed')
+        AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+      GROUP BY f.departure_airport) AS td --total_departed_pass_counts
+         JOIN
+     (SELECT f.arrival_airport,
+             sum(pass_count) AS arr_pass_count
+      FROM (SELECT flight_id, count(*) AS pass_count
+            FROM boarding_passes
+            GROUP BY flight_id) AS bp
+               JOIN flights AS f ON f.flight_id = bp.flight_id
+      WHERE f.status IN ('Arrived', 'Departed')
+        AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+      GROUP BY f.arrival_airport) AS ta --total_arrived_pass_counts
+     ON td.departure_airport = ta.arrival_airport
+         JOIN airports AS a ON a.airport_code = td.departure_airport
+ORDER BY "Всего" DESC;
 
 /*Можно упростить данный запрос не потеряв в скорости
- *Вложенный подзапрос, агрегирующий таблицу посадочные талоны, 
+ *Вложенный подзапрос, агрегирующий таблицу посадочные талоны,
  *выполняется дважды воспользуемся CTE*/
 
 
 /*Время выполнения 95 миллисекнд
  * Исходя из плана запроса видно что таблица bp используется дважды
  * узлы CTE Scan on bp и поэтому по умолчанию матерализуется
- * Это означает, что результат первого и единственного выполнения подзапроса 
+ * Это означает, что результат первого и единственного выполнения подзапроса
  * bp сохраняется, а при повторном обращении к таблице bp берутся уже
  * готовые материализованные данные
  * Если же результат вычисления общего табличного выражения используется
  * в запросе только один раз, то по умолчанию материализации не происходит
  * В таком случае в плане не будет CTE Scan и подзапрос встраивается непо
  * средственно в запрос и оптимизируется вместе с ним!!!
- * В ряде случаев управление материализацией MATERIALIZED и NOT 
+ * В ряде случаев управление материализацией MATERIALIZED и NOT
  * MATERIALIZED позволяет ускорить выполнение запросов (с.82)*/
 EXPLAIN
-WITH bp AS (
-SELECT flight_id, count(*) AS pass_count
-FROM boarding_passes
-GROUP BY flight_id
-) ---общее табличное выражение
+WITH bp AS (SELECT flight_id, count(*) AS pass_count
+            FROM boarding_passes
+            GROUP BY flight_id) ---общее табличное выражение
 
-SELECT 
-td.departure_airport AS "Код а/п",
-a.airport_name AS "Аэропорт",
-td.dep_pass_count AS "Вылетели",
-ta.arr_pass_count AS "Прибыли",
-td.dep_pass_count + ta.arr_pass_count AS "Всего"
-FROM (
-SELECT 
-f.departure_airport,
-sum(pass_count) AS dep_pass_count
-FROM bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived', 'Departed')
-AND f.scheduled_departure  >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.departure_airport
-) AS td ---total_departed_pass_counts
-JOIN 
-(SELECT 
-f.arrival_airport, sum(pass_count) AS arr_pass_count
-FROM bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived','Departed')
-AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.arrival_airport 
-) AS ta ---total_arrived_pass_counts
-ON td.departure_airport = ta.arrival_airport 
-JOIN airports AS a ON a.airport_code = td.departure_airport 
-ORDER BY "Всего" DESC
+SELECT td.departure_airport                  AS "Код а/п",
+       a.airport_name                        AS "Аэропорт",
+       td.dep_pass_count                     AS "Вылетели",
+       ta.arr_pass_count                     AS "Прибыли",
+       td.dep_pass_count + ta.arr_pass_count AS "Всего"
+FROM (SELECT f.departure_airport,
+             sum(pass_count) AS dep_pass_count
+      FROM bp
+               JOIN flights AS f ON f.flight_id = bp.flight_id
+      WHERE f.status IN ('Arrived', 'Departed')
+        AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+      GROUP BY f.departure_airport) AS td ---total_departed_pass_counts
+         JOIN
+     (SELECT f.arrival_airport,
+             sum(pass_count) AS arr_pass_count
+      FROM bp
+               JOIN flights AS f ON f.flight_id = bp.flight_id
+      WHERE f.status IN ('Arrived', 'Departed')
+        AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+      GROUP BY f.arrival_airport) AS ta ---total_arrived_pass_counts
+     ON td.departure_airport = ta.arrival_airport
+         JOIN airports AS a ON a.airport_code = td.departure_airport
+ORDER BY "Всего" DESC;
 
 
 /*Есть ли еще варианты сделать запрос более оптимальным и производительным
@@ -249,60 +225,52 @@ ORDER BY "Всего" DESC
  * Время выполнения не уменьшилось, но запрос стал более читаемым*/
 
 EXPLAIN ANALYZE
-WITH bp AS (
-SELECT flight_id, count(*) AS pass_count
-FROM boarding_passes
-GROUP BY flight_id
-), ---общее табличное выражение
+WITH bp AS (SELECT flight_id, count(*) AS pass_count
+            FROM boarding_passes
+            GROUP BY flight_id), ---общее табличное выражение
 
-total_departed_pass_counts AS (
-SELECT 
-f.departure_airport,
-sum(pass_count) AS dep_pass_count
-FROM bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived', 'Departed')
-AND f.scheduled_departure  >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.departure_airport
-),
+     total_departed_pass_counts AS (SELECT f.departure_airport,
+                                           sum(pass_count) AS dep_pass_count
+                                    FROM bp
+                                             JOIN flights AS f ON f.flight_id = bp.flight_id
+                                    WHERE f.status IN ('Arrived', 'Departed')
+                                      AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+                                    GROUP BY f.departure_airport),
 
-total_arrived_pass_counts AS (
-SELECT 
-f.arrival_airport, sum(pass_count) AS arr_pass_count
-FROM bp
-JOIN flights AS f ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived','Departed')
-AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL 
-GROUP BY f.arrival_airport)
+     total_arrived_pass_counts AS (SELECT f.arrival_airport,
+                                          sum(pass_count) AS arr_pass_count
+                                   FROM bp
+                                            JOIN flights AS f ON f.flight_id = bp.flight_id
+                                   WHERE f.status IN ('Arrived', 'Departed')
+                                     AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL
+                                   GROUP BY f.arrival_airport)
 
 
-
-SELECT 
-td.departure_airport AS "Код а/п",
-a.airport_name AS "Аэропорт",
-td.dep_pass_count AS "Вылетели",
-ta.arr_pass_count AS "Прибыли",
-td.dep_pass_count + ta.arr_pass_count AS "Всего"
-FROM total_departed_pass_counts AS td 
-JOIN total_arrived_pass_counts AS ta ON td.departure_airport = ta.arrival_airport 
-JOIN airports AS a ON a.airport_code = td.departure_airport 
-ORDER BY "Всего" DESC
+SELECT td.departure_airport                  AS "Код а/п",
+       a.airport_name                        AS "Аэропорт",
+       td.dep_pass_count                     AS "Вылетели",
+       ta.arr_pass_count                     AS "Прибыли",
+       td.dep_pass_count + ta.arr_pass_count AS "Всего"
+FROM total_departed_pass_counts AS td
+         JOIN total_arrived_pass_counts AS ta ON td.departure_airport = ta.arrival_airport
+         JOIN airports AS a ON a.airport_code = td.departure_airport
+ORDER BY "Всего" DESC;
 
 /*Когда результат подзапроса, помещенного в конструкцию WITH, используется
- * в главном запросе (или в другом подзапросе внутри WITH) только один раз, 
+ * в главном запросе (или в другом подзапросе внутри WITH) только один раз,
  * этот подзапрос по умолчанию не материализуется, а просто встраивается
  * в общий план и оптимизируется вместе с ним. А вот подзапрос с именем
  * bp по - прежнему используется более одного раза, пусть и не в главном
  * запросе, а в подзапросах находящихся как и он сам в конструкции WITH.
  * Поэтому он и в этой версии запроса материализуется и отражается под строкой
- * CTE bp. 
- * 
+ * CTE bp.
+ *
  * В рассмотренной версии остался потенциал для ускорения - соединение
  * bp и таблицы рейсы flights выполняется дважды в подзапросах
  * total_departed_pass_counts и total_arrived_pass_counts.
- * Вынесем эту операцию в отдельный запрос flights_pass_counts в 
+ * Вынесем эту операцию в отдельный запрос flights_pass_counts в
  * конструкции WITH
- * 
+ *
  * Порядок следования подзапросов в WITH имеет значение.
  * Например переставив в последнем запросе местами подзапросы flights_pass_counts
  * и bp получим ошибку: отношение bp не существует.
@@ -310,65 +278,55 @@ ORDER BY "Всего" DESC
 
 /*Время выполнения 83 миллисекунды, время выполнения еще немного уменьшилось*/
 EXPLAIN ANALYZE
-WITH bp AS MATERIALIZED  (
-SELECT flight_id, count(*) AS pass_count
-FROM boarding_passes
-GROUP BY flight_id
-), ---общее табличное выражение
+WITH bp AS MATERIALIZED (SELECT flight_id, count(*) AS pass_count
+                         FROM boarding_passes
+                         GROUP BY flight_id), ---общее табличное выражение
 
-flights_pass_counts AS (
-SELECT 
-f.departure_airport,
-f.arrival_airport,
-bp.pass_count
-FROM flights AS f 
-JOIN bp ON f.flight_id = bp.flight_id
-WHERE f.status IN ('Arrived', 'Departed')
-AND f.scheduled_departure  >= bookings.now() - '1 mon'::INTERVAL 
-),
+     flights_pass_counts AS (SELECT f.departure_airport,
+                                    f.arrival_airport,
+                                    bp.pass_count
+                             FROM flights AS f
+                                      JOIN bp ON f.flight_id = bp.flight_id
+                             WHERE f.status IN ('Arrived', 'Departed')
+                               AND f.scheduled_departure >= bookings.now() - '1 mon'::INTERVAL),
 
-total_departed_pass_counts AS (
-SELECT 
-departure_airport,
-sum(pass_count) AS dep_pass_count
-FROM flights_pass_counts 
-GROUP BY departure_airport
-),
+     total_departed_pass_counts AS (SELECT departure_airport,
+                                           sum(pass_count) AS dep_pass_count
+                                    FROM flights_pass_counts
+                                    GROUP BY departure_airport),
 
-total_arrived_pass_counts AS (
-SELECT  
-arrival_airport, sum(pass_count) AS arr_pass_count
-FROM flights_pass_counts 
-GROUP BY arrival_airport)
+     total_arrived_pass_counts AS (SELECT arrival_airport,
+                                          sum(pass_count) AS arr_pass_count
+                                   FROM flights_pass_counts
+                                   GROUP BY arrival_airport)
 
 
-SELECT 
-td.departure_airport AS "Код а/п",
-a.airport_name AS "Аэропорт",
-td.dep_pass_count AS "Вылетели",
-ta.arr_pass_count AS "Прибыли",
-td.dep_pass_count + ta.arr_pass_count AS "Всего"
-FROM total_departed_pass_counts AS td 
-JOIN total_arrived_pass_counts AS ta ON td.departure_airport = ta.arrival_airport 
-JOIN airports AS a ON a.airport_code = td.departure_airport 
-ORDER BY "Всего" DESC
+SELECT td.departure_airport                  AS "Код а/п",
+       a.airport_name                        AS "Аэропорт",
+       td.dep_pass_count                     AS "Вылетели",
+       ta.arr_pass_count                     AS "Прибыли",
+       td.dep_pass_count + ta.arr_pass_count AS "Всего"
+FROM total_departed_pass_counts AS td
+         JOIN total_arrived_pass_counts AS ta ON td.departure_airport = ta.arrival_airport
+         JOIN airports AS a ON a.airport_code = td.departure_airport
+ORDER BY "Всего" DESC;
 
 /*Рекурсивные общие табличные выражения
-*Граф это множество вершин(узлов), соединенных линиями, которые называют 
-*ребрами (дугами). 
+*Граф это множество вершин(узлов), соединенных линиями, которые называют
+*ребрами (дугами).
 *Каждое ребро соединяет две вершины.
 *
 *По графу можно перемещаться, переходя от одной вершины к другой, смежной
-*с ней, формируя определеную траекторию или путь, 
+*с ней, формируя определеную траекторию или путь,
 *как последовательность посещенных вершин или ребер.
 *Длина пути равна числу ребер, составляющих его.
-*Если путь начинается и заканчивается в одной и той же вершине 
+*Если путь начинается и заканчивается в одной и той же вершине
 *и при этом не имеет повторяющихся ребер - он называется циклом.
 *
-*Связным графом называется граф, в котором от любой вершины можно 
+*Связным графом называется граф, в котором от любой вершины можно
 *добраться до любой другой.
 *
-*Граф может быть ориентированным. 
+*Граф может быть ориентированным.
 *В этом случае его ребра имеют направление,
 *и переходить по ребру от вершины к вершине можно только в этом направлении.
 *
@@ -386,14 +344,14 @@ ORDER BY "Всего" DESC
 *
 *Деревья широко используются в информатике, в частности как структура
 *данных для индексов в СУБД.
-*Они служат также средсвтом моделирования иерархий. 
+*Они служат также средсвтом моделирования иерархий.
 *Иерархия это многоуровневая струткра, в которой элементы, принадлежащие
 *соседним уровням, связаны некторым типом взаимоотнощений.
 *В качестве примеров иерархий можно привести систему воинских званий,
 *административно-территоиальнрое деление страны, классификация биологических
 *видов, организационные структуры кмпаний и учреждений, структурное
-*устройство машин и механизмов. 
-*Отношения имеющие место в иерархии могут распространяться от более 
+*устройство машин и механизмов.
+*Отношения имеющие место в иерархии могут распространяться от более
 *высоких уровней к более низким (от коня к листьям)
 *
 *Рекурсивные общие табличные выражения и используются для обработки
@@ -402,36 +360,35 @@ ORDER BY "Всего" DESC
 
 
 WITH RECURSIVE included_parts(part, sub_part, quantity) AS
-(SELECT part, sub_part, quantity
-FROM parts
-WHERE part = 'самолет'
+                   (SELECT part, sub_part, quantity
+                    FROM parts
+                    WHERE part = 'самолет'
 
-UNION ALL 
+                    UNION ALL
 
-SELECT p.part, p.sub_part, p.quantity * ip.quantity AS quantity
-FROM included_parts ip,
-parts p
-WHERE p.part = ip.sub_part
-)
+                    SELECT p.part, p.sub_part, p.quantity * ip.quantity AS quantity
+                    FROM included_parts ip,
+                         parts p
+                    WHERE p.part = ip.sub_part)
 
 SELECT sub_part, sum(quantity) AS total_quantity
-FROM  included_parts
+FROM included_parts
 GROUP BY sub_part
 ORDER BY sub_part;
-/*в представлении структураного свойства самолета 
+/*в представлении структураного свойства самолета
  * каждая вершинаграфа соответствует какому то виду узлов или деталей,
  * а вес ребра графа соответствует количеству этих деталей, входящих
  * в состав узла более выского уровня иерархии. В результате оказывается,
- * что к некоторым вершинам графа ведет более одного пути, например - 
+ * что к некоторым вершинам графа ведет более одного пути, например -
  * к вершине, обозначающей колесо: ведь оно входит в состав передней
  * и двух основных стоек*/
 
-CREATE TABLE parts 
+CREATE TABLE parts
 (
-part text,
-sub_part text,
-quantity int NOT NULL,
-PRIMARY KEY (part,sub_part)
+    part     text,
+    sub_part text,
+    quantity int NOT NULL,
+    PRIMARY KEY (part, sub_part)
 );
 
 /*Реализация вычислительного процесса является итерационной, а не рекурсивной,
@@ -439,74 +396,63 @@ PRIMARY KEY (part,sub_part)
 
 
 WITH RECURSIVE included_parts(
-iteration, part, sub_part, tt, quantity, path_to_sub_part) AS
-(
-SELECT
-	1,
-	part,
-	sub_part,
-	COALESCE(part,sub_part) AS tt,
-	quantity,
-	part || '->' || sub_part || '(x' || quantity || ')'
-FROM
-	parts
-WHERE
-	part = 'самолет'
-UNION ALL
-SELECT
-	iteration + 1,
-	p.part,
-	p.sub_part,
-	ip.tt,
-	p.quantity * ip.quantity AS quantity,
-	ip.part || '->' || ip.sub_part || '(x' || ip.quantity || ')' ||
-CASE
-		WHEN p.part IS NOT NULL 
-THEN '->' || p.sub_part || '(x' || p.quantity || ')'
-		ELSE '-> составных частей нет'
-	END
-FROM
-	included_parts ip
-LEFT OUTER JOIN parts p ON
-	p.part = ip.sub_part
-WHERE
-	ip.part IS NOT NULL 
-)
+                              iteration, part, sub_part, tt, quantity, path_to_sub_part) AS
+                   (SELECT 1,
+                           part,
+                           sub_part,
+                           COALESCE(part, sub_part) AS tt,
+                           quantity,
+                           part || '->' || sub_part || '(x' || quantity || ')'
+                    FROM parts
+                    WHERE part = 'самолет'
+                    UNION ALL
+                    SELECT iteration + 1,
+                           p.part,
+                           p.sub_part,
+                           ip.tt,
+                           p.quantity * ip.quantity AS quantity,
+                           ip.part || '->' || ip.sub_part || '(x' || ip.quantity || ')' ||
+                           CASE
+                               WHEN p.part IS NOT NULL
+                                   THEN '->' || p.sub_part || '(x' || p.quantity || ')'
+                               ELSE '-> составных частей нет'
+                               END
+                    FROM included_parts ip
+                             LEFT OUTER JOIN parts p ON
+                        p.part = ip.sub_part
+                    WHERE ip.part IS NOT NULL)
 
-SELECT
-	iteration,
-	tt,
-	part,
-	sub_part,
-	quantity,
-	path_to_sub_part
-FROM
-	included_parts
-ORDER BY
-	iteration ASC
+SELECT iteration,
+       tt,
+       part,
+       sub_part,
+       quantity,
+       path_to_sub_part
+FROM included_parts
+ORDER BY iteration ASC
 
 /*Штатная иерархия
  * FOREIGN KEY (boss_position_id) REFERENCES staff (POSITION_ID)
-FOREIGN KEY (boss_position_id) - указывает, что столбец boss_position_id в 
+FOREIGN KEY (boss_position_id) - указывает, что столбец boss_position_id в
 этой таблице будет внешним ключом
 REFERENCES staff (POSITION_ID) - ссылается на столбец POSITION_ID в таблице staff
 Как это работает:
-Это создает иерархическую структуру внутри одной таблицы, где каждый 
+Это создает иерархическую структуру внутри одной таблицы, где каждый
 сотрудник может иметь начальника:
  */
 CREATE TABLE staff
 (
-position_id      integer PRIMARY KEY, ---id позиции
-position_title   text NOT NULL, --наименование должности
-person_name      text  NOT NULL UNIQUE, ---имя работника
-boss_position_id integer, ---id начальника
-FOREIGN KEY (boss_position_id) REFERENCES staff (position_id)
-)
-
+    position_id      integer PRIMARY KEY,  ---id позиции
+    position_title   text NOT NULL,        --наименование должности
+    person_name      text NOT NULL UNIQUE, ---имя работника
+    boss_position_id integer,              ---id начальника
+    FOREIGN KEY (boss_position_id) REFERENCES staff (position_id)
+);
 
 
 -- Вставка данных в таблицу staff
-INSERT INTO staff (position_id, position_title, person_name, boss_position_id) VALUES
+INSERT INTO staff (position_id, position_title, person_name, boss_position_id)
+VALUES
 -- Руководство (верхний уровень иерархии)
 (1, 'Генеральный директор', 'Иванов Иван Иванович', NULL),
 
@@ -532,50 +478,52 @@ INSERT INTO staff (position_id, position_title, person_name, boss_position_id) V
 (14, 'Ассистент маркетолога', 'Лебедев Артем Викторович', 10);
 
 -- Проверка вставленных данных
-SELECT * FROM staff ORDER BY position_id;
+SELECT *
+FROM staff
+ORDER BY position_id;
 /*Вывести руководителей конкретного работника*/
 
 WITH RECURSIVE search_staff
-(position_title, 
-person_name, 
-position_id, 
-boss_position_id, 
-level) AS
-(
-SELECT 
-s.position_title, 
-s.person_name, 
-s.position_id, 
-s.boss_position_id,
-1
-FROM staff s
-WHERE s.person_name = 'Кузнецов Алексей Владимирович'
+                   (position_title,
+                    person_name,
+                    position_id,
+                    boss_position_id,
+                    level) AS
+                   (SELECT s.position_title,
+                           s.person_name,
+                           s.position_id,
+                           s.boss_position_id,
+                           1
+                    FROM staff s
+                    WHERE s.person_name = 'Кузнецов Алексей Владимирович'
 
-UNION ALL
+                    UNION ALL
 
-SELECT 
-s.position_title, 
-s.person_name, 
-s.position_id, 
-s.boss_position_id,
-ss.level + 1
-FROM search_staff ss,
-staff s  
-WHERE s.position_id = ss.boss_position_id)
+                    SELECT s.position_title,
+                           s.person_name,
+                           s.position_id,
+                           s.boss_position_id,
+                           ss.level + 1
+                    FROM search_staff ss,
+                         staff s
+                    WHERE s.position_id = ss.boss_position_id)
 
 
-SELECT position_title, person_name, position_id, boss_position_id,
-(SELECT max(level) FROM search_staff) - LEVEL + 1 AS level
+SELECT position_title,
+       person_name,
+       position_id,
+       boss_position_id,
+       (SELECT max(level) FROM search_staff) - LEVEL + 1 AS level
 FROM search_staff
 ORDER BY level ASC
 
 /*Выведем подчиненных указанного работника
- * схематично как раьотает 
- * 
+ * схематично как раьотает
+ *
  * ШАГ 0: [Олег] ← начальная точка (level 1)
     ↓
 ШАГ 1: [Олег, Иван] ← нашли подчиненного (level 2)
-    ↓  
+    ↓
 ШАГ 2: [Олег, Иван, Петр, Анна] ← нашли подчиненных (level 3)
     ↓
 ШАГ 3: [Олег, Иван, Петр, Анна, Сергей, Мария] ← нашли подчиненных (level 4)
@@ -585,37 +533,34 @@ ORDER BY level ASC
 ШАГ 5: [результат тот же] ← подчиненных нет, СТОП
 */
 WITH RECURSIVE search_staff
-(position_title, 
-person_name, 
-position_id, 
-boss_position_id, 
-level) AS
-(
-SELECT 
-s.position_title, 
-s.person_name, 
-s.position_id, 
-s.boss_position_id,
-1
-FROM staff s
-WHERE s.person_name = 'Кузнецов Алексей Владимирович'
+                   (position_title,
+                    person_name,
+                    position_id,
+                    boss_position_id,
+                    level) AS
+                   (SELECT s.position_title,
+                           s.person_name,
+                           s.position_id,
+                           s.boss_position_id,
+                           1
+                    FROM staff s
+                    WHERE s.person_name = 'Кузнецов Алексей Владимирович'
 
-UNION ALL
+                    UNION ALL
 
-SELECT 
-s.position_title, 
-s.person_name, 
-s.position_id, 
-s.boss_position_id,
-ss.level + 1
-FROM search_staff ss,
-staff s  
-WHERE s.boss_position_id = ss.position_id)
+                    SELECT s.position_title,
+                           s.person_name,
+                           s.position_id,
+                           s.boss_position_id,
+                           ss.level + 1
+                    FROM search_staff ss,
+                         staff s
+                    WHERE s.boss_position_id = ss.position_id)
 
 
 SELECT position_title, person_name, position_id, boss_position_id, level
 FROM search_staff
-ORDER BY level, boss_position_id, position_id 
+ORDER BY level, boss_position_id, position_id
 
 /*Массивы в общих табличных выражениях
  * Выявление циклов.
@@ -636,25 +581,25 @@ ORDER BY level, boss_position_id, position_id
  */
 
 CREATE TABLE hier
-(vertex_from integer,
-vertex_to integer, 
-data NUMERIC,
-PRIMARY KEY (vertex_from, vertex_to)
+(
+    vertex_from integer,
+    vertex_to   integer,
+    data        NUMERIC,
+    PRIMARY KEY (vertex_from, vertex_to)
 );
-INSERT INTO hier (vertex_from, vertex_to, data) 
-VALUES 
-(1, 2, 4.7),
-(1, 3, 5.6),
-(2, 4, 6.3),
-(2, 5, 1.9),
-(3, 6, 3.5),
-(3, 7, 2.8),
-(3, 8, 4.1),
-(5, 9, 3.3),
-(5, 10, 4.5),
-(6, 11, 2.7),
-(6, 12, 1.3),
-(9, 13, 2.1);
+INSERT INTO hier (vertex_from, vertex_to, data)
+VALUES (1, 2, 4.7),
+       (1, 3, 5.6),
+       (2, 4, 6.3),
+       (2, 5, 1.9),
+       (3, 6, 3.5),
+       (3, 7, 2.8),
+       (3, 8, 4.1),
+       (5, 9, 3.3),
+       (5, 10, 4.5),
+       (6, 11, 2.7),
+       (6, 12, 1.3),
+       (9, 13, 2.1);
 
 
 SELECT distinct(vertex_from)
@@ -664,108 +609,115 @@ WHERE NOT EXISTS (SELECT 1 FROM hier h2 WHERE h2.vertex_to = h1.vertex_from)
 /*Другое решение на основе внешнего соединения*/
 SELECT DISTINCT h1.vertex_from
 FROM hier h1
-LEFT JOIN hier h2 ON h2.vertex_to = h1.vertex_from 
-WHERE h2.vertex_to IS NULL; 
+         LEFT JOIN hier h2 ON h2.vertex_to = h1.vertex_from
+WHERE h2.vertex_to IS NULL;
 
 /*Самый быстрый запрос, результат аналогичен двум предыдущим*/
-SELECT vertex_from FROM hier
-EXCEPT 
-SELECT vertex_to FROM hier 
+SELECT vertex_from
+FROM hier
+EXCEPT
+SELECT vertex_to
+FROM hier
 
 /*Например если из дерева удалить одно ребро то дерево распадется на два дерева
  * при этом каждая из двух вершин будет принадлежать разным вновь полученным
  * деревьям теперь приведем запрос, который решает основную задачу: получает пути,
  * ведущие из начала иерархии ко всем другим вершинам
- * 
- * 
+ *
+ *
 */
 
-WITH RECURSIVE search_hier(vertex_from, vertex_to, data, depth) AS 
-(
-SELECT h.vertex_from, h.vertex_to, h.data, 1
-FROM hier h
-WHERE h.vertex_from = 1
+WITH RECURSIVE search_hier(vertex_from, vertex_to, data, depth) AS
+                   (SELECT h.vertex_from, h.vertex_to, h.data, 1
+                    FROM hier h
+                    WHERE h.vertex_from = 1
 
-UNION ALL
+                    UNION ALL
 
-SELECT h.vertex_from, h.vertex_to, h.data, sh.DEPTH + 1
-FROM search_hier sh,
-hier h 
-WHERE h.vertex_from = sh.vertex_to
-)
+                    SELECT h.vertex_from, h.vertex_to, h.data, sh.DEPTH + 1
+                    FROM search_hier sh,
+                         hier h
+                    WHERE h.vertex_from = sh.vertex_to)
 
 SELECT *
-FROM search_hier 
+FROM search_hier
 ORDER BY depth, vertex_from, vertex_to
 
 
 SELECT *
-FROM hier h 
+FROM hier h
 
 /*Существует возможность представить полные пути от одной
  * вершины к другой, для этого можно воспользоваться массивами*/
 
-WITH RECURSIVE search_hier(vertex_from, vertex_to, data, depth, path) AS 
-(
-SELECT h.vertex_from, h.vertex_to, h.data, 1, 
-ARRAY[h.vertex_from, h.vertex_to] path
-FROM hier h
-WHERE h.vertex_from = 1
+WITH RECURSIVE search_hier(vertex_from, vertex_to, data, depth, path) AS
+                   (SELECT h.vertex_from,
+                           h.vertex_to,
+                           h.data,
+                           1,
+                           ARRAY [h.vertex_from, h.vertex_to] path
+                    FROM hier h
+                    WHERE h.vertex_from = 1
 
-UNION ALL
+                    UNION ALL
 
-SELECT h.vertex_from, h.vertex_to, h.data, sh.depth + 1,
-sh.path || h.vertex_to 
-FROM search_hier sh,
-hier h 
-WHERE h.vertex_from = sh.vertex_to
-)
+                    SELECT h.vertex_from,
+                           h.vertex_to,
+                           h.data,
+                           sh.depth + 1,
+                           sh.path || h.vertex_to
+                    FROM search_hier sh,
+                         hier h
+                    WHERE h.vertex_from = sh.vertex_to)
 
 SELECT *
-FROM search_hier 
+FROM search_hier
 ORDER BY depth, vertex_from, vertex_to
 
 /*Теперь мы готовы к тому чтобы научиться выявлять нарушения
  * структуры иерархии: присуствие циклов и наличие более одного
  * пути от начала иерархии (корня дерева к вершинам)*/
 
-INSERT INTO hier 
-VALUES 
-(5,2, 3.8),
-(11,3, 7.4)
+INSERT INTO hier
+VALUES (5, 2, 3.8),
+       (11, 3, 7.4)
 
 
-WITH RECURSIVE search_hier(vertex_from, vertex_to, data, depth, PATH, cycle) AS 
-(
-SELECT h.vertex_from, h.vertex_to, h.data, 1, 
-ARRAY[h.vertex_from, h.vertex_to] PATH, ----path
-FALSE ----выявление циклов (cycle)
-FROM hier h
-WHERE h.vertex_from = 1
+WITH RECURSIVE search_hier(vertex_from, vertex_to, data, depth, PATH, cycle) AS
+                   (SELECT h.vertex_from,
+                           h.vertex_to,
+                           h.data,
+                           1,
+                           ARRAY [h.vertex_from, h.vertex_to] PATH, ----path
+                           FALSE                                    ----выявление циклов (cycle)
+                    FROM hier h
+                    WHERE h.vertex_from = 1
 
-UNION ALL
+                    UNION ALL
 
-SELECT h.vertex_from, h.vertex_to, h.data, sh.depth + 1,
-sh.path || h.vertex_to,
-h.vertex_to = ANY(sh.path)
-FROM search_hier sh,
-hier h 
-WHERE h.vertex_from = sh.vertex_to
-AND NOT sh.cycle
-)
+                    SELECT h.vertex_from,
+                           h.vertex_to,
+                           h.data,
+                           sh.depth + 1,
+                           sh.path || h.vertex_to,
+                           h.vertex_to = ANY (sh.path)
+                    FROM search_hier sh,
+                         hier h
+                    WHERE h.vertex_from = sh.vertex_to
+                      AND NOT sh.cycle)
 
 SELECT *
-FROM search_hier 
-ORDER BY depth, vertex_from, vertex_to
+FROM search_hier
+ORDER BY depth, vertex_from, vertex_to;
 
 /*Поиск маршрута между двумя городами, между которыми, возможно нет, прямого
- * сообщения. 
+ * сообщения.
  * Но даже если оно существует, у пассажира может возникнуть
- * необходимость в маршруте с пересадками, 
+ * необходимость в маршруте с пересадками,
  * если например, на более удобные рейсы закончились билеты
- * 
- * Обратите внимание, что для каждой пары городов, между коорыми установлено 
- * сообщение, в таблице (точнее говоря, представлении) "Маршруты" routes 
+ *
+ * Обратите внимание, что для каждой пары городов, между коорыми установлено
+ * сообщение, в таблице (точнее говоря, представлении) "Маршруты" routes
  * находятся две строки: для рейсов в прямом и в обратном направлениях.
  * Таким образом, мы имеем дело с ориентированным графом, причем для каждой пары
  * вершин a и b существует два ребра: (a, b) и (b, a).
@@ -773,72 +725,68 @@ ORDER BY depth, vertex_from, vertex_to
  * Важно, что мы ищем только маршрут, то есть определяем принципиальную
  * возможность перемещения между городами, а не подбираем конкретные рейсы
  * с учетом их стыковок по времени вылета!!!
- * 
+ *
  * Представим стратегию поиска, которая позволит выбрать не только самый
  * короткий (по числу перелдетов) маршрут, но и более длинные маршруты.
- * 
+ *
  * 1.Сформировать маршруты из исходного города в те города, в которые из него
  * выполняются прямые рейсы.
- * 
- * 2.Удлинить формируемые маршруты на один перелет, добавив к текущему конечному 
- * пункту те города, в которые есть прямые рейсы из него. 
+ *
+ * 2.Удлинить формируемые маршруты на один перелет, добавив к текущему конечному
+ * пункту те города, в которые есть прямые рейсы из него.
  * Если текущий конечный пункт какого-либо маршрута (до его удлинения) является
  * целевым городом, то прокладывать дальнейший маршрут из него уже не нужно,
  * однако необходимо записать полученный маршрут в результирующий список
  * машрутов.
- * 
+ *
  * В составе каждого формируемого маршрута не должно быть повторяющихся городов
  * - циклы недопустимы.
- * 
+ *
  * Процесс удлинения продолжается, пока не достигнута заданная предельная длина
  * маршрута (число перелетов между городами)!!!
- * 
- * 3.Выбрать из сформированных маршрутов только те, в которых конечной точкой 
+ *
+ * 3.Выбрать из сформированных маршрутов только те, в которых конечной точкой
  * является целевой город!!!
- * 
+ *
  * Как пример проложим машрут из Новосибирска в Краснодар. При этом будем ограничивать
  * предельное число перелетов, скажем, четырьмя. Алгоритм не изменится, если
  * число перелетов будет и большим, но негуманно заставлять пассажира совершать
  * так много пересадок.
- * 
+ *
  * */
 
-EXPLAIN ANALYZE 
-WITH RECURSIVE 
-search_route(
-city_from, 
-city_to, 
-transfers, 
-route) 
-AS
-(
-SELECT DISTINCT ON (arrival_city)
-departure_city,
-arrival_city,
-1,
-ARRAY[departure_city, arrival_city]
-FROM routes 
-WHERE departure_city = 'Новосибирск'
+EXPLAIN ANALYZE
+WITH RECURSIVE search_route(
+                            city_from,
+                            city_to,
+                            transfers,
+                            route)
+                   AS
+                   (SELECT DISTINCT ON (arrival_city) departure_city,
+                                                      arrival_city,
+                                                      1,
+                                                      ARRAY [departure_city, arrival_city]
+                    FROM routes
+                    WHERE departure_city = 'Новосибирск'
 
-UNION ALL
+                    UNION ALL
 
-SELECT DISTINCT ON (sr.route || r.arrival_city)
-r.departure_city,
-r.arrival_city,
-transfers + 1,
-sr.route || r.arrival_city
-FROM search_route sr 
-JOIN routes AS r ON r.departure_city = sr.city_to
-WHERE sr.city_to <> 'Краснодар'
-AND sr.transfers <=4
-AND r.arrival_city <> ALL(sr.route) --- Предотвращение петель и циклов в графе маршрутов
-)
+                    SELECT DISTINCT ON (sr.route || r.arrival_city) r.departure_city,
+                                                                    r.arrival_city,
+                                                                    transfers + 1,
+                                                                    sr.route || r.arrival_city
+                    FROM search_route sr
+                             JOIN routes AS r ON r.departure_city = sr.city_to
+                    WHERE sr.city_to <> 'Краснодар'
+                      AND sr.transfers <= 4
+                      AND r.arrival_city <> ALL (sr.route) --- Предотвращение петель и циклов в графе маршрутов
+                   )
 
-SELECT transfers AS "Число перелетов", 
-array_to_string(route, ' - ') AS "Маршрут"
-FROM search_route 
+SELECT transfers                     AS "Число перелетов",
+       array_to_string(route, ' - ') AS "Маршрут"
+FROM search_route
 WHERE city_to = 'Краснодар'
-ORDER BY transfers, route
+ORDER BY transfers, route;
 
 
 /*Модификации данных в общем табличном выражении
@@ -847,15 +795,15 @@ ORDER BY transfers, route
  * и команды изменения данных: вставку, обновление, удаление строк.
  * Можно как пример переместить данные из оперативных таблиц в архивные
  * учитывая специфику предметной области, размеры таблиц и скорость
- * приращения числа записей. В нашем случае в рамках одной 
+ * приращения числа записей. В нашем случае в рамках одной
  * операции бронирования может быть оформлено более одного перелета,
- * которые могут выполняться в разные даты. 
- * Мы изберем такую стратегию: 
- * 
+ * которые могут выполняться в разные даты.
+ * Мы изберем такую стратегию:
+ *
  * 1.Из оперативных таблиц Перелеты ticket_flights, Посадочные талоны boarding_passes
  * и Рейсы flights будем переносить в архивные таблицы записи, относящиеся к рейсам
  * "возраст" которых не менее тридцати дней. Речь идет о рейсах, которые уже
- * завершены или отменены. Важно то, что мы недопустим ситуацию, когда из 
+ * завершены или отменены. Важно то, что мы недопустим ситуацию, когда из
  * оперативной таблицы Посадочные талоны boarding_passes в архивную перенесена
  * лишь часть записей, относящихся к конкретному рейсу. Однако при этом возможна
  * ситуация, когда часть записей о перелетах, относящихся к одному и тому же
@@ -867,108 +815,112 @@ ORDER BY transfers, route
  * С таблицей бронирования поступим аналогичным образом: будем переносить
  * в архивную таблицу те строки, у которых нет связанных строк в таблице
  * Билеты (tickets), то есть бронирования, осташиеся без билетов.
- * 
- * При выбранной стратегии сохраняется возможность получить полную стоимость 
+ *
+ * При выбранной стратегии сохраняется возможность получить полную стоимость
  * даже тех бронирований, часть записей о перелетах которых уже перенсена
  * в архив. Это возможно благодаря тому, что в таблице бронирований bookings
  * есть столбец total_amount, содержащий полную стоиомость бронирования, которая
  * складывается из стоимостей всех входящих в него перелетов. Это пример
  * контролируемой избыточности в базе данных.
- * 
+ *
  * Прежде всего создадим архивные таблицы. Заполнять данными их, конечно не будем.
  * Создавать первичные и внешние ключи тоже не станем, поскольку данные, которые
  * будут вводиться в ахивные таблицы, не будут согласованными: связанные данные
  * могут разрываться между оперативными и архивными таблицами.
- * Например в архив может быть перенесена лишь часть записей о перелетах, 
+ * Например в архив может быть перенесена лишь часть записей о перелетах,
  * оформленных в одном билете.
  * */
 
-CREATE TABLE flights_arch AS 
-SELECT * FROM flights WITH NO DATA;
+CREATE TABLE flights_arch AS
+SELECT *
+FROM flights WITH NO DATA;
 
-CREATE TABLE bookings_arch AS 
-SELECT * FROM bookings WITH NO DATA;
+CREATE TABLE bookings_arch AS
+SELECT *
+FROM bookings WITH NO DATA;
 
-CREATE TABLE tickets_arch AS 
-SELECT * FROM tickets WITH  NO DATA;
+CREATE TABLE tickets_arch AS
+SELECT *
+FROM tickets WITH NO DATA;
 
-CREATE TABLE ticket_flights_arch AS 
-SELECT * FROM ticket_flights WITH NO DATA;
+CREATE TABLE ticket_flights_arch AS
+SELECT *
+FROM ticket_flights WITH NO DATA;
 
-CREATE TABLE boarding_passes_arch AS 
-SELECT * FROM boarding_passes WITH NO DATA;
+CREATE TABLE boarding_passes_arch AS
+SELECT *
+FROM boarding_passes WITH NO DATA;
 
 /*Переносим в архив истоию рейсов, совершенных
  * не менее 30 дней назад:*/
 
-BEGIN 
+BEGIN;
 INSERT INTO flights_arch
-SELECT * FROM flights
-WHERE bookings.now()::date - scheduled_departure::date >=30;
+SELECT *
+FROM flights
+WHERE bookings.now()::date - scheduled_departure::date >= 30;
 
 INSERT INTO ticket_flights_arch
-SELECT tf.* 
+SELECT tf.*
 FROM ticket_flights AS tf,
-flights AS f
-WHERE bookings.now()::date - f.scheduled_departure::date >=30
-AND tf.flight_id = f.flight_id;
+     flights AS f
+WHERE bookings.now()::date - f.scheduled_departure::date >= 30
+  AND tf.flight_id = f.flight_id;
 
 INSERT INTO boarding_passes_arch
-SELECT bp.* 
-FROM  boarding_passes AS bp,
-flights AS f
-WHERE bookings.now()::date - f.scheduled_departure::date >=30
-AND bp.flight_id = f.flight_id;
+SELECT bp.*
+FROM boarding_passes AS bp,
+     flights AS f
+WHERE bookings.now()::date - f.scheduled_departure::date >= 30
+  AND bp.flight_id = f.flight_id;
 
-ROLLBACK 
+ROLLBACK
 
 /*Удалим таблицы в рамках тразакции в CTE*/
-BEGIN 
-	
-WITH deleted_f AS 
-(DELETE FROM flights 
-WHERE bookings.now()::date - scheduled_departure::date >=30
-RETURNING *
-),	
+BEGIN;
 
-deleted_tf AS 
-(DELETE FROM ticket_flights AS tf 
-USING deleted_f AS df
-WHERE tf.flight_id = df.flight_id
-RETURNING tf.*
-), 
+WITH deleted_f AS
+         (DELETE FROM flights
+             WHERE bookings.now()::date - scheduled_departure::date >= 30
+             RETURNING *),
 
-deleted_bp AS 
-(DELETE FROM boarding_passes AS bp 
-USING deleted_f AS df
-WHERE bp.flight_id = df.flight_id
-RETURNING bp.*
-), 
+     deleted_tf AS
+         (DELETE FROM ticket_flights AS tf
+             USING deleted_f AS df
+             WHERE tf.flight_id = df.flight_id
+             RETURNING tf.*),
 
-inserted_bp AS 
-(INSERT INTO boarding_passes_arch
+     deleted_bp AS
+         (DELETE FROM boarding_passes AS bp
+             USING deleted_f AS df
+             WHERE bp.flight_id = df.flight_id
+             RETURNING bp.*),
+
+     inserted_bp AS
+         (INSERT INTO boarding_passes_arch
+             SELECT *
+             FROM deleted_bp),
+
+     inserted_tf AS
+         (INSERT INTO ticket_flights_arch
+             SELECT *
+             FROM deleted_tf)
+INSERT
+INTO flights_arch
 SELECT *
-FROM deleted_bp
-), 
+FROM deleted_f;
 
-inserted_tf AS 
-(INSERT INTO ticket_flights_arch
-SELECT *
-FROM deleted_tf
-)
-INSERT INTO flights_arch
-SELECT * FROM deleted_f;
-
-SELECT count(*) FROM boarding_passes_arch bpa 
+SELECT count(*)
+FROM boarding_passes_arch bpa
 ROLLBACK
 
 
 /*Материализация общего табличного выражения может
  * влиять на скорость выполнения всего запроса
- * Поскольку результат выполнения подзапроса, 
+ * Поскольку результат выполнения подзапроса,
  * представленного в конструкции with используется в главном
  * запросе более одного раза, то по умолчанию запрос
- * материализуется - в плане присутствуют CTE Scan. 
+ * материализуется - в плане присутствуют CTE Scan.
  * При выполнении
  * подзапроса aps создается временная таблица с таким же именем.
  * Для соединения двух наборов строк используется метод вложенного
@@ -978,7 +930,7 @@ ROLLBACK
  * скалярные текстовые значения, а не объекты json поскольку при
  * материализации подзапроса для каждой строки были вычислены
  * выражения с оператором -->, предусмотренные представлением.
- * 
+ *
  * Материализация подзапроса означает, что результаты его выполнения
  * сохраняются во временной таблице, и повторная выборка проихзводится
  * уже из нее.
@@ -988,7 +940,7 @@ EXPLAIN (VERBOSE, ANALYZE, BUFFERS)
 WITH aps AS (SELECT * FROM airports)
 SELECT count(*)
 FROM aps AS a1
-JOIN aps AS a2 ON a1.city <> a2.city;
+         JOIN aps AS a2 ON a1.city <> a2.city;
 
 /*
 QUERY PLAN                                                                                                            |
@@ -1002,8 +954,8 @@ Aggregate  (cost=155.78..155.78 rows=1 width=8) (actual time=3.667..3.668 rows=1
         ->  CTE Scan on aps a1  (cost=0.00..1.04 rows=104 width=32) (actual time=0.056..0.065 rows=104 loops=1)       |
         ->  CTE Scan on aps a2  (cost=0.00..1.04 rows=104 width=32) (actual time=0.000..0.013 rows=104 loops=104)     |
 Planning Time: 0.160 ms                                                                                               |
-Execution Time: 3.711 ms     
-*/                         
+Execution Time: 3.711 ms
+*/
 
 /*Проведем экспримент - отменим материализованное представление
  * теперь условие join filter обращается к полям json объектов,
@@ -1014,7 +966,7 @@ EXPLAIN (VERBOSE, ANALYZE, BUFFERS)
 WITH aps AS NOT MATERIALIZED (SELECT * FROM airports)
 SELECT count(*)
 FROM aps AS a1
-JOIN aps AS a2 ON a1.city <> a2.city;
+         JOIN aps AS a2 ON a1.city <> a2.city;
 
 /*
  * QUERY PLAN                                                                                                                       |
@@ -1032,12 +984,11 @@ Execution Time: 13.475 ms                                                       
 
 EXPLAIN (VERBOSE, ANALYZE, BUFFERS)
 WITH aps AS (SELECT *
-FROM (SELECT * FROM airports) AS a1
-JOIN (SELECT * FROM airports) AS a2 ON a1.city <> a2.city)
+             FROM (SELECT * FROM airports) AS a1
+                      JOIN (SELECT * FROM airports) AS a2 ON a1.city <> a2.city)
 
 SELECT count(*)
-FROM aps ;
-
+FROM aps;
 
 
 /*
@@ -1049,7 +1000,7 @@ FROM aps ;
 Память	          Минимум	                 25kB heap
 CTE g1 строки	  1 строка	                 100 строк
 CTE g2 строки	  11 строк (всего)	         100 строк × 100 циклов
- * 
+ *
  * План1: -- Оптимизатор понимает, что нужно только 10 строк
 Выполняет Nested Loop до тех пор, пока не наберет 10 подходящих строк
 LOOP по g1 (только 1 строка!)
@@ -1057,7 +1008,7 @@ LOOP по g1 (только 1 строка!)
     Проверяем g1.num <> g2.num
     Если true - добавляем в результат
     КОГДА набрали 10 строк - ПРЕКРАЩАЕМ выполнение!
- * 
+ *
  * План 2:
 Выполняет ВЕСЬ Nested Loop (100 × 100 = 10000 комбинаций)
 LOOP по g1 (все 100 строк)
@@ -1067,48 +1018,43 @@ LOOP по g1 (все 100 строк)
     Получаем 9900 строк
 -- Сортируем все 9900 строк
 -- Берем первые 10 отсортированных строк
- * 
- * 
+ *
+ *
  */
-EXPLAIN ANALYZE 
-WITH g AS (
-SELECT * 
-FROM generate_series(1,100) AS gs(num)
-)
+EXPLAIN ANALYZE
+WITH g AS (SELECT *
+           FROM generate_series(1, 100) AS gs(num))
 SELECT g1.num, g2.num
 FROM g AS g1
-JOIN g AS g2 ON  g1.num <> g2.num
-ORDER BY 1,2
+         JOIN g AS g2 ON g1.num <> g2.num
+ORDER BY 1, 2
 LIMIT 10
-
 
 
 /*Разница между union и union all*/
 
-EXPLAIN ANALYZE 
-WITH RECURSIVE t(n) AS 
-(
-SELECT 1
-UNION ALL  
-SELECT n + 1 
-FROM t
-WHERE n < 100
-)
-SELECT 
-count(n),
-sum(n),
-avg(n)
+EXPLAIN ANALYZE
+WITH RECURSIVE t(n) AS
+                   (SELECT 1
+                    UNION ALL
+                    SELECT n + 1
+                    FROM t
+                    WHERE n < 100)
+SELECT count(n),
+       sum(n),
+       avg(n)
 FROM t;
 
 
-EXPLAIN ANALYZE 
-WITH RECURSIVE t(n) AS 
-( values(1), (2), (3)
-UNION ALL  
-SELECT n + 1 
-FROM t
-WHERE n < 101
-)
+EXPLAIN ANALYZE
+WITH RECURSIVE t(n) AS
+                   (values (1),
+                           (2),
+                           (3)
+                    UNION ALL
+                    SELECT n + 1
+                    FROM t
+                    WHERE n < 101)
 SELECT n
 FROM t
 ORDER BY n;
@@ -1116,21 +1062,20 @@ ORDER BY n;
 
 /*Агрегатные функции*/
 
-SELECT 
-string_agg(model, E'\n ' ORDER BY model) AS models,
-array_agg(range ORDER BY model) AS ranges,
-array_agg(model ORDER BY model) AS models_1,
-min(range) AS min,
-max(range) AS max,
-bool_or(RANGE < 5000) AS b_or, ---если в группе найдется хотя бы
+SELECT string_agg(model, E'\n ' ORDER BY model) AS models,
+       array_agg(range ORDER BY model)          AS ranges,
+       array_agg(model ORDER BY model)          AS models_1,
+       min(range)                               AS min,
+       max(range)                               AS max,
+       bool_or(RANGE < 5000)                    AS b_or, ---если в группе найдется хотя бы
 ----одна строка, для которой параметр функции имеет значение true
-bool_and(RANGE <= 11100) AS b_and,--- если для всех строк в группе
+       bool_and(RANGE <= 11100)                 AS b_and,--- если для всех строк в группе
 ----ее параметр также имеет значение true
-round(avg(range), 2) AS everage,
-count(*)
-FROM aircrafts 
-WHERE LEFT(model, strpos(model,' ')-1) IN ('Аэробус', 'Боинг')
-GROUP BY LEFT(model, strpos(model,' ')-1)
+       round(avg(range), 2)                     AS everage,
+       count(*)
+FROM aircrafts
+WHERE LEFT(model, strpos(model, ' ') - 1) IN ('Аэробус', 'Боинг')
+GROUP BY LEFT(model, strpos(model, ' ') - 1)
 --WHERE SPLIT_PART(model, ' ', 1) IN ('Аэробус', 'Боинг')
 --GROUP BY SPLIT_PART(model, ' ', 1);
 
@@ -1148,51 +1093,47 @@ ORDER BY days_of_week
 /*Агрегатные функции тесно связаны с group by*/
 EXPLAIN(ANALYZE, costs OFF, timing off)
 SELECT status
-FROM flights 
+FROM flights
 GROUP BY status
 
 
 EXPLAIN ANALYZE
 SELECT status, count(*)
-FROM flights 
+FROM flights
 GROUP BY status
 
 
 /*FILTER в PostgreSQL - это модификатор для агрегатных функций, который позволяет применять агрегацию только к подмножеству строк.*/
 EXPLAIN ANALYZE
-SELECT 
-count(flight_id) FILTER (WHERE fare_conditions = 'Economy') AS Economy,
-count(flight_id) FILTER (WHERE fare_conditions = 'Comfort') AS Comfort,
-count(flight_id) FILTER (WHERE fare_conditions = 'Business') AS Business
+SELECT count(flight_id) FILTER (WHERE fare_conditions = 'Economy')  AS Economy,
+       count(flight_id) FILTER (WHERE fare_conditions = 'Comfort')  AS Comfort,
+       count(flight_id) FILTER (WHERE fare_conditions = 'Business') AS Business
 FROM ticket_flights;
 
----Он 
-SELECT 
-    COUNT(CASE WHEN fare_conditions = 'Economy' THEN 1 END) AS Economy,
-    COUNT(CASE WHEN fare_conditions = 'Comfort' THEN 1 END) AS Comfort,
-    COUNT(CASE WHEN fare_conditions = 'Business' THEN 1 END) AS Business
+---Он
+SELECT COUNT(CASE WHEN fare_conditions = 'Economy' THEN 1 END)  AS Economy,
+       COUNT(CASE WHEN fare_conditions = 'Comfort' THEN 1 END)  AS Comfort,
+       COUNT(CASE WHEN fare_conditions = 'Business' THEN 1 END) AS Business
 FROM ticket_flights;
 
-SELECT 
-    SUM(CASE WHEN fare_conditions = 'Economy' THEN 1 ELSE 0 END) AS Economy,
-    SUM(CASE WHEN fare_conditions = 'Comfort' THEN 1 ELSE 0 END) AS Comfort, 
-    SUM(CASE WHEN fare_conditions = 'Business' THEN 1 ELSE 0 END) AS Business
+SELECT SUM(CASE WHEN fare_conditions = 'Economy' THEN 1 ELSE 0 END)  AS Economy,
+       SUM(CASE WHEN fare_conditions = 'Comfort' THEN 1 ELSE 0 END)  AS Comfort,
+       SUM(CASE WHEN fare_conditions = 'Business' THEN 1 ELSE 0 END) AS Business
 FROM ticket_flights;
 
-SELECT 
-    (SELECT COUNT(*) FROM ticket_flights WHERE fare_conditions = 'Economy') AS Economy,
-    (SELECT COUNT(*) FROM ticket_flights WHERE fare_conditions = 'Comfort') AS Comfort,
-    (SELECT COUNT(*) FROM ticket_flights WHERE fare_conditions = 'Business') AS Business;
+SELECT (SELECT COUNT(*) FROM ticket_flights WHERE fare_conditions = 'Economy')  AS Economy,
+       (SELECT COUNT(*) FROM ticket_flights WHERE fare_conditions = 'Comfort')  AS Comfort,
+       (SELECT COUNT(*) FROM ticket_flights WHERE fare_conditions = 'Business') AS Business;
 
 ---CREATE EXTENSION IF NOT EXISTS tablefunc;
 EXPLAIN ANALYZE
 SELECT *
 FROM crosstab(
-    'SELECT ''total'' as row_name, fare_conditions, COUNT(*) 
-     FROM ticket_flights 
-     GROUP BY fare_conditions 
+             'SELECT ''total'' as row_name, fare_conditions, COUNT(*)
+     FROM ticket_flights
+     GROUP BY fare_conditions
      ORDER BY 1,2'
-) AS ct(row_name text, Economy bigint, Comfort bigint, Business bigint);
+     ) AS ct(row_name text, Economy bigint, Comfort bigint, Business bigint);
 
 
 /*Функции для получения и агрегирования данных в формате json
@@ -1201,68 +1142,76 @@ FROM crosstab(
  * к числовому типу нельзя*/
 
 
-WITH people_info(num,KEY, value) AS 
-(VALUES (1, 'weight', 80.5), (1,'height', 175),  (1,'age', 35),
-        (2, 'weight', 76.4), (2,'height', 183),  (2,'age', 45),
-        (3, 'weight', 68.8), (3,'height', 169),  (3,'age', 40)
-)
-SELECT num,jsonb_object_agg(key,value) AS info
+WITH people_info(num, KEY, value) AS
+         (VALUES (1, 'weight', 80.5),
+                 (1, 'height', 175),
+                 (1, 'age', 35),
+                 (2, 'weight', 76.4),
+                 (2, 'height', 183),
+                 (2, 'age', 45),
+                 (3, 'weight', 68.8),
+                 (3, 'height', 169),
+                 (3, 'age', 40))
+SELECT num, jsonb_object_agg(key, value) AS info
 FROM people_info
 GROUP BY num;
 
 
-WITH people_info(num,KEY, value) AS 
-(VALUES (1, 'weight', 80.5), (1,'height', 175),  (1,'age', 35),
-        (2, 'weight', 76.4), (2,'height', 183),  (2,'age', 45),
-        (3, 'weight', 68.8), (3,'height', 169),  (3,'age', 40)
-),
-jsonbs AS 
-(SELECT num,jsonb_object_agg(key,value) AS info
-FROM people_info
-GROUP BY num)
+WITH people_info(num, KEY, value) AS
+         (VALUES (1, 'weight', 80.5),
+                 (1, 'height', 175),
+                 (1, 'age', 35),
+                 (2, 'weight', 76.4),
+                 (2, 'height', 183),
+                 (2, 'age', 45),
+                 (3, 'weight', 68.8),
+                 (3, 'height', 169),
+                 (3, 'age', 40)),
+     jsonbs AS
+         (SELECT num, jsonb_object_agg(key, value) AS info
+          FROM people_info
+          GROUP BY num)
 
 SELECT avg((info -> 'age')::double precision)
-FROM jsonbs 
+FROM jsonbs
 ;
 
 /*Требуется организовать более реалистиный пример, предположим
  * что необходимо организтвать просмотр в удобной форме
- * всей информации о каждом бронировании, включая все 
+ * всей информации о каждом бронировании, включая все
  * оформленные в его рамках бидеты и перелеты*/
 
-SELECT 
-b.book_ref,
-b.book_date,
-b.total_amount,
-jsonb_pretty(
-jsonb_object_agg(
-t.ticket_no,
-jsonb_build_array(
-t.passenger_id,
-t.passenger_name,
---все перелеты для текущего билета для ticket_flights
+SELECT b.book_ref,
+       b.book_date,
+       b.total_amount,
+       jsonb_pretty(
+               jsonb_object_agg(
+                       t.ticket_no,
+                       jsonb_build_array(
+                               t.passenger_id,
+                               t.passenger_name,
+                           --все перелеты для текущего билета для ticket_flights
 --отсортированные по плановому времени вылета
-(SELECT jsonb_agg(
+                               (SELECT jsonb_agg(
 --описание одного перелета по данным оной строки
-jsonb_build_array(
-f.flight_no,
-f.scheduled_departure,
-f.departure_city || '-' || f.arrival_city,
-jsonb_build_object(
-'fare_cond', tf.fare_conditions,
-'amount', tf.amount)
-)ORDER BY f.scheduled_departure)
+                                               jsonb_build_array(
+                                                       f.flight_no,
+                                                       f.scheduled_departure,
+                                                       f.departure_city || '-' || f.arrival_city,
+                                                       jsonb_build_object(
+                                                               'fare_cond', tf.fare_conditions,
+                                                               'amount', tf.amount)
+                                               ) ORDER BY f.scheduled_departure)
 
-FROM ticket_flights tf 
-JOIN flights_v f ON f.flight_id = tf.flight_id --using(flight_id)
-WHERE tf.ticket_no = t.ticket_no
-GROUP BY tf.ticket_no 
-        )
-     )
-  )
-) AS tickets_info 
-FROM bookings b 
-JOIN tickets  t ON t.book_ref = b.book_ref -- USING(book_ref)
+                                FROM ticket_flights tf
+                                         JOIN flights_v f ON f.flight_id = tf.flight_id --using(flight_id)
+                                WHERE tf.ticket_no = t.ticket_no
+                                GROUP BY tf.ticket_no)
+                       )
+               )
+       ) AS tickets_info
+FROM bookings b
+         JOIN tickets t ON t.book_ref = b.book_ref -- USING(book_ref)
 WHERE b.book_ref = 'D56F95'
 GROUP BY b.book_ref
 
@@ -1275,21 +1224,21 @@ GROUP BY b.book_ref
  *задержки (по минутам, секундам, часам)*/
 
 
-SELECT count(*) FILTER (WHERE EXTRACT(sec FROM scheduled_departure)>0)
-AS scheduled_departured_nonzero_secs,
-count(*) FILTER (WHERE EXTRACT(sec FROM actual_departure)>0)
-AS actual_departured_nonzero_secs
+SELECT count(*) FILTER (WHERE EXTRACT(sec FROM scheduled_departure) > 0)
+           AS scheduled_departured_nonzero_secs,
+       count(*) FILTER (WHERE EXTRACT(sec FROM actual_departure) > 0)
+           AS actual_departured_nonzero_secs
 FROM flights_v
 WHERE actual_departure > scheduled_departure
 ---отклонений фактического времени вылета с плановым временем по секундам нет.
 
 ---теперь рассмотрим число минут
 
-SELECT count(*) FILTER (WHERE EXTRACT(min FROM scheduled_departure)>0)
-AS scheduled_departured_nonzero_secs,
-count(*) FILTER (WHERE EXTRACT(min FROM actual_departure)>0) AS actual_departured_nonzero_secs,
-count(*) FILTER (WHERE EXTRACT(min FROM scheduled_departure)>0) - 
-count(*) FILTER (WHERE EXTRACT(min FROM actual_departure)>0) AS diff
+SELECT count(*) FILTER (WHERE EXTRACT(min FROM scheduled_departure) > 0)
+                                                                      AS scheduled_departured_nonzero_secs,
+       count(*) FILTER (WHERE EXTRACT(min FROM actual_departure) > 0) AS actual_departured_nonzero_secs,
+       count(*) FILTER (WHERE EXTRACT(min FROM scheduled_departure) > 0) -
+       count(*) FILTER (WHERE EXTRACT(min FROM actual_departure) > 0) AS diff
 FROM flights_v
 WHERE actual_departure > scheduled_departure
 ---расхождени я по минутам есть
@@ -1298,14 +1247,14 @@ WHERE actual_departure > scheduled_departure
 /*Рассмотрим какие значения имеет число минут
  * в плановом и фактическом времени вылета*/
 SELECT array_agg(DISTINCT EXTRACT(min FROM scheduled_departure)) AS
-scheduled_mins
+           scheduled_mins
 FROM flights_v
 WHERE actual_departure > scheduled_departure
 
-/*Фактическое время может содержать любое число минут 
+/*Фактическое время может содержать любое число минут
  * от 0 до 59*/
-SELECT array_agg(DISTINCT EXTRACT(min FROM actual_departure )) AS
-actual_departure_mins
+SELECT array_agg(DISTINCT EXTRACT(min FROM actual_departure)) AS
+           actual_departure_mins
 FROM flights_v
 WHERE actual_departure > scheduled_departure
 
@@ -1326,9 +1275,9 @@ WHERE actual_departure > scheduled_departure
  * Поскольку мы имеем возможность исследовать все задержанные рейсы,
  * которые и будут образовывать генеральную совокупность, воспользуемся
  * функцией var_pop. Эта функция не может работать с типом данных interval,
- * поэтому переведем значения задержке, представленных в виде инервалов, 
+ * поэтому переведем значения задержке, представленных в виде инервалов,
  * в целое число минут.
- * Аналогично и для вычисления среднеквадратичного отклонения воспользуемся 
+ * Аналогично и для вычисления среднеквадратичного отклонения воспользуемся
  * функцией stddev_pop.
  * 3.Мода это наиболее типичное значение в выборке, оно имеет наибольшую
  * частоту встречаемости в вариационном ряде. Функция mode
@@ -1339,7 +1288,7 @@ WHERE actual_departure > scheduled_departure
  * значений конечно либо счетно.
  * Счетным называется бесконечное множество, элементы которого можно
  * пронумеровать натуральными числами.
- * Вариационным рядом называется последовательность полученных значений случайно 
+ * Вариационным рядом называется последовательность полученных значений случайно
  * величины, упорядоченных по возрастанию!!!
 Общее количество	16056
 Минимальная задержка	00:01:00
@@ -1353,53 +1302,47 @@ WHERE actual_departure > scheduled_departure
 Глядя на результат можно предполоджить, что большая часть задержек
 рейсов является кратковременной. Тем неменее поскольку среднее значение
 больше медианы, а максимально значение - более четырех с половиной часов,
-представляется целесообразным сформировать вариационный ряд задержек 
+представляется целесообразным сформировать вариационный ряд задержек
 рейсов для получения более детальной картины!!!
- * 
- * 
+ *
+ *
  */
 
-WITH delays AS (
-SELECT actual_departure - scheduled_departure AS delay
-FROM flights_v 
-WHERE actual_departure > scheduled_departure
-),
-stats AS (
-    SELECT 
-        count(*) as total_count,
-        min(delay) AS minimal_delay,
-        max(delay) AS maximal_delay,
-        avg(delay) AS average_delay,
-        round(var_pop(EXTRACT(epoch FROM delay)/60)::NUMERIC, 2) AS variance,
-        round(stddev_pop(EXTRACT(epoch FROM delay)/60)::NUMERIC, 2) AS standart_deviation,
-        mode() WITHIN GROUP (ORDER BY delay) as mode_delay,
-        percentile_disc(0.5) WITHIN GROUP (ORDER BY delay) AS median
-    FROM delays
-)
-SELECT 
-    unnest(ARRAY[
-        'Общее количество',
-        'Минимальная задержка', 
-        'Максимальная задержка',
-        'Средняя задержка',
-        'Дисперсия',
-        'Стандартное отклонение',
-        'Мода',
-        'Медиана'
-    ]) as metric,
-    unnest(ARRAY[
-        total_count::text,
-        minimal_delay::text,
-        maximal_delay::text,
-        average_delay::text, 
-        variance::text,
-        standart_deviation::text,
-        mode_delay::text,
-        median::text
-    ]) as value
+WITH delays AS (SELECT actual_departure - scheduled_departure AS delay
+                FROM flights_v
+                WHERE actual_departure > scheduled_departure),
+     stats AS (SELECT count(*)                                                      as total_count,
+                      min(delay)                                                    AS minimal_delay,
+                      max(delay)                                                    AS maximal_delay,
+                      avg(delay)                                                    AS average_delay,
+                      round(var_pop(EXTRACT(epoch FROM delay) / 60)::NUMERIC, 2)    AS variance,
+                      round(stddev_pop(EXTRACT(epoch FROM delay) / 60)::NUMERIC, 2) AS standart_deviation,
+                      mode() WITHIN GROUP (ORDER BY delay)                          as mode_delay,
+                      percentile_disc(0.5) WITHIN GROUP (ORDER BY delay)            AS median
+               FROM delays)
+SELECT unnest(ARRAY [
+    'Общее количество',
+    'Минимальная задержка',
+    'Максимальная задержка',
+    'Средняя задержка',
+    'Дисперсия',
+    'Стандартное отклонение',
+    'Мода',
+    'Медиана'
+    ])        as metric,
+       unnest(ARRAY [
+           total_count::text,
+           minimal_delay::text,
+           maximal_delay::text,
+           average_delay::text,
+           variance::text,
+           standart_deviation::text,
+           mode_delay::text,
+           median::text
+           ]) as value
 FROM stats;
 
-/*SELECT 
+/*SELECT
 count(*),
 min(delay) AS minimal_delay,
 max(delay) AS maximal_delay,
@@ -1410,26 +1353,24 @@ mode() WITHIN GROUP (ORDER BY delay)
 FROM delays*/
 
 
-/*Из результатов выборки можно увидеть, что она явно разбивается на две части, 
+/*Из результатов выборки можно увидеть, что она явно разбивается на две части,
  * коротки задержки, не первышающие 11 минут, и длительные
  * задержки первышающие два часа.
  * Для определенности будем считать задержки, не превышающие
  * одного часа, короткими, а первышающие этот рубеж - длительными*/
-SELECT 
-(actual_departure  - scheduled_departure ) AS delay,
-count(*)
+SELECT (actual_departure - scheduled_departure) AS delay,
+       count(*)
 FROM flights_v
-WHERE actual_departure > scheduled_departure 
+WHERE actual_departure > scheduled_departure
 GROUP BY delay
 ORDER BY delay
 
 /*Создадим представление выбирающее коротки задержки*/
-CREATE VIEW short_delays AS 
-SELECT 
-(actual_departure  - scheduled_departure ) AS delay
+CREATE VIEW short_delays AS
+SELECT (actual_departure - scheduled_departure) AS delay
 FROM flights_v
-WHERE actual_departure > scheduled_departure 
-AND actual_departure <= scheduled_departure + INTERVAL '1hour';
+WHERE actual_departure > scheduled_departure
+  AND actual_departure <= scheduled_departure + INTERVAL '1hour';
 
 SELECT *
 FROM short_delays
@@ -1438,45 +1379,40 @@ FROM short_delays
  * медианой
  * Получить более информативную картину можно с помощью выичления
  * процентилей*/
-WITH 
-stats AS (
-    SELECT 
-        count(*) as total_count,
-        min(delay) AS minimal_delay,
-        max(delay) AS maximal_delay,
-        avg(delay) AS average_delay,
-        round(var_pop(EXTRACT(epoch FROM delay)/60)::NUMERIC, 2) AS variance,
-        round(stddev_pop(EXTRACT(epoch FROM delay)/60)::NUMERIC, 2) AS standart_deviation,
-        mode() WITHIN GROUP (ORDER BY delay) as mode_delay,
-        percentile_disc(0.5) WITHIN GROUP (ORDER BY delay) AS median
-    FROM short_delays
-)
-SELECT 
-    unnest(ARRAY[
-        'Общее количество',
-        'Минимальная задержка', 
-        'Максимальная задержка',
-        'Средняя задержка',
-        'Дисперсия',
-        'Стандартное отклонение',
-        'Мода',
-        'Медиана'
-    ]) as metric,
-    unnest(ARRAY[
-        total_count::text,
-        minimal_delay::text,
-        maximal_delay::text,
-        average_delay::text, 
-        variance::text,
-        standart_deviation::text,
-        mode_delay::text,
-        median::text
-    ]) as value
+WITH stats AS (SELECT count(*)                                                      as total_count,
+                      min(delay)                                                    AS minimal_delay,
+                      max(delay)                                                    AS maximal_delay,
+                      avg(delay)                                                    AS average_delay,
+                      round(var_pop(EXTRACT(epoch FROM delay) / 60)::NUMERIC, 2)    AS variance,
+                      round(stddev_pop(EXTRACT(epoch FROM delay) / 60)::NUMERIC, 2) AS standart_deviation,
+                      mode() WITHIN GROUP (ORDER BY delay)                          as mode_delay,
+                      percentile_disc(0.5) WITHIN GROUP (ORDER BY delay)            AS median
+               FROM short_delays)
+SELECT unnest(ARRAY [
+    'Общее количество',
+    'Минимальная задержка',
+    'Максимальная задержка',
+    'Средняя задержка',
+    'Дисперсия',
+    'Стандартное отклонение',
+    'Мода',
+    'Медиана'
+    ])        as metric,
+       unnest(ARRAY [
+           total_count::text,
+           minimal_delay::text,
+           maximal_delay::text,
+           average_delay::text,
+           variance::text,
+           standart_deviation::text,
+           mode_delay::text,
+           median::text
+           ]) as value
 FROM stats;
 
-/*Если выборку длительностей задержек упорядочить по 
+/*Если выборку длительностей задержек упорядочить по
  * возарстанию, а затем разбить на равные - по числу элементов -
- * диапазоны, то значения, находящиеся на границах этих 
+ * диапазоны, то значения, находящиеся на границах этих
  * диапазонов, будут называться процентилями соответствующих
  * уровней. Например, если выборка разбивается на десять
  * диапазонов, в каждый из которых входит по 10% значений,
@@ -1499,89 +1435,82 @@ FROM stats;
  * */
 
 SELECT percentile_disc(
-ARRAY[0.1 ,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-)
-WITHIN GROUP (ORDER BY delay) AS deciles
+       ARRAY [0.1 ,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                      )
+       WITHIN GROUP (ORDER BY delay) AS deciles
 FROM short_delays;
 
 /*Разворот массива в виде столбца таблицы с помощью функции unnest*/
 
 WITH deciles AS
-(SELECT percentile_disc(
-ARRAY[0.1 ,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-WITHIN GROUP (ORDER BY delay) AS deciles
-FROM short_delays)
+         (SELECT percentile_disc(
+                 ARRAY [0.1 ,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+                 WITHIN GROUP (ORDER BY delay) AS deciles
+          FROM short_delays)
 
-SELECT unnest(ARRAY[0.1 ,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]) AS LEVEL,
-unnest(deciles) AS decile
+SELECT unnest(ARRAY [0.1 ,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]) AS LEVEL,
+       unnest(deciles)                                                  AS decile
 FROM deciles;
 
 /*Обратите внимание, что значения децилей повторяются. Разобраться,
  * почему это происходит, можно с помощью такого запроса.
  * В это запросе мы не только подсчитываем количество задержек
  * каждой длительностт, но и вычисляем их доли в общем количестве задержек (выражените
- * в процентах). Обратите внимание, что первый параметр функции round 
- * должен иметь тип numeric. 
- * Для этого достаточно привести к типу numeric только первый 
+ * в процентах). Обратите внимание, что первый параметр функции round
+ * должен иметь тип numeric.
+ * Для этого достаточно привести к типу numeric только первый
  * компонент выражения.
 */
 
-SELECT 
-delay, 
-count(*),
-round(count(*)::NUMERIC /
-(SELECT count(*) FROM short_delays) ----общее число коротких задержек 
-* 100, 2) AS PERCENT
+SELECT delay,
+       count(*),
+       round(count(*)::NUMERIC /
+             (SELECT count(*) FROM short_delays) ----общее число коротких задержек
+                 * 100, 2) AS PERCENT
 FROM short_delays
-GROUP BY delay 
+GROUP BY delay
 ORDER BY delay;
 
 
 /*Создадим представление выбирающее длинные задержки рейсов*/
-CREATE VIEW long_delays AS 
-SELECT 
-(actual_departure  - scheduled_departure ) AS delay
+CREATE VIEW long_delays AS
+SELECT (actual_departure - scheduled_departure) AS delay
 FROM flights_v
 WHERE actual_departure > scheduled_departure + INTERVAL '1hour';
 
 SELECT *
-FROM  long_delays
+FROM long_delays
 
 
-WITH 
-stats AS (
-    SELECT 
-        count(*) as total_count,
-        min(delay) AS minimal_delay,
-        max(delay) AS maximal_delay,
-        avg(delay) AS average_delay,
-        round(var_pop(EXTRACT(epoch FROM delay)/60)::NUMERIC, 2) AS variance,
-        round(stddev_pop(EXTRACT(epoch FROM delay)/60)::NUMERIC, 2) AS standart_deviation,
-        mode() WITHIN GROUP (ORDER BY delay) as mode_delay,
-        percentile_disc(0.5) WITHIN GROUP (ORDER BY delay) AS median
-    FROM long_delays
-)
-SELECT 
-    unnest(ARRAY[
-        'Общее количество',
-        'Минимальная задержка', 
-        'Максимальная задержка',
-        'Средняя задержка',
-        'Дисперсия',
-        'Стандартное отклонение',
-        'Мода',
-        'Медиана'
-    ]) as metric,
-    unnest(ARRAY[
-        total_count::text,
-        minimal_delay::text,
-        maximal_delay::text,
-        average_delay::text, 
-        variance::text,
-        standart_deviation::text,
-        mode_delay::text,
-        median::text
-    ]) as value
+WITH stats AS (SELECT count(*)                                                      as total_count,
+                      min(delay)                                                    AS minimal_delay,
+                      max(delay)                                                    AS maximal_delay,
+                      avg(delay)                                                    AS average_delay,
+                      round(var_pop(EXTRACT(epoch FROM delay) / 60)::NUMERIC, 2)    AS variance,
+                      round(stddev_pop(EXTRACT(epoch FROM delay) / 60)::NUMERIC, 2) AS standart_deviation,
+                      mode() WITHIN GROUP (ORDER BY delay)                          as mode_delay,
+                      percentile_disc(0.5) WITHIN GROUP (ORDER BY delay)            AS median
+               FROM long_delays)
+SELECT unnest(ARRAY [
+    'Общее количество',
+    'Минимальная задержка',
+    'Максимальная задержка',
+    'Средняя задержка',
+    'Дисперсия',
+    'Стандартное отклонение',
+    'Мода',
+    'Медиана'
+    ])        as metric,
+       unnest(ARRAY [
+           total_count::text,
+           minimal_delay::text,
+           maximal_delay::text,
+           average_delay::text,
+           variance::text,
+           standart_deviation::text,
+           mode_delay::text,
+           median::text
+           ]) as value
 FROM stats;
 
 /*Grouping SETS, CUBE, ROLLUP
@@ -1591,8 +1520,8 @@ FROM stats;
  * При этом требуется получить и общее число маршрутов, обслуживаемых
  * самолетами каждой модели.
  * Отчет необходимо представить в таком виде:
- * 
- * Абакан 
+ *
+ * Абакан
  * Всего по а.п
  * Новосибирск
  * Всего по а.п.
@@ -1602,113 +1531,89 @@ FROM stats;
  */
 
 EXPLAIN ANALYZE
-SELECT
-	r.departure_airport_name AS airport,
-	a.model,
-	count(*) AS routes_count
-	--- количество маршрутов
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
-GROUP BY
-	airport,
-	model
+SELECT r.departure_airport_name AS airport,
+       a.model,
+       count(*)                 AS routes_count
+--- количество маршрутов
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
+GROUP BY airport,
+         model
 UNION ALL
 
-SELECT
-	r.departure_airport_name AS airport,
-	NULL AS model,
-	count(*) AS routes_count
-	--- количество маршрутов
-FROM
-	routes r
-GROUP BY
-	airport
-UNION ALL 
+SELECT r.departure_airport_name AS airport,
+       NULL                     AS model,
+       count(*)                 AS routes_count
+--- количество маршрутов
+FROM routes r
+GROUP BY airport
+UNION ALL
 
-SELECT
-	NULL AS airport,
-	a.model,
-	count(*) AS routes_count
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
-GROUP BY
-	a.model
-	
-UNION ALL 
+SELECT NULL     AS airport,
+       a.model,
+       count(*) AS routes_count
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
+GROUP BY a.model
 
-SELECT
-	NULL AS airprot,
-	NULL AS model,
-	count(*) AS routes_count
-FROM
-	routes
-ORDER BY
-	airport,
-	routes_count,
-	model;
+UNION ALL
+
+SELECT NULL     AS airprot,
+       NULL     AS model,
+       count(*) AS routes_count
+FROM routes
+ORDER BY airport,
+         routes_count,
+         model;
 
 
 
-WITH detailed_stats AS (
-    SELECT
-        r.departure_airport_name AS airport,
-        a.model AS model,
-        COUNT(*) AS routes_count,
-        0 as sort_order  -- для обычных записей
-    FROM routes r
-    JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
-    GROUP BY r.departure_airport_name, a.model
-),
-airport_summary AS (
-    SELECT
-        r.departure_airport_name AS airport,
-        '↳ Итого по а/п ' || r.departure_airport_name AS model,
-        COUNT(*) AS routes_count,
-        1 as sort_order  -- для итогов по аэропортам
-    FROM routes r
-    GROUP BY r.departure_airport_name
-),
-model_summary AS (
-    SELECT
-        'ИТОГИ ПО МОДЕЛЯМ' AS airport,
-        a.model AS model,
-        COUNT(*) AS routes_count,
-        2 as sort_order  -- для итогов по моделям
-    FROM routes r
-    JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
-    GROUP BY a.model
-),
-final_summary AS (
-    SELECT
-        'ОБЩИЙ ИТОГ' AS airport,
-        'Всего маршрутов: ' || COUNT(*)::text AS model,
-        COUNT(*) AS routes_count,
-        3 as sort_order  -- для общего итога
-    FROM routes
-)
+WITH detailed_stats AS (SELECT r.departure_airport_name AS airport,
+                               a.model                  AS model,
+                               COUNT(*)                 AS routes_count,
+                               0                        as sort_order -- для обычных записей
+                        FROM routes r
+                                 JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+                        GROUP BY r.departure_airport_name, a.model),
+     airport_summary AS (SELECT r.departure_airport_name                      AS airport,
+                                '↳ Итого по а/п ' || r.departure_airport_name AS model,
+                                COUNT(*)                                      AS routes_count,
+                                1                                             as sort_order -- для итогов по аэропортам
+                         FROM routes r
+                         GROUP BY r.departure_airport_name),
+     model_summary AS (SELECT 'ИТОГИ ПО МОДЕЛЯМ' AS airport,
+                              a.model            AS model,
+                              COUNT(*)           AS routes_count,
+                              2                  as sort_order -- для итогов по моделям
+                       FROM routes r
+                                JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+                       GROUP BY a.model),
+     final_summary AS (SELECT 'ОБЩИЙ ИТОГ'                          AS airport,
+                              'Всего маршрутов: ' || COUNT(*)::text AS model,
+                              COUNT(*)                              AS routes_count,
+                              3                                     as sort_order -- для общего итога
+                       FROM routes)
 -- Объединяем все с сортировкой
-SELECT 
-    airport,
-    model,
-    routes_count
-FROM (
-    SELECT * FROM detailed_stats
-    UNION ALL
-    SELECT * FROM airport_summary
-    UNION ALL  
-    SELECT * FROM model_summary
-    UNION ALL
-    SELECT * FROM final_summary
-) combined_data
-ORDER BY 
-sort_order,
-CASE WHEN sort_order = 0 THEN airport END,
-CASE WHEN sort_order = 0 THEN model END,
-routes_count DESC;
+SELECT airport,
+       model,
+       routes_count
+FROM (SELECT *
+      FROM detailed_stats
+      UNION ALL
+      SELECT *
+      FROM airport_summary
+      UNION ALL
+      SELECT *
+      FROM model_summary
+      UNION ALL
+      SELECT *
+      FROM final_summary) combined_data
+ORDER BY sort_order,
+         CASE WHEN sort_order = 0 THEN airport END,
+         CASE WHEN sort_order = 0 THEN model END,
+         routes_count DESC;
 
 /*Если sort_order = 0 (детальные данные) → сортируем по airport
 Если sort_order ≠ 0 (итоги) → возвращает NULL → не влияет на сортировку
@@ -1723,79 +1628,71 @@ sort_order=1,2,3: остаются в порядке sort_order (не сорти
 */
 
 
-WITH hierarchical_stats AS (
-    SELECT
-        COALESCE(r.departure_airport_name, 'ИТОГО') AS airport,
-        CASE 
-            WHEN r.departure_airport_name IS NULL AND a.model IS NULL THEN 'ОБЩИЙ ИТОГ'
-            WHEN r.departure_airport_name IS NOT NULL AND a.model IS NULL THEN 'Итого по а/п ' || r.departure_airport_name
-            ELSE a.model
-        END AS model,
-        COUNT(*) AS routes_count
-    FROM routes r
-    JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
-    GROUP BY ROLLUP (r.departure_airport_name, a.model)
-)
-SELECT 
-    airport,
-    model,
-    routes_count
+WITH hierarchical_stats AS (SELECT COALESCE(r.departure_airport_name, 'ИТОГО') AS airport,
+                                   CASE
+                                       WHEN r.departure_airport_name IS NULL AND a.model IS NULL THEN 'ОБЩИЙ ИТОГ'
+                                       WHEN r.departure_airport_name IS NOT NULL AND a.model IS NULL
+                                           THEN 'Итого по а/п ' || r.departure_airport_name
+                                       ELSE a.model
+                                       END                                     AS model,
+                                   COUNT(*)                                    AS routes_count
+                            FROM routes r
+                                     JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+                            GROUP BY ROLLUP (r.departure_airport_name, a.model))
+SELECT airport,
+       model,
+       routes_count
 FROM hierarchical_stats
-ORDER BY 
-    CASE 
-        WHEN airport = 'ИТОГО' AND model = 'ОБЩИЙ ИТОГ' THEN 3
-        WHEN airport != 'ИТОГО' AND model LIKE 'Итого по а/п%' THEN 2
-        WHEN airport = 'ИТОГО' AND model != 'ОБЩИЙ ИТОГ' THEN 1
-        ELSE 0
-    END,
-    airport,
-    model;
+ORDER BY CASE
+             WHEN airport = 'ИТОГО' AND model = 'ОБЩИЙ ИТОГ' THEN 3
+             WHEN airport != 'ИТОГО' AND model LIKE 'Итого по а/п%' THEN 2
+             WHEN airport = 'ИТОГО' AND model != 'ОБЩИЙ ИТОГ' THEN 1
+             ELSE 0
+             END,
+         airport,
+         model;
 
 /*Можно ли ускорить данный запрос, да, конечно для эоого нужно прибуегнуть к конструкции
- * grouping sets, она позволяет выполнить несколько группировок в рамках одного запроса, 
- * а затем объединить их результаты аналогично инструкции union all. Таким образом, 
- * выражения для группировки, использованные в трех подзапросах включаются в 
+ * grouping sets, она позволяет выполнить несколько группировок в рамках одного запроса,
+ * а затем объединить их результаты аналогично инструкции union all. Таким образом,
+ * выражения для группировки, использованные в трех подзапросах включаются в
  * инструкцию gruuping sets, в четверотом подзапросе группировка выполняется для всей
  * выборки, для такого случая в grщuping sets предусмотерно выражение (), то есть пустые скобки*/
 
 ---EXPLAIN ANALYZE;
-SELECT
-	CASE
-		WHEN r.departure_airport_name IS NULL AND a.model IS NULL 
-            THEN 'ИТОГО:'
-		WHEN a.model IS NULL 
-            THEN 'Всего по а/п: ' || r.departure_airport_name
-        WHEN r.departure_airport_name IS NULL 
-            THEN 'Всего по мод/самолета' 
-		ELSE r.departure_airport_name 
-	END AS airport,
-a.model,
+SELECT CASE
+           WHEN r.departure_airport_name IS NULL AND a.model IS NULL
+               THEN 'ИТОГО:'
+           WHEN a.model IS NULL
+               THEN 'Всего по а/п: ' || r.departure_airport_name
+           WHEN r.departure_airport_name IS NULL
+               THEN 'Всего по мод/самолета'
+           ELSE r.departure_airport_name
+           END  AS airport,
+       a.model,
 ---GROUPING(r.departure_airport_name, a.model) AS GROUPING,
-	count(*) AS routes_count
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
+       count(*) AS routes_count
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
 GROUP BY
-	GROUPING SETS 
-( 
-    (r.departure_airport_name, a.model),  -- детальные данные
-    (r.departure_airport_name),           -- итоги по аэропортам
-    (a.model),                            -- итоги по самолетам  
-    ()                                    -- общий итог
-)
-ORDER BY
-	departure_airport_name,
-	routes_count,
-	a.model;
+    GROUPING SETS
+    ( (r.departure_airport_name, a.model), -- детальные данные
+      (r.departure_airport_name),          -- итоги по аэропортам
+      (a.model),                           -- итоги по самолетам
+    ()                                     -- общий итог
+    )
+ORDER BY departure_airport_name,
+         routes_count,
+         a.model;
 
 /*Группировка с помощью rollup
-	 * 
+	 *
 	 * для вуз типичных ситуаций существуют сокращенные варианты записи конструкции
 	 * GROUPING SETS это ROLLUP и CUBE
-	 * 
+	 *
 	 * rollup(a,b,c...) равнозначна записи
-	 * 
+	 *
 	 * grouping sets ((a,b,c)
 	 * ...
 	 * (a,b),
@@ -1803,105 +1700,96 @@ ORDER BY
 	 * ()
 	 * )
 	 * Динамика авиабилетов с разбиением по дням, дкадам и месяцам,
-	 * необходимо отражать как сумму бронирований так и количество бронирований 
+	 * необходимо отражать как сумму бронирований так и количество бронирований
 	 * уточним что третья декада может иметь длительность от 8 до 11 дней в
 	 * зависимости от месяца
-	 * 
-	 * 
+	 *
+	 *
 */
 
 EXPLAIN ANALYZE
-SELECT
-	EXTRACT(MONTH FROM book_date) AS MONTH,
-	CASE
-		WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
-		WHEN EXTRACT (DAY
-	FROM
-		book_date) <= 20 THEN 2
-		ELSE 3
-	END AS ten_days,
-	EXTRACT(DAY FROM book_date) AS DAY,
-	count(*) AS book_num,
-	round(sum(total_amount), 2) AS amount
-FROM
-	bookings
+SELECT EXTRACT(MONTH FROM book_date) AS MONTH,
+       CASE
+           WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
+           WHEN EXTRACT(DAY
+                        FROM
+                        book_date) <= 20 THEN 2
+           ELSE 3
+           END                       AS ten_days,
+       EXTRACT(DAY FROM book_date)   AS DAY,
+       count(*)                      AS book_num,
+       round(sum(total_amount), 2)   AS amount
+FROM bookings
 GROUP BY
-	ROLLUP (MONTH,
-	ten_days,
-	DAY)
-ORDER BY
-	MONTH,
-	ten_days,
-	DAY;
+    ROLLUP (MONTH,
+            ten_days,
+            DAY)
+ORDER BY MONTH,
+         ten_days,
+         DAY;
 
 ---SHOW timezone
-	
 
 
-SELECT
-    CASE 
-        WHEN year_num IS NULL THEN '📊 ОБЩИЙ ИТОГ ЗА ВСЕ ГОДЫ'
-        WHEN month_num IS NULL THEN '📈 ИТОГО ЗА ' || year_num::TEXT || ' ГОД'
-        ELSE year_num::TEXT || ' год - ' || 
-             CASE month_num
-                 WHEN 1 THEN 'Январь'
-                 WHEN 2 THEN 'Февраль'
-                 WHEN 3 THEN 'Март'
-                 WHEN 4 THEN 'Апрель'
-                 WHEN 5 THEN 'Май'
-                 WHEN 6 THEN 'Июнь'
-                 WHEN 7 THEN 'Июль'
-                 WHEN 8 THEN 'Август'
-                 WHEN 9 THEN 'Сентябрь'
-                 WHEN 10 THEN 'Октябрь'
-                 WHEN 11 THEN 'Ноябрь'
-                 WHEN 12 THEN 'Декабрь'
-             END
-    END AS период,
+SELECT CASE
+           WHEN year_num IS NULL THEN '📊 ОБЩИЙ ИТОГ ЗА ВСЕ ГОДЫ'
+           WHEN month_num IS NULL THEN '📈 ИТОГО ЗА ' || year_num::TEXT || ' ГОД'
+           ELSE year_num::TEXT || ' год - ' ||
+                CASE month_num
+                    WHEN 1 THEN 'Январь'
+                    WHEN 2 THEN 'Февраль'
+                    WHEN 3 THEN 'Март'
+                    WHEN 4 THEN 'Апрель'
+                    WHEN 5 THEN 'Май'
+                    WHEN 6 THEN 'Июнь'
+                    WHEN 7 THEN 'Июль'
+                    WHEN 8 THEN 'Август'
+                    WHEN 9 THEN 'Сентябрь'
+                    WHEN 10 THEN 'Октябрь'
+                    WHEN 11 THEN 'Ноябрь'
+                    WHEN 12 THEN 'Декабрь'
+                    END
+           END                     AS период,
 
-    CASE
-        WHEN year_num IS NULL THEN '---'
-        WHEN month_num IS NULL THEN '---'
-        WHEN decade_num IS NULL THEN '✅ ИТОГО ЗА МЕСЯЦ'
-        WHEN decade_num = 1 THEN '1-я декада (1-10 числа)'
-        WHEN decade_num = 2 THEN '2-я декада (11-20 числа)'
-        WHEN decade_num = 3 THEN '3-я декада (21-31 числа)'
-    END AS декада,
+       CASE
+           WHEN year_num IS NULL THEN '---'
+           WHEN month_num IS NULL THEN '---'
+           WHEN decade_num IS NULL THEN '✅ ИТОГО ЗА МЕСЯЦ'
+           WHEN decade_num = 1 THEN '1-я декада (1-10 числа)'
+           WHEN decade_num = 2 THEN '2-я декада (11-20 числа)'
+           WHEN decade_num = 3 THEN '3-я декада (21-31 числа)'
+           END                     AS декада,
 
-    CASE
-        WHEN year_num IS NULL THEN '---'
-        WHEN month_num IS NULL THEN '---'
-        WHEN decade_num IS NULL THEN '---'
-        WHEN day_num IS NULL THEN '📋 Итог за декаду'
-        ELSE day_num::TEXT || ' число'
-    END AS день,
+       CASE
+           WHEN year_num IS NULL THEN '---'
+           WHEN month_num IS NULL THEN '---'
+           WHEN decade_num IS NULL THEN '---'
+           WHEN day_num IS NULL THEN '📋 Итог за декаду'
+           ELSE day_num::TEXT || ' число'
+           END                     AS день,
 
-    count(*) AS количество_бронирований,
-    round(sum(total_amount), 2) AS общая_сумма,
-    round(avg(total_amount), 2) AS средний_чек
+       count(*)                    AS количество_бронирований,
+       round(sum(total_amount), 2) AS общая_сумма,
+       round(avg(total_amount), 2) AS средний_чек
 
-FROM (
-    SELECT 
-        book_date,
-        total_amount,
-        EXTRACT(YEAR FROM book_date) AS year_num,
-        EXTRACT(MONTH FROM book_date) AS month_num,
-        CASE
-            WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
-            WHEN EXTRACT(DAY FROM book_date) <= 20 THEN 2
-            ELSE 3
-        END AS decade_num,
-        EXTRACT(DAY FROM book_date) AS day_num
-    FROM bookings
-) подготовленные_данные
+FROM (SELECT book_date,
+             total_amount,
+             EXTRACT(YEAR FROM book_date)  AS year_num,
+             EXTRACT(MONTH FROM book_date) AS month_num,
+             CASE
+                 WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
+                 WHEN EXTRACT(DAY FROM book_date) <= 20 THEN 2
+                 ELSE 3
+                 END                       AS decade_num,
+             EXTRACT(DAY FROM book_date)   AS day_num
+      FROM bookings) подготовленные_данные
 
 GROUP BY ROLLUP (year_num, month_num, decade_num, day_num)
 
-ORDER BY
-    CASE WHEN year_num IS NULL THEN 9999 ELSE year_num END,
-    CASE WHEN month_num IS NULL THEN 999 ELSE month_num END,
-    CASE WHEN decade_num IS NULL THEN 999 ELSE decade_num END,
-    CASE WHEN day_num IS NULL THEN 999 ELSE day_num END;
+ORDER BY CASE WHEN year_num IS NULL THEN 9999 ELSE year_num END,
+         CASE WHEN month_num IS NULL THEN 999 ELSE month_num END,
+         CASE WHEN decade_num IS NULL THEN 999 ELSE decade_num END,
+         CASE WHEN day_num IS NULL THEN 999 ELSE day_num END;
 
 /*Группировка с помощью cube
  * cube (a,b,c)
@@ -1924,7 +1812,7 @@ ORDER BY
  * Поэтому если есть комбинация с,a , то комбинация c,a уже не нужна.
  * Это будет корректно работать в рамках запроса, поскольку в предложении Group by порядок
  * следования выражений не важен!!!
- * 
+ *
 CUBE создает 2ⁿ комбинаций (где n - количество столбцов):
 Для CUBE(отдел, должность):
 (отдел, должность) - детальные данные
@@ -1934,76 +1822,74 @@ CUBE создает 2ⁿ комбинаций (где n - количество �
  *
  */
 
-SELECT 
-r.departure_airport AS da,
-r.arrival_airport   AS aa,
-a.model,
-left(tf.fare_conditions, 1) AS fc, ---Берет указанное количество символов с начала строки
-count(*),
-round(sum(tf.amount),2) AS t_amount,
-GROUPING(r.departure_airport, r.arrival_airport, a.model, tf.fare_conditions)::bit(4) AS mask,
-concat_ws(',',
-CASE WHEN GROUPING(r.departure_airport) = 0 THEN 'da' END,
-CASE WHEN GROUPING(r.arrival_airport) = 0 THEN 'aa' END,
-CASE WHEN GROUPING(a.model) = 0 THEN 'm' END,
-CASE WHEN GROUPING(tf.fare_conditions) = 0 THEN 'fc' END 
-) AS grouped_cols
+SELECT r.departure_airport                                                                   AS da,
+       r.arrival_airport                                                                     AS aa,
+       a.model,
+       left(tf.fare_conditions, 1)                                                           AS fc, ---Берет указанное количество символов с начала строки
+       count(*),
+       round(sum(tf.amount), 2)                                                              AS t_amount,
+       GROUPING(r.departure_airport, r.arrival_airport, a.model, tf.fare_conditions)::bit(4) AS mask,
+       concat_ws(',',
+                 CASE WHEN GROUPING(r.departure_airport) = 0 THEN 'da' END,
+                 CASE WHEN GROUPING(r.arrival_airport) = 0 THEN 'aa' END,
+                 CASE WHEN GROUPING(a.model) = 0 THEN 'm' END,
+                 CASE WHEN GROUPING(tf.fare_conditions) = 0 THEN 'fc' END
+       )                                                                                     AS grouped_cols
 FROM routes r
-JOIN flights f ON f.flight_no = r.flight_no 
-JOIN ticket_flights tf ON tf.flight_id = f.flight_id 
-JOIN aircrafts a ON a.aircraft_code = r.aircraft_code 
-GROUP BY CUBE (
-(da, aa), 
-a.model, 
-tf.fare_conditions 
-)
+         JOIN flights f ON f.flight_no = r.flight_no
+         JOIN ticket_flights tf ON tf.flight_id = f.flight_id
+         JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+GROUP BY CUBE ( (da, aa),
+                a.model,
+                tf.fare_conditions
+    )
 ORDER BY da, aa, a.model, fc;
 
 /*Оконные функции
  * Оконные функции имеют много общего с агрегатными, но между ними есть и приципиальные различия
- * При обычном агрегировании каждая группа строк, формируемая в соответствии с предложением GROUP BY, 
+ * При обычном агрегировании каждая группа строк, формируемая в соответствии с предложением GROUP BY,
  * заменяется одной строкой.
- * 
+ *
  * Но при сипользовании оконных функций сохраняются все индивидульные строки
  * Вызовы оконных функций допускаются только в предложении SELECT(в списке вывода) и
- * в предложении order by команды Select. 
+ * в предложении order by команды Select.
  * Во всех остальных предложениях этой команды, включая WHERE, GROUP BY и HAVING, их вызвать нельзя,
  * поскольку оконные функции логически выполняются после обработки этих предложений!!!
  * Таким образом, если в предложении SELECT присутствует предложение  GROUP BY и возможно HAVING,
  * то оконные функции имеют дело с уже сгруппированными строками.
- * 
+ *
  * Если в запросе присутствуют и агрегатные функции, и оконные, то оконные вызываются после
  * агрегатных.
  * Поэтому в принципе можно включить вызов агрегатной функции в качестве параметра оконной функции,
  * а вот поступить наоборот нельзя.
- * 
+ *
  * В технологии оконных фунций базовым является понятие раздела (partition). Раздел включает в себя
- * все строки, имеющие одинаковые значения определенного выражения, вычисляемого для каждой 
+ * все строки, имеющие одинаковые значения определенного выражения, вычисляемого для каждой
  * строки их выборки.
  * Это может быть например значение одного или нескольких столбцов или значение какой-либо
  * функции.
  * Разделы определяются предложением PARTITION BY в конструкции OVER.
- * 
- * В процессе обработки раздела каждая его строка поочередно помещается, образно говоря, в 
- * фокус внимания; для нее некоторым образом определяются связанные с ней строки, которые 
+ *
+ * В процессе обработки раздела каждая его строка поочередно помещается, образно говоря, в
+ * фокус внимания; для нее некоторым образом определяются связанные с ней строки, которые
  * и учитываются при при вычисления оконной функции.
  * Такая строка считается текущей, а связанные с ней строки образуют ее оконный кадр (window frame).
  * Это второе базовое понятие технологии оконных функций. Существует целый ряд способов задания
  * оконного кадра.
- * 
+ *
  * Если в конструкции OVER присутствует предложение ORDER BY, определяющее порядок сортировки, то
  * это будут строки раздела, начиная с первой и заканчивая текущей!!!
- * Бывают ситуации, когда кадр не завершается на текущей строке, а включает в себя еще одну 
- * или более строк, располагающихся в выбоки после текущей строки. 
+ * Бывают ситуации, когда кадр не завершается на текущей строке, а включает в себя еще одну
+ * или более строк, располагающихся в выбоки после текущей строки.
  * Это происходит, когда значения выражения сортировки этих строк и текущей строки совпадают.
  * Такие строки нахываются родственными (peer).
- * 
+ *
  * Если же предложения ORDER BY в конструкции  OVER отсутствует, то оконный кадр
  * текущей строки образует все строки раздела, в котором эта строка находится, поскольку
  * все они будут считаться родственными.
  * Таким образом, оконная функция получает доступ ко всем строкам оконного кадра текущей строки,
  * но при этом не заменяет все эти строки одной строкой.
- * 
+ *
  * Предположим что в нашей авикомпании проводится оптимизация расписания. Руководство обратило
  * внимание на маршрут Москва - Санкт-Петербург, по которому следуют несколько рейсов.
  * Цель исследования: выяснить, какая доля пассажиров, перевезенных за день,
@@ -2013,9 +1899,9 @@ ORDER BY da, aa, a.model, fc;
  * В Запрос включим все сведения представленные в базе данных Авиаперевозки
  * за период с 16 ибля по 15 августа 2017 года. Кроме того, будем учитывать только
  * выполненные рейсы со статусом Arrived
- * 
+ *
  * Списки аэропортов представлены в виде литералов, это сделано с целью упрощения запроса.
- * Однако при использовани и этих конструкций выполнение запроса значительно замедляется, поскольку 
+ * Однако при использовани и этих конструкций выполнение запроса значительно замедляется, поскольку
  * планировщик неверно определяет количество аэропортов и выбирает метод вложенного цикла для
  * выполнения соединения наборов строк. В качестве однрой из идей можно прибегнуть
  * к материализации требуемых рейсов в общем табличном выражении предложение MATERIALIZED.
@@ -2023,31 +1909,26 @@ ORDER BY da, aa, a.model, fc;
 
 
 EXPLAIN VERBOSE
-WITH passenger AS (
-SELECT 
-f.scheduled_departure,
-f.flight_no,
-count(*) AS pass_count
-FROM flights f
-JOIN ticket_flights tf ON f.flight_id = tf.flight_id 
-WHERE f.departure_airport IN ('DME','SVO','VKO')
-AND f.arrival_airport = 'LED' ---Пулково
-AND f.status = 'Arrived'
-GROUP BY f.flight_id--можно заменить вместо  потому как f.scheduled_departure,f.flight_no зависят от
+WITH passenger AS (SELECT f.scheduled_departure,
+                          f.flight_no,
+                          count(*) AS pass_count
+                   FROM flights f
+                            JOIN ticket_flights tf ON f.flight_id = tf.flight_id
+                   WHERE f.departure_airport IN ('DME', 'SVO', 'VKO')
+                     AND f.arrival_airport = 'LED' ---Пулково
+                     AND f.status = 'Arrived'
+                   GROUP BY f.flight_id--можно заменить вместо  потому как f.scheduled_departure,f.flight_no зависят от
 ---первичного ключа
 ),
 
-passenger2 AS 
-(
-SELECT 
-scheduled_departure,
-flight_no, 
-pass_count,
-sum(pass_count) OVER (PARTITION BY date_trunc('day',scheduled_departure)) AS day_pass_count
-----это значение вычисляется однократно, чтобы в общем запросе не писать два раза
+     passenger2 AS
+         (SELECT scheduled_departure,
+                 flight_no,
+                 pass_count,
+                 sum(pass_count) OVER (PARTITION BY date_trunc('day', scheduled_departure)) AS day_pass_count
+          ----это значение вычисляется однократно, чтобы в общем запросе не писать два раза
 ----оконную функцию
-FROM passenger
-)
+          FROM passenger)
 
 /*
 SELECT
@@ -2058,7 +1939,7 @@ day_pass_count,
 /*Нет order by поэтому для всего раздела будет один итог за выбранный день
  * Функция sum вызывается не для каждой строки, а одни раз для каждого
  * раздела, затем выисленное значение используется в списке Select для
- * всех строк раздела, поэтому значения в столбце day_pass_count повторяются для 
+ * всех строк раздела, поэтому значения в столбце day_pass_count повторяются для
  * всех строк за один день*/
 round(pass_count / day_pass_count,2) AS fract
 /*прописывем sum(pass_count) потому как нельзя сослаться на псевдоним столбца, вычисляемого
@@ -2070,39 +1951,36 @@ ORDER BY scheduled_departure,flight_no
 /*Рассмотренный пример можно модифицировать следующим образом
  * вызов оконной функции будет выполняться дважды но при этом
  * объявление раздела указывается один раз в WINDOW
- * 
+ *
  * Здесь мы получили картину распределения числа пассажиров между
  * каждыми рейсами каждго дня. Видны рейсы лидеры и рейсы аутсайдеры.
 */
 
-SELECT
-scheduled_departure,
-flight_no,
-pass_count,
-sum(pass_count) OVER day_flights_win AS day_pass_count,
-round(pass_count / sum(pass_count) OVER day_flights_win, 2) AS fract
+SELECT scheduled_departure,
+       flight_no,
+       pass_count,
+       sum(pass_count) OVER day_flights_win                        AS day_pass_count,
+       round(pass_count / sum(pass_count) OVER day_flights_win, 2) AS fract
 FROM passenger
-WINDOW day_flights_win AS (PARTITION BY date_trunc('day',scheduled_departure))
-ORDER BY  fract DESC,  scheduled_departure ASC ,flight_no ASC
+WINDOW day_flights_win AS (PARTITION BY date_trunc('day', scheduled_departure))
+ORDER BY fract DESC, scheduled_departure ASC, flight_no ASC
 
 
-
-
-/*Однако для принятия обоснованного решения о сокращении числа рейсов необходимо 
+/*Однако для принятия обоснованного решения о сокращении числа рейсов необходимо
  * проанализировать динамику перевозки пассажиров по каждому рейсу за каждую
  * неделю отчетного периода. Если известно, что рейс считается рентабельным при
  * перевозке за неделю не мнее определенного числа пассажиров, такая информация
  * позволит увидеть начиная с какого дня недели рейс начинает приносить прибыль
  * Также необходимо попытаться увидеть другие закономерности, ведь возможно,
- * какой-нибудь вечерний рейс наиболее  популярен у пасажиров вылетающих в пятницу, 
+ * какой-нибудь вечерний рейс наиболее  популярен у пасажиров вылетающих в пятницу,
  * а какой-то утренний рейс у пассажиров, вылетающих в субботу
- * 
- * 
+ *
+ *
  * Номер рейса в совокупности с номером недели определяют текущий раздел.
  * Поскольку строки в разделе обрабатываются в порядке номеров дней недели,
  * то оконная функция sum подсчитвает накопленное число пассажиров, перевезенных на
  * конкретном рейсе с начала отчетной недели.
- * 
+ *
  *Здесь разделы формируются по рейсу и неделе, а в каждом разделе представлены все дни
  *конкретной недели.
  *Порядок сортировки в предложении order by  в коснтрукции over  необязан совпадать с порядком сортировки
@@ -2113,26 +1991,23 @@ ORDER BY  fract DESC,  scheduled_departure ASC ,flight_no ASC
  *приносит прибыль начиная с пятницы 21 июля.
  *
  **/
-WITH passenger AS (
-SELECT 
-f.scheduled_departure,
-f.flight_no,
-count(*) AS pass_count
-FROM flights f
-JOIN ticket_flights tf ON f.flight_id = tf.flight_id 
-WHERE f.departure_airport IN ('DME','SVO','VKO')
-AND f.arrival_airport = 'LED' ---Пулково
-AND f.status = 'Arrived'
-GROUP BY f.flight_id--можно заменить вместо  потому как f.scheduled_departure,f.flight_no зависят от
+WITH passenger AS (SELECT f.scheduled_departure,
+                          f.flight_no,
+                          count(*) AS pass_count
+                   FROM flights f
+                            JOIN ticket_flights tf ON f.flight_id = tf.flight_id
+                   WHERE f.departure_airport IN ('DME', 'SVO', 'VKO')
+                     AND f.arrival_airport = 'LED' ---Пулково
+                     AND f.status = 'Arrived'
+                   GROUP BY f.flight_id--можно заменить вместо  потому как f.scheduled_departure,f.flight_no зависят от
 ---первичного ключа
 )
 
 
-SELECT
-flight_no,
-scheduled_departure,
-extract(week FROM scheduled_departure) AS week,
-extract(isodow FROM scheduled_departure) AS dow,
+SELECT flight_no,
+       scheduled_departure,
+       extract(week FROM scheduled_departure)   AS week,
+       extract(isodow FROM scheduled_departure) AS dow,
 /*Понедельник = 1
 Вторник = 2
 Среда = 3
@@ -2140,93 +2015,89 @@ extract(isodow FROM scheduled_departure) AS dow,
 Пятница = 5
 Суббота = 6
 Воскресенье = 7*/
-pass_count,
-sum(pass_count) OVER day_flights_win AS running_count
+       pass_count,
+       sum(pass_count) OVER day_flights_win     AS running_count
 FROM passenger
 WINDOW day_flights_win AS (PARTITION BY flight_no, EXTRACT(week from scheduled_departure)
-ORDER BY EXTRACT(isodow FROM scheduled_departure))
-ORDER BY  flight_no, week, dow --также и псевдонимы вычичляемых столбцов списка Select
+        ORDER BY EXTRACT(isodow FROM scheduled_departure))
+ORDER BY flight_no, week, dow
+--также и псевдонимы вычичляемых столбцов списка Select
 
 /*Способы формирования оконного кадра!!!
- * 
- * 
+ *
+ *
 Тип	Работает с	Пример
 ROWS	Физическими строками	ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
 RANGE	Значениями	RANGE BETWEEN 10 PRECEDING AND 10 FOLLOWING
 GROUPS	Группами одинаковых значений	GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING
- * 
+ *
  * Специфика конкретной задачи определяет множество строк раздела, которые необходимо учитывать при
  * вычилении оконной функции для каждой строк выборки.
  * Например может потребоваться принимать во внимание все строки раздела, начиная с первой и заканчивая текущей
  * строкой или учитывать только строку раздела, отстоящую от текщуей на заданное число строк!!!
  * Множество строк, рассматриваемых оконной функцией, задается оконным кадром с помощью
  * специальных синтаксических средств.
- * 
+ *
  * В качестве примера рассмотрим фрагмент сложной задачи финасвого положения нашей авиакомпании
  * Мы ограничимся лишь изучением процесса поступления денег за счет продажи авиабилетов!!!
- * Будем исходить из того, что равномерное ежедневное поступление денежных средств является 
+ * Будем исходить из того, что равномерное ежедневное поступление денежных средств является
  * хорошим показателем стабильной работы авиакомпании.
- * 
+ *
  * Для начала рассмотрим так называемое скользящее среднее.
  * Этот показатель отличается от обычного среднего значения тем, что вычисляется
  * в каждой точке выборки на основе значений некотрого интервала от текущей точки в прошлое.
- * Скользящее среднее показывает более четкую картину, потому что оно сглаживает краткосрочные 
+ * Скользящее среднее показывает более четкую картину, потому что оно сглаживает краткосрочные
  * колебания и показывает основной тренд.
  * Для определения равномерности поступления денег от бронирования юилетов мы вычисляем
- * разность между дневной суммой бронирования и скользящим средним значением, 
- * вычисленным для этого же дня. 
- * Для наглядности представим ее еще и в процентах. 
+ * разность между дневной суммой бронирования и скользящим средним значением,
+ * вычисленным для этого же дня.
+ * Для наглядности представим ее еще и в процентах.
  * Чем меньше эта разность, тем более равномерным является поступление.
- * 
+ *
  * */
 
 ---EXPLAIN ANALYZE
-WITH day_amounts(b_date, day_sum) AS 
-(
-SELECT
-	date_trunc('day', book_date),
-	round((sum(total_amount) / 1000000), 2)
-FROM
-	bookings
-GROUP BY date_trunc('day', book_date)
-)
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date),
+                 round((sum(total_amount) / 1000000), 2)
+          FROM bookings
+          GROUP BY date_trunc('day', book_date))
 
-SELECT
-to_char(b_date, 'YYYY-MM-DD') AS date,
-day_sum,
-round(avg(day_sum) OVER moving_win, 2) AS mv_avg_5,
-round(day_sum - avg(day_sum) OVER moving_win, 2) AS delta,
-round( (day_sum - avg(day_sum) OVER moving_win) / day_sum * 100, 2) AS percent
+SELECT to_char(b_date, 'YYYY-MM-DD')                                      AS date,
+       day_sum,
+       round(avg(day_sum) OVER moving_win, 2)                             AS mv_avg_5,
+       round(day_sum - avg(day_sum) OVER moving_win, 2)                   AS delta,
+       round((day_sum - avg(day_sum) OVER moving_win) / day_sum * 100, 2) AS percent
 FROM day_amounts
 WINDOW moving_win AS (
-ORDER BY b_date ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-)
+        ORDER BY b_date ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+        )
 ORDER BY date
-	
+
 /*В конструкции with мы выполняем подготовительную работу вычисялем суммы бронирований,
  * выполненных за кажду дату. При этом суммы будем представлять в миллионах рублей.
- * В предложении Window отсуствует предложение partiton by, поэтому разделом будет служить 
- * вся выборка. 
- * Интервал сглаживания для вычисления скользяшего среднего примем равным 
- * пяти дням. 
+ * В предложении Window отсуствует предложение partiton by, поэтому разделом будет служить
+ * вся выборка.
+ * Интервал сглаживания для вычисления скользяшего среднего примем равным
+ * пяти дням.
  * Конечно он может быть и другим если его выбор будет каким-то образом обоснован.
  * Поскольку этот интервал отсчитвается от текущего момента времени назад в прошлое!!!, то
  * в качестве оконного кадра текущей строки должны выступать сама эта строка!!! и еще четыре
  * строки, предшествующие ей в порядке сортировки, указанном в предложении order by
- * 
+ *
  * Выполнение этого требования обеспечивает конструкция ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
  * Она определяет множество строк, составляющих оконный кадр, путем указания его начала (4 Preceding)
  * и конца (Current Row).
- * В Выражении 4 preceding целое число 4 означает смещение первой строки оконного кадра от 
+ * В Выражении 4 preceding целое число 4 означает смещение первой строки оконного кадра от
  * текущей строки к началу раздела.
  *
  *В рассматриваемой конструкции требует пояснения ключевое слово ROWS. Оно задает так называемый режим
  *формирования кадра. В этом режиме current row означает только текущую строку, а родственные строки
- *не учитываются. 
+ *не учитываются.
  *Аналогично и выражение 4 preceding означает ровно четыре строки, предшествующие текущей строке,
  *также без учета родственных строк. Но в нашшем случае формируется одна строка, поэтому родственных строк
  *вообще не существует.
- *Как видим в начале отчетного периоа отклонения текущей дневной выручки от значения скользящего 
+ *Как видим в начале отчетного периоа отклонения текущей дневной выручки от значения скользящего
  *среднего были велики а затем они перестали первышать 5-6%.
  *При интепретации нужно учитывать, что границы оконного кадра не могут выходить за пределы раздела.
  *Поэтому при вычислении скользящего среднего для каждой из первых трех строк выборки
@@ -2239,8 +2110,8 @@ ORDER BY date
  *ROWS BETWEEN CURRENT ROW AND 4 FOLLOWING - оконный кадр начинается на текущей строке, а завершается
  *на строке, смещенной от текущей к концу раздела на заданное число строк.
  *RANGE и GROUPS - в них также как и в режиме ROWS, оконный кадр определяется своим началом и концом.
- *При использовании RANGE сортировка строк раздела должна выполняться только по одному столбцу. 
- *Смещение задается макисмальной разностью значений этого столбца в текущей строке и в той строке, 
+ *При использовании RANGE сортировка строк раздела должна выполняться только по одному столбцу.
+ *Смещение задается макисмальной разностью значений этого столбца в текущей строке и в той строке,
  *на которой должен начинаться или заканчиваться оконный кадр. Если в выборке есть родственные строки
  *то при поиске начала окнного кадра используется первая строка из группы этих строк,
  *а при поиске его конца - последняя из них.
@@ -2252,7 +2123,7 @@ ORDER BY date
  *Например, в выражении 4 PRECENDING целое число 4 означало бы, что первая группа оконного кадра
  *расположена в выборке со смещением к началу раздела на 4 группы от текущей группы (к которой относится
  *текущая строка). Но поскольку группы состоят зи строк, когда говорят о первой группе оконного кадра,
- *то имеют вввиду первую строку из этой группы, а когда говорят о последней группе этого кадра, 
+ *то имеют вввиду первую строку из этой группы, а когда говорят о последней группе этого кадра,
  *то имеют ввиду последнюю строку из этой группы.
  *
  *
@@ -2263,28 +2134,22 @@ ORDER BY date
 
 
 /*range*/
-WITH day_amounts(b_date, day_sum) AS 
-(
-SELECT
-	date_trunc('day', book_date),
-	round((sum(total_amount) / 1000000), 2)
-FROM
-	bookings
-GROUP BY date_trunc('day', book_date)
-)
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date),
+                 round((sum(total_amount) / 1000000), 2)
+          FROM bookings
+          GROUP BY date_trunc('day', book_date))
 
-SELECT
-to_char(b_date, 'YYYY-MM-DD') AS date,
-day_sum,
-round(avg(day_sum) OVER moving_win, 2) AS mv_avg_5,
-round(day_sum - avg(day_sum) OVER moving_win, 2) AS delta,
-round( (day_sum - avg(day_sum) OVER moving_win) / day_sum * 100, 2) AS percent
+SELECT to_char(b_date, 'YYYY-MM-DD')                                      AS date,
+       day_sum,
+       round(avg(day_sum) OVER moving_win, 2)                             AS mv_avg_5,
+       round(day_sum - avg(day_sum) OVER moving_win, 2)                   AS delta,
+       round((day_sum - avg(day_sum) OVER moving_win) / day_sum * 100, 2) AS percent
 FROM day_amounts
 WINDOW moving_win AS (
-ORDER BY b_date RANGE BETWEEN INTERVAL '4 days' PRECEDING AND CURRENT ROW
-)
+        ORDER BY b_date RANGE BETWEEN INTERVAL '4 days' PRECEDING AND CURRENT ROW
+        )
 ORDER BY date
-
 
 
 
@@ -2292,36 +2157,33 @@ ORDER BY date
 
 ---1. GROUPS BETWEEN N PRECEDING AND M FOLLOWING
 -- Сумма текущей группы + 1 предыдущая группа + 1 следующая группа
-SELECT 
-    department,
-    salary,
-    SUM(salary) OVER (
-        ORDER BY department
-        GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING
-    ) as sum_3_groups
+SELECT department,
+       salary,
+       SUM(salary) OVER (
+           ORDER BY department
+           GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+           ) as sum_3_groups
 FROM employees;
 
 ---2.GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
 -- Накопление по группам
-SELECT 
-    department,
-    salary,
-    SUM(salary) OVER (
-        ORDER BY department
-        GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) as cumulative_by_groups
+SELECT department,
+       salary,
+       SUM(salary) OVER (
+           ORDER BY department
+           GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+           ) as cumulative_by_groups
 FROM employees;
 
 
 ---3. GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
 -- Обратное накопление
-SELECT 
-    department,
-    salary,
-    SUM(salary) OVER (
-        ORDER BY department  
-        GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
-    ) as remaining_total
+SELECT department,
+       salary,
+       SUM(salary) OVER (
+           ORDER BY department
+           GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+           ) as remaining_total
 FROM employees;
 
 /*
@@ -2336,34 +2198,30 @@ EXCLUDE полезен когда:
 GROUPS и EXCLUDE - это продвинутые инструменты для сложной аналитики в PostgreSQL!
 */
 
-WITH day_amounts(b_date, day_sum) AS 
-(
-SELECT
-	date_trunc('day', book_date),
-	round((sum(total_amount) / 1000000), 2)
-FROM
-	bookings
-GROUP BY date_trunc('day', book_date)
-)
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date),
+                 round((sum(total_amount) / 1000000), 2)
+          FROM bookings
+          GROUP BY date_trunc('day', book_date))
 
-SELECT
-to_char(b_date, 'YYYY-MM-DD') AS date,
-day_sum,
-round(avg(day_sum) OVER moving_win, 2) AS mv_avg_5,
-round(day_sum - avg(day_sum) OVER moving_win, 2) AS delta,
-round( (day_sum - avg(day_sum) OVER moving_win) / day_sum * 100, 2) AS percent
+SELECT to_char(b_date, 'YYYY-MM-DD')                                      AS date,
+       day_sum,
+       round(avg(day_sum) OVER moving_win, 2)                             AS mv_avg_5,
+       round(day_sum - avg(day_sum) OVER moving_win, 2)                   AS delta,
+       round((day_sum - avg(day_sum) OVER moving_win) / day_sum * 100, 2) AS percent
 FROM day_amounts
 WINDOW moving_win AS (
-ORDER BY b_date GROUPS BETWEEN 2 PRECEDING AND CURRENT ROW
-)
+        ORDER BY b_date GROUPS BETWEEN 2 PRECEDING AND CURRENT ROW
+        )
 ORDER BY date
 
 
 ---1. PARTITION BY - Разделение на группы
 -- Разделяем по предметам
-SELECT 
-    ученик, предмет, оценка,
-    AVG(оценка) OVER (PARTITION BY предмет) as средняя_по_предмету
+SELECT ученик,
+       предмет,
+       оценка,
+       AVG(оценка) OVER (PARTITION BY предмет) as средняя_по_предмету
 FROM журнал;
 
 Ученик | Предмет    | Оценка | Средняя_по_предмету
@@ -2377,12 +2235,13 @@ FROM журнал;
 --2. ORDER BY - Сортировка внутри окна
 
 -- Накопительная сумма оценок по предметам
-SELECT 
-    ученик, предмет, оценка,
-    SUM(оценка) OVER (
-        PARTITION BY предмет
-        ORDER BY оценка DESC
-    ) as накопленная_сумма
+SELECT ученик,
+       предмет,
+       оценка,
+       SUM(оценка) OVER (
+           PARTITION BY предмет
+           ORDER BY оценка DESC
+           ) as накопленная_сумма
 FROM журнал;
 
 Ученик | Предмет    | Оценка | Накопленная_сумма
@@ -2394,54 +2253,56 @@ FROM журнал;
 Боря   | Физика     | 4      | 9    ← 5+4
 
 /*Совместное использование оконных и агрегатных функций
- * 
+ *
  * Из документации известно, что при использовании в одном запросе как оконных,
  * так и агрегатных функций с предложением GROUP BY и возможно HAVING оконные
  * функции работают с уже сгруппированными строками.
- * 
+ *
  * Предположим, что требуется оценить нагрузку на электронную систему
  * бронирования авиабилетов в выходные дни (субботу и воскресенье) по
  * сравнению с рабочими днями. В каждой операци бронирования может
- * оформляться несколько билетов, при этом в каждом билете может присутствовать 
+ * оформляться несколько билетов, при этом в каждом билете может присутствовать
  * несколько перелетов, каждый из которых требует использования ресурсов системы.
  * Таким образом, в качестве меры загруженности системы бронирования логично
  * использовать число перелетов, оформленных в ней за один день.
- * 
+ *
  * Идея запроса такова:
  * 1.Для каждой отчетной недели подсчитать среднее число перелетов,
  * оформленных за пять рабочих дней.
- * 
- * 2.Сравнить п. 1 с числом перелетов, оформленных  в выходные дни. 
+ *
+ * 2.Сравнить п. 1 с числом перелетов, оформленных  в выходные дни.
  * Поскольку в таблице Передлеты ticket_flights нет информации о дате
  * бронирования, придется обратиться к таблице Бронирования bookings. Связать эти
  * две таблицы можно через таблицу Билеты tickets.
  */
 
 
-SELECT 
-    to_char(date_trunc('day', b.book_date), 'YYYY-MM-DD') AS b_date,
-    EXTRACT(week FROM b.book_date) AS week,
-    extract(isodow FROM b.book_date) AS dow,
-    count(*) AS day_tf_count,
-    
-    CASE WHEN EXTRACT(isodow FROM b.book_date) BETWEEN 1 AND 5 THEN
-    round(avg(count(*))
-    FILTER (WHERE EXTRACT(isodow FROM b.book_date) BETWEEN 1 AND 5)
-    OVER week_win, 0) 
-    END AS avg_5_days,
+SELECT to_char(date_trunc('day', b.book_date), 'YYYY-MM-DD') AS b_date,
+       EXTRACT(week FROM b.book_date)                        AS week,
+       extract(isodow FROM b.book_date)                      AS dow,
+       count(*)                                              AS day_tf_count,
 
-    -- ТОЛЬКО для выходных показываем значение, для остальных - NULL
-    CASE WHEN EXTRACT(isodow FROM b.book_date) IN (6,7) THEN
-        round(avg(count(*))
-        FILTER (WHERE EXTRACT(isodow FROM b.book_date) IN (6,7))
-        OVER week_win, 0)
-    END AS avg_67
+       CASE
+           WHEN EXTRACT(isodow FROM b.book_date) BETWEEN 1 AND 5 THEN
+               round(avg(count(*))
+                     FILTER (WHERE EXTRACT(isodow FROM b.book_date) BETWEEN 1 AND 5)
+                         OVER week_win, 0)
+           END                                               AS avg_5_days,
+
+       -- ТОЛЬКО для выходных показываем значение, для остальных - NULL
+       CASE
+           WHEN EXTRACT(isodow FROM b.book_date) IN (6, 7) THEN
+               round(avg(count(*))
+                     FILTER (WHERE EXTRACT(isodow FROM b.book_date) IN (6, 7))
+                         OVER week_win, 0)
+           END                                               AS avg_67
 
 FROM bookings b
-JOIN tickets t ON t.book_ref = b.book_ref
-JOIN ticket_flights tf ON tf.ticket_no = t.ticket_no 
+         JOIN tickets t ON t.book_ref = b.book_ref
+         JOIN ticket_flights tf ON tf.ticket_no = t.ticket_no
 GROUP BY b_date, week, dow
-WINDOW week_win AS (PARTITION BY EXTRACT(week FROM b.book_date)) ---order by нет, значит выступают все строки раздела
+WINDOW week_win AS (PARTITION BY EXTRACT(week FROM b.book_date))
+---order by нет, значит выступают все строки раздела
 ORDER BY b_date;
 
 ---предложение фильтр могут принимать только агрегирующие оконные функции, такие
@@ -2450,71 +2311,59 @@ ORDER BY b_date;
 
 
 /*Функции общего назначения
- * 
+ *
  * first_value, last_value, nth_value.
- * 
+ *
  * Первая из них возвращает первое значение окна оконного кадрая, вторая функция возвращает последнее
  * значения окна оконного кадра, а третья функция для n-ой строки оконного кадра!!!
- * 
+ *
  * В качестве примера обратимя к оценке равномерности поступления денег за счет продажи авиабилетов.
  * Для каждой даты будем выислять разности между общей суммой бронирования, произведенных в этот день
  * и суммами бронирований, полученными в первый день месяца, в поеследний день месяца и день месяца,
  * являющегося его серединой.
- * Будем считать, что если для всех дат теущего месяца три эти разности окажутся небольшими, то 
+ * Будем считать, что если для всех дат теущего месяца три эти разности окажутся небольшими, то
  * это в какой-то степени говорит о равномерном поступлении денег от продажи билетов насчет
  * авиакомпании.
- * 
+ *
  * Сначала представим запрос, решающий поставленную задачу, а затем приведем его описание.
  * В псевдонимах столбцов d_fv, d_lv, d_nv буква d означает delta, то есть разность.
  */
 
-WITH day_amounts(b_date, day_sum) AS 
-(
-SELECT
-	date_trunc('day', book_date),
-	round(sum(total_amount) / 1000000, 2) ---сумма в миллионах рублей
-FROM
-	bookings
-GROUP BY
-	1
-),
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date),
+                 round(sum(total_amount) / 1000000, 2) ---сумма в миллионах рублей
+          FROM bookings
+          GROUP BY 1),
 
-days_per_month(month, days_count) AS 
-(
-SELECT
-	EXTRACT('mon' FROM b_date),
-	count(*)::integer
-FROM
-day_amounts
-GROUP BY 1),
+     days_per_month(month, days_count) AS
+         (SELECT EXTRACT('mon' FROM b_date),
+                 count(*)::integer
+          FROM day_amounts
+          GROUP BY 1),
 
-day_amounts_2 AS 
-(
-SELECT 
-to_char(da.b_date, 'YYYY-MM-DD') AS date,
-da.day_sum,
-first_value(da.day_sum) OVER month_win AS fv,
-last_value(da.day_sum)  OVER month_win AS lv,
-nth_value(
-da.day_sum,  
-(SELECT days_count FROM days_per_month WHERE month=EXTRACT('mon' FROM da.b_date)
-            ) / 2
-) OVER month_win  AS nv
+     day_amounts_2 AS
+         (SELECT to_char(da.b_date, 'YYYY-MM-DD')       AS date,
+                 da.day_sum,
+                 first_value(da.day_sum) OVER month_win AS fv,
+                 last_value(da.day_sum) OVER month_win  AS lv,
+                 nth_value(
+                 da.day_sum,
+                 (SELECT days_count FROM days_per_month WHERE month = EXTRACT('mon' FROM da.b_date)) / 2
+                          ) OVER month_win              AS nv
 
-FROM day_amounts da
-WINDOW month_win AS 
-(
-PARTITION BY EXTRACT('mon' FROM da.b_date) 
-ORDER BY da.b_date 
-ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-        )
-)
+          FROM day_amounts da
+          WINDOW month_win AS
+                     (
+                             PARTITION BY EXTRACT('mon' FROM da.b_date)
+                             ORDER BY da.b_date
+                             ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                             ))
 
 /*
- * WINDOW month_win AS 
+ * WINDOW month_win AS
 (
     PARTITION BY EXTRACT('mon' FROM b_date)   -- 🎯 Разделение
-    ORDER BY b_date                           -- 🔄 Сортировка  
+    ORDER BY b_date                           -- 🔄 Сортировка
     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING  -- 📏 Фрейм
 )
  * b_date     | day_sum | Месяц
@@ -2526,23 +2375,23 @@ ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
 2024-02-28 | 25.00   | 2
 
 ОКНО 1 (Январь):
-[2024-01-01: 15.25] 
-[2024-01-02: 18.50] 
+[2024-01-01: 15.25]
+[2024-01-02: 18.50]
 [2024-01-31: 22.10]
 
-ОКНО 2 (Февраль):  
+ОКНО 2 (Февраль):
 [2024-02-01: 12.00] [2024-02-28: 25.00]
 
 
 ORDER BY b_date  -- Сортируем по дате внутри каждого окна
 
 ОКНО 1 (Январь):
-[01.01: 15.25] 
-[02.01: 18.50]  
+[01.01: 15.25]
+[02.01: 18.50]
 [31.01: 22.10]
 
 ОКНО 2 (Февраль):
-[01.02: 12.00] 
+[01.02: 12.00]
 [28.02: 25.00]
 
 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
@@ -2559,29 +2408,28 @@ first_value(day_sum) OVER month_win
 Для февраля: всегда возвращает 12.00 (01.02)
 
 
-last_value(day_sum) OVER month_win  
+last_value(day_sum) OVER month_win
 Ищет в КАЖДОМ окне последнюю строку
 Для января: всегда возвращает 22.10 (31.01)
 Для февраля: всегда возвращает 25.00 (28.02)
- * 
- * 
- * 
- * 
- * 
- * 
- * 
- * 
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
  * */
 
-SELECT 
-date,
-day_sum,
-fv,
-lv,
-nv,
-day_sum - fv AS d_fv,
-day_sum - lv AS l_fv,
-day_sum - nv AS d_nv
+SELECT date,
+       day_sum,
+       fv,
+       lv,
+       nv,
+       day_sum - fv AS d_fv,
+       day_sum - lv AS l_fv,
+       day_sum - nv AS d_nv
 FROM day_amounts_2
 ORDER BY date desc;
 
@@ -2590,25 +2438,23 @@ ORDER BY date desc;
  * например за тот же месяц прошлого года.
  * Будем сравнивать сумму полных стоимостей бронирований, оформленных в текущий день, с суммами полученными в тот же
  * день неделю назад!!!
- * 
+ *
  * При сортировке строк раздела по убыванию дат функция lead выдаст желаемый результат, поскольку возвратится
  * значение суммы, соответстветвующее меньшей дате.
  *Не задаем в окне partition by потому как в качестве раздела участвует вся выборка
  */
 
-WITH day_amounts(b_date, day_sum) AS 
-(SELECT date_trunc('day', book_date)  AS b_date, 
-round(sum(total_amount) / 1000000, 2) AS day_sum
-FROM bookings
-GROUP BY b_date
-)
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date)          AS b_date,
+                 round(sum(total_amount) / 1000000, 2) AS day_sum
+          FROM bookings
+          GROUP BY b_date)
 
-SELECT 
-to_char(b_date, 'YYYY-MM-DD') AS date,
-extract(isodow FROM b_date) AS dow, ----день недели
-day_sum,
-lead(day_sum, 7) OVER all_rows_win AS week_ago, ---неделю назад от текущей вычисляемой даты
-day_sum - lead(day_sum,7) OVER  all_rows_win AS delta ---разница между суммами фактической и неделю назад
+SELECT to_char(b_date, 'YYYY-MM-DD')                AS date,
+       extract(isodow FROM b_date)                  AS dow,      ----день недели
+       day_sum,
+       lead(day_sum, 7) OVER all_rows_win           AS week_ago, ---неделю назад от текущей вычисляемой даты
+       day_sum - lead(day_sum, 7) OVER all_rows_win AS delta     ---разница между суммами фактической и неделю назад
 FROM day_amounts
 WINDOW all_rows_win AS (ORDER BY b_date DESC)
 ORDER BY b_date DESC
@@ -2616,19 +2462,17 @@ ORDER BY b_date DESC
 
 
 
-WITH day_amounts(b_date, day_sum) AS 
-(SELECT date_trunc('day', book_date)  AS b_date, 
-round(sum(total_amount) / 1000000, 2) AS day_sum
-FROM bookings
-GROUP BY b_date
-)
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date)          AS b_date,
+                 round(sum(total_amount) / 1000000, 2) AS day_sum
+          FROM bookings
+          GROUP BY b_date)
 
-SELECT 
-to_char(b_date, 'YYYY-MM-DD') AS date,
-extract(isodow FROM b_date) AS dow, ----день недели
-day_sum,
-lag(day_sum, 7) OVER all_rows_win AS week_ago, ---неделю назад от текущей вычисляемой даты
-day_sum - lag(day_sum,7) OVER  all_rows_win AS delta ---разница между суммами фактической и неделю назад
+SELECT to_char(b_date, 'YYYY-MM-DD')               AS date,
+       extract(isodow FROM b_date)                 AS dow,      ----день недели
+       day_sum,
+       lag(day_sum, 7) OVER all_rows_win           AS week_ago, ---неделю назад от текущей вычисляемой даты
+       day_sum - lag(day_sum, 7) OVER all_rows_win AS delta     ---разница между суммами фактической и неделю назад
 FROM day_amounts
 WINDOW all_rows_win AS (ORDER BY b_date)
 ORDER BY b_date DESC
@@ -2637,24 +2481,22 @@ ORDER BY b_date DESC
 /*Остальные оконные функции*/
 
 WITH aircrafts_plus AS
-(SELECT aircraft_code, model, range
-FROM aircrafts
-UNION ALL 
-VALUES ('T20', 'Туполев Ту-204', 6700)
-)
+         (SELECT aircraft_code, model, range
+          FROM aircrafts
+          UNION ALL
+          VALUES ('T20', 'Туполев Ту-204', 6700))
 
-SELECT 
-aircraft_code AS ac,
-model,
-"range",
-row_number() OVER all_rows_win AS rn, 
-rank() OVER  all_rows_win AS r,
-dense_rank() OVER   all_rows_win AS dr,
-cume_dist() OVER   all_rows_win AS cd,
-round( (percent_rank() OVER   all_rows_win)::NUMERIC, 2) AS pr,
-ntile(4) OVER   all_rows_win AS nt4,
-ntile(3) OVER   all_rows_win AS nt3,
-ntile(5) OVER   all_rows_win AS nt5
+SELECT aircraft_code                                         AS ac,
+       model,
+       "range",
+       row_number() OVER all_rows_win                        AS rn,
+       rank() OVER all_rows_win                              AS r,
+       dense_rank() OVER all_rows_win                        AS dr,
+       cume_dist() OVER all_rows_win                         AS cd,
+       round((percent_rank() OVER all_rows_win)::NUMERIC, 2) AS pr,
+       ntile(4) OVER all_rows_win                            AS nt4,
+       ntile(3) OVER all_rows_win                            AS nt3,
+       ntile(5) OVER all_rows_win                            AS nt5
 FROM aircrafts_plus
 WINDOW all_rows_win AS (ORDER BY "range" desc)
 ORDER BY rn;
@@ -2662,7 +2504,7 @@ ORDER BY rn;
 
 /*Битовые строки тоже можно агрегировать
  * Раздел 3.1. Агрегатные функции*
- * 
+ *
  * Модели самолетов можно дополнительно охарактеризовать несколькими показателями(сервисами),
  * каждый из которых может либо присутсвовать, либо отсутствовать у конкретной модели.
  * Таким образом, показатели могут иметь истинное или ложное значение
@@ -2672,97 +2514,74 @@ ORDER BY rn;
  * Функция bit_and формирует битовую строку, в которой единицы означают, что сервис доступен
  * на всех моделях самолетов. Единицы в битовой строкое, сформированной функцией bit_or, означают,
  * что сервис доступен хотя бы для одной модели.
- * В главном запросе формируются дополнительные показатели: сервисы, которыми оборудованы не все 
+ * В главном запросе формируются дополнительные показатели: сервисы, которыми оборудованы не все
  * модели и те которыми не оборудована ни одна из них.
  */
 
-WITH all_facilities(faciliti_code, faciliti_name) AS 
-(
-VALUES 
-(B'00001', 'система развлечений'),
-(B'00010', 'перевозка животных'),
-(B'00100', 'usb-розетки'),
-(B'01000', 'теплые пледы'),
-(B'10000', 'WI-FI в полете')
-),
+WITH all_facilities(faciliti_code, faciliti_name) AS
+         (VALUES (B'00001', 'система развлечений'),
+                 (B'00010', 'перевозка животных'),
+                 (B'00100', 'usb-розетки'),
+                 (B'01000', 'теплые пледы'),
+                 (B'10000', 'WI-FI в полете')),
 
-aircrafts_equipment(aircraft_code, facilities) AS
-(
-VALUES
-('SU9', B'01110'),
-('320', B'01110'),
-('773', B'01111'),
-('CN',  B'01000')
-),
+     aircrafts_equipment(aircraft_code, facilities) AS
+         (VALUES ('SU9', B'01110'),
+                 ('320', B'01110'),
+                 ('773', B'01111'),
+                 ('CN', B'01000')),
 
-aggregates AS 
-(SELECT 
-bit_and(facilities::bit(5)) AS all_equipped,
-bit_or(facilities::bit(5)) AS at_least_one_equipped
-FROM aircrafts_equipment
-),
+     aggregates AS
+         (SELECT bit_and(facilities::bit(5)) AS all_equipped,
+                 bit_or(facilities::bit(5))  AS at_least_one_equipped
+          FROM aircrafts_equipment),
 
-finals AS (
-SELECT 
-all_equipped,
-~all_equipped AS not_all_equipped, --- все кроме, ~ побитовый оператор NOT (инверсия битов)
-at_least_one_equipped,
-~at_least_one_equipped AS no_one_equipped --- кроме,~ побитовый оператор NOT (инверсия битов)
-FROM aggregates
-)
+     finals AS (SELECT all_equipped,
+                       ~all_equipped          AS not_all_equipped, --- все кроме, ~ побитовый оператор NOT (инверсия битов)
+                       at_least_one_equipped,
+                       ~at_least_one_equipped AS no_one_equipped   --- кроме,~ побитовый оператор NOT (инверсия битов)
+                FROM aggregates)
 
 SELECT *
 FROM finals AS f
-JOIN all_facilities AS af ON (af.faciliti_code & f.all_equipped)::int > 0;
+         JOIN all_facilities AS af ON (af.faciliti_code & f.all_equipped)::int > 0;
 
 
 
+WITH all_facilities AS (SELECT faciliti_code::bit(5), faciliti_name
+                        FROM (VALUES ('00001', 'система развлечений'),
+                                     ('00010', 'перевозка животных'),
+                                     ('00100', 'usb-розетки'),
+                                     ('01000', 'теплые пледы'),
+                                     ('10000', 'WI-FI в полете')) AS t(faciliti_code, faciliti_name)),
 
-WITH all_facilities AS (
-    SELECT faciliti_code::bit(5), faciliti_name
-    FROM (VALUES 
-        ('00001', 'система развлечений'),
-        ('00010', 'перевозка животных'), 
-        ('00100', 'usb-розетки'),
-        ('01000', 'теплые пледы'),
-        ('10000', 'WI-FI в полете')
-    ) AS t(faciliti_code, faciliti_name)
-),
+     aircrafts_equipment AS (SELECT aircraft_code, facilities::bit(5)
+                             FROM (VALUES ('SU9', '01110'),
+                                          ('320', '01110'),
+                                          ('773', '01111'),
+                                          ('CN', '01000')) AS t(aircraft_code, facilities)),
 
-aircrafts_equipment AS (
-    SELECT aircraft_code, facilities::bit(5)
-    FROM (VALUES
-        ('SU9', '01110'),
-        ('320', '01110'),
-        ('773', '01111'),
-        ('CN',  '01000')
-    ) AS t(aircraft_code, facilities)
-),
+     aggregates AS (SELECT bit_and(facilities) AS all_equipped,
+                           bit_or(facilities)  AS at_least_one_equipped
+                    FROM aircrafts_equipment),
 
-aggregates AS (
-    SELECT 
-        bit_and(facilities) AS all_equipped,
-        bit_or(facilities) AS at_least_one_equipped
-    FROM aircrafts_equipment
-),
+     categories AS
+         (SELECT 1 as sort_order, 'все модели' as agg_name, all_equipped as mask
+          FROM aggregates
+          UNION ALL
+          SELECT 2, 'не все', ~all_equipped
+          FROM aggregates
+          UNION ALL
+          SELECT 3, 'ни одной', ~at_least_one_equipped
+          FROM aggregates
+          UNION ALL
+          SELECT 4, 'хотя бы одна', at_least_one_equipped
+          FROM aggregates)
 
-categories AS 
-(
-    SELECT 1 as sort_order, 'все модели' as agg_name, all_equipped as mask 
-    FROM aggregates
-    UNION ALL 
-    SELECT 2, 'не все', ~all_equipped FROM aggregates
-    UNION ALL 
-    SELECT 3, 'ни одной', ~at_least_one_equipped FROM aggregates  
-    UNION ALL 
-    SELECT 4, 'хотя бы одна', at_least_one_equipped FROM aggregates
-)
-
-SELECT 
-    c.agg_name,
-    STRING_AGG(af.faciliti_name, ', ' ORDER BY af.faciliti_code) as facilities
+SELECT c.agg_name,
+       STRING_AGG(af.faciliti_name, ', ' ORDER BY af.faciliti_code) as facilities
 FROM categories c
-JOIN all_facilities af ON (af.faciliti_code & c.mask) != B'00000'::bit(5)
+         JOIN all_facilities af ON (af.faciliti_code & c.mask) != B'00000'::bit(5)
 GROUP BY c.sort_order, c.agg_name
 ORDER BY c.sort_order;
 
@@ -2798,44 +2617,38 @@ BIT_XOR	      32/64	    ⭐⭐⭐⭐⭐	            ⭐	       Быстрая, �
  */
 
 
-SELECT bit_xor(a."range") AS check_sum 
-FROM aircrafts  a
+SELECT bit_xor(a."range") AS check_sum
+FROM aircrafts a
 
-SELECT distinct HASHTEXT(a."range"::text) AS check_sum 
-FROM aircrafts  a
-ORDER BY  HASHTEXT(a."range"::text)
+SELECT distinct HASHTEXT(a."range"::text) AS check_sum
+FROM aircrafts a
+ORDER BY HASHTEXT(a."range"::text)
 
 
 /*Агрегирование в параллельном режиме
  * Мы рассматривали выполнение запросов с агрегатными функциями в параллельном режиме.
- * Однако в том случае, когда предполагается что формируемых групп будет относительно 
+ * Однако в том случае, когда предполагается что формируемых групп будет относительно
  * много (их число равно числу исходных строк), то планировщик может отказаться от создания
  * параллельного плана.
  */
 
 EXPLAIN (costs OFF )
-SELECT
-	flight_id,
-	count(*)
-FROM
-	boarding_passes
-GROUP BY
-	flight_id
-	
-	
+SELECT flight_id,
+       count(*)
+FROM boarding_passes
+GROUP BY flight_id
+
+
 EXPLAIN (costs OFF )
-SELECT
-	flight_id,
-	boarding_no,
-	count(*)
-FROM
-	boarding_passes
-GROUP BY
-	flight_id, boarding_no
-	
-	
-	SELECT name, setting, context 
-FROM pg_settings 
+SELECT flight_id,
+       boarding_no,
+       count(*)
+FROM boarding_passes
+GROUP BY flight_id, boarding_no
+
+
+SELECT name, setting, context
+FROM pg_settings
 WHERE name LIKE '%parallel%';
 
 
@@ -2844,93 +2657,84 @@ WHERE name LIKE '%parallel%';
 
 /*Агрегирование числовых данных, содержащихся в формате json */
 
-WITH aircrafts_tmp AS 
-(
-SELECT 
-*, 
-row_to_json(aircrafts)::jsonb AS info
-FROM aircrafts 
-)
+WITH aircrafts_tmp AS
+         (SELECT *,
+                 row_to_json(aircrafts)::jsonb AS info
+          FROM aircrafts)
 
-SELECT 
-max(range),
-min(range),
-max(info ->>'range') AS max_json,
-min(info ->>'range') AS max_json,
-max((info ->>'range')::integer) AS max_json_numeric,
-min((info ->>'range')::integer) AS min_json_numeric,
-max(CAST(info ->>'range' AS integer)) AS max_json_numeric_cast
+SELECT max(range),
+       min(range),
+       max(info ->> 'range')                  AS max_json,
+       min(info ->> 'range')                  AS max_json,
+       max((info ->> 'range')::integer)       AS max_json_numeric,
+       min((info ->> 'range')::integer)       AS min_json_numeric,
+       max(CAST(info ->> 'range' AS integer)) AS max_json_numeric_cast
 FROM aircrafts_tmp
 
-/*
+         /*
 max(info ->>'range') AS max_json,  -- TEXT → TEXT (лексикографическая сортировка)
 min(info ->>'range') AS max_json   -- TEXT → TEXT (лексикографическая сортировка)
 */
 
 
 /*Как первичный ключ влияет на выбор группируемых столбцов?*/
-EXPLAIN ANALYZE 
-SELECT 
-a.aircraft_code,
-a.model AS model,
-a."range",
-count(*) AS seats_num 
+         EXPLAIN ANALYZE
+SELECT a.aircraft_code,
+       a.model  AS model,
+       a."range",
+       count(*) AS seats_num
 FROM aircrafts a
-join seats s ON s.aircraft_code = a.aircraft_code 
-GROUP BY a.aircraft_code, a.model, a."range" 
-ORDER BY seats_num DESC 
+         join seats s ON s.aircraft_code = a.aircraft_code
+GROUP BY a.aircraft_code, a.model, a."range"
+ORDER BY seats_num DESC
 
-EXPLAIN ANALYZE 
-SELECT 
-a.aircraft_code,
-a.model ->>lang() AS model,
-a."range",
-count(*) AS seats_num 
+EXPLAIN ANALYZE
+SELECT a.aircraft_code,
+       a.model ->> lang() AS model,
+       a."range",
+       count(*)           AS seats_num
 FROM aircrafts_data a
-join seats s ON s.aircraft_code = a.aircraft_code 
+         join seats s ON s.aircraft_code = a.aircraft_code
 GROUP BY a.aircraft_code ---, a.model, a."range" ---a.aircraft_code
-ORDER BY seats_num DESC 
+ORDER BY seats_num DESC
 
 
-EXPLAIN ANALYZE 
-SELECT 
-a.aircraft_code,
-a.model,
-a."range",
-count(*) AS seats_num 
+EXPLAIN ANALYZE
+SELECT a.aircraft_code,
+       a.model,
+       a."range",
+       count(*) AS seats_num
 FROM aircrafts_data a
-join seats s ON s.aircraft_code = a.aircraft_code 
+         join seats s ON s.aircraft_code = a.aircraft_code
 GROUP BY a.aircraft_code ---, a.model, a."range" ---a.aircraft_code
-ORDER BY seats_num DESC 
+ORDER BY seats_num DESC
 
 
-EXPLAIN ANALYZE 
-SELECT 
-a.aircraft_code,
-a.model AS model,
-a."range",
-count(*) AS seats_num 
+EXPLAIN ANALYZE
+SELECT a.aircraft_code,
+       a.model  AS model,
+       a."range",
+       count(*) AS seats_num
 FROM aircrafts_view2 a
-join seats s ON s.aircraft_code = a.aircraft_code 
-GROUP BY a.aircraft_code, a.model, a."range" 
-ORDER BY seats_num DESC 
+         join seats s ON s.aircraft_code = a.aircraft_code
+GROUP BY a.aircraft_code, a.model, a."range"
+ORDER BY seats_num DESC
 
 /*Аргумент массив функции можно сгенерировать
- * 
+ *
  * Чтобы вычислить с шагом в 5%, хотелось бы иметь способ генерирования
  * этого массива, избавляющий нас от ручного ввода всех значений,
- * и такой способ есть ARRAY в сочетании с функцией 
+ * и такой способ есть ARRAY в сочетании с функцией
  * generate_series
  */
 
-WITH percentiles AS 
-(
-SELECT PERCENTILE_DISC(
-ARRAY(SELECT generate_series(0.05, 1.0, 0.05) ) ---Преобразует результат в массив: {0.05, 0.10, 0.15, ..., 1.0}
-) WITHIN GROUP (ORDER BY delay) AS percentiles ---Указывает, как упорядочить данные перед вычислением перцентилей. 
-                                             ---Сортирует строки по столбцу delay по возрастанию.
-FROM short_delays
-)
+WITH percentiles AS
+         (SELECT PERCENTILE_DISC(
+                 ARRAY(SELECT generate_series(0.05, 1.0, 0.05)) ---Преобразует результат в массив: {0.05, 0.10, 0.15, ..., 1.0}
+                                )
+                 WITHIN GROUP (ORDER BY delay) AS percentiles ---Указывает, как упорядочить данные перед вычислением перцентилей.
+          ---Сортирует строки по столбцу delay по возрастанию.
+          FROM short_delays)
 
 /*
 Для каждого значения в массиве [0.05, 0.10, ..., 1.00] функция:
@@ -2939,11 +2743,9 @@ FROM short_delays
 Возвращает значение на этой позиции (округляет вверх)
 */
 
-SELECT 
-generate_series(0.05, 1.0, 0.05) AS level,
-unnest(percentiles) AS percentile ---функция, которая "разворачивает" массив в набор строк:
+SELECT generate_series(0.05, 1.0, 0.05) AS level,
+       unnest(percentiles)              AS percentile ---функция, которая "разворачивает" массив в набор строк:
 FROM percentiles
-
 
 
 /*Вычислим описательные статистики -- для всего множества
@@ -2955,58 +2757,53 @@ FROM percentiles
 **Среднеквадратическое отклонение (стандартное отклонение)** - квадратный корень из дисперсии. Измеряется в тех же единицах, что и исходные данные. Показывает типичное отклонение значения от среднего.
  */
 
-SELECT 
-count(*),
-min(total_amount),
-max(total_amount),
-percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount) AS median,
-round(avg(total_amount),2) AS average,
-round(stddev_pop(total_amount),2) AS stddev,
-round(var_pop(total_amount),2) AS variance
-FROM bookings
-
-
-EXPLAIN ANALYZE 
-WITH stats AS (
-    SELECT 
-        count(*) as cnt,
-        min(total_amount) as min_val,
-        max(total_amount) as max_val,
-        percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount) as median_val,
-        round(avg(total_amount), 2) as avg_val,
-        round(stddev_pop(total_amount), 2) as stddev_val,
-        round(var_pop(total_amount), 2) as var_val
-    FROM bookings
-)
+SELECT count(*),
+       min(total_amount),
+       max(total_amount),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount) AS median,
+       round(avg(total_amount), 2)                               AS average,
+       round(stddev_pop(total_amount), 2)                        AS stddev,
+       round(var_pop(total_amount), 2)                           AS variance
+FROM bookings EXPLAIN ANALYZE
+WITH stats AS (SELECT count(*)                                                  as cnt,
+                      min(total_amount)                                         as min_val,
+                      max(total_amount)                                         as max_val,
+                      percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount) as median_val,
+                      round(avg(total_amount), 2)                               as avg_val,
+                      round(stddev_pop(total_amount), 2)                        as stddev_val,
+                      round(var_pop(total_amount), 2)                           as var_val
+               FROM bookings)
 SELECT metric, value
 FROM stats
-CROSS JOIN LATERAL (
-    VALUES 
-        ('count', cnt::text),
-        ('min', min_val::text),
-        ('max', max_val::text),
-        ('median', median_val::text),
-        ('average', avg_val::text),
-        ('stddev', stddev_val::text),
-        ('variance', var_val::text)
-) AS t(metric, value);
+         CROSS JOIN LATERAL (
+    VALUES ('count', cnt::text),
+           ('min', min_val::text),
+           ('max', max_val::text),
+           ('median', median_val::text),
+           ('average', avg_val::text),
+           ('stddev', stddev_val::text),
+           ('variance', var_val::text)
+    ) AS t(metric, value);
 
 /*Самый неээфективный запрос 7 проходов*/
 EXPLAIN ANALYZE
-SELECT 
-    m.metric,
-    CASE m.metric
-        WHEN 'count' THEN (SELECT count(*)::text FROM bookings)
-        WHEN 'min' THEN (SELECT min(total_amount)::text FROM bookings)
-        WHEN 'max' THEN (SELECT max(total_amount)::text FROM bookings)
-        WHEN 'median' THEN (SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount)::text FROM bookings)
-        WHEN 'average' THEN (SELECT round(avg(total_amount), 2)::text FROM bookings)
-        WHEN 'stddev' THEN (SELECT round(stddev_pop(total_amount), 2)::text FROM bookings)
-        WHEN 'variance' THEN (SELECT round(var_pop(total_amount), 2)::text FROM bookings)
-    END as value
-FROM (VALUES 
-    ('count'), ('min'), ('max'), ('median'), ('average'), ('stddev'), ('variance')
-) AS m(metric);
+SELECT m.metric,
+       CASE m.metric
+           WHEN 'count' THEN (SELECT count(*)::text FROM bookings)
+           WHEN 'min' THEN (SELECT min(total_amount)::text FROM bookings)
+           WHEN 'max' THEN (SELECT max(total_amount)::text FROM bookings)
+           WHEN 'median' THEN (SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount)::text FROM bookings)
+           WHEN 'average' THEN (SELECT round(avg(total_amount), 2)::text FROM bookings)
+           WHEN 'stddev' THEN (SELECT round(stddev_pop(total_amount), 2)::text FROM bookings)
+           WHEN 'variance' THEN (SELECT round(var_pop(total_amount), 2)::text FROM bookings)
+           END as value
+FROM (VALUES ('count'),
+             ('min'),
+             ('max'),
+             ('median'),
+             ('average'),
+             ('stddev'),
+             ('variance')) AS m(metric);
 
 
 /*Самый эффективный запрос
@@ -3024,7 +2821,7 @@ SYSTEM (сканирование на уровне блоков)
 
 count     : 262,788    -- полное количество бронирований
 min       : 3,400.00   -- минимальная сумма
-max       : 1,204,500.00 -- максимальная сумма  
+max       : 1,204,500.00 -- максимальная сумма
 median    : 55,900.00  -- медианная сумма
 average   : 79,025.61  -- средняя сумма
 stddev    : 77,621.78  -- стандартное отклонение
@@ -3038,7 +2835,7 @@ text
 
 2. Очень высокий разброс данных
 Коэффициент вариации = 77,622 / 79,026 ≈ 98%
-Интерпретация: Чрезвычайно высокая вариативность. Суммы бронирований крайне неоднородны 
+Интерпретация: Чрезвычайно высокая вариативность. Суммы бронирований крайне неоднородны
 - от очень маленьких до очень крупных.
 
 3. Экстремальный разброс значений
@@ -3066,14 +2863,14 @@ text
 Сегментация клиентов:
 Расчетные сегменты:
 • Эконом: до 30,000 (≈35% клиентов)
-• Стандарт: 30,000 - 80,000 (≈35% клиентов)  
+• Стандарт: 30,000 - 80,000 (≈35% клиентов)
 • Премиум: 80,000 - 300,000 (≈25% клиентов)
 • VIP: свыше 300,000 (≈5% клиентов)
 
 Распределение доходов (оценочное):
 • Эконом сегмент: ~10% выручки
 • Стандарт сегмент: ~30% выручки
-• Премиум сегмент: ~40% выручки  
+• Премиум сегмент: ~40% выручки
 • VIP сегмент: ~20% выручки
 
 Возможности роста:
@@ -3093,46 +2890,46 @@ text
 Специализированные менеджеры для VIP-клиентов
 
 Заключение:
-Данные демонстрируют здоровую, но сложную структуру бизнеса с широким ценовым диапазоном. 
-Высокое стандартное отклонение указывает на необходимость сегментированного подхода. 
-Бизнес успешно сочетает массовость с премиальными услугами, что является оптимальной 
+Данные демонстрируют здоровую, но сложную структуру бизнеса с широким ценовым диапазоном.
+Высокое стандартное отклонение указывает на необходимость сегментированного подхода.
+Бизнес успешно сочетает массовость с премиальными услугами, что является оптимальной
 стратегией для максимизации доходов при управляемых рисках.
 
-Ключевой вывод: Успешная бизнес-модель, требующая тонкой настройки под разные 
+Ключевой вывод: Успешная бизнес-модель, требующая тонкой настройки под разные
 клиентские сегменты для дальнейшего роста.
 
-Полные данные подтвердили основные выводы из выборки, но выявили более сложную структуру распределения. 
+Полные данные подтвердили основные выводы из выборки, но выявили более сложную структуру распределения.
 Бизнес демонстрирует здоровую диверсификацию с сильным премиальным сегментом.
-Критически важный инсайт: 25% клиентов (премиум+VIP) генерируют около 60% выручки, 
+Критически важный инсайт: 25% клиентов (премиум+VIP) генерируют около 60% выручки,
 что указывает на необходимость фокуса на удержании и развитии именно этого сегмента.
-Рекомендуемая стратегия: Инвестировать в программы лояльности для премиальных 
+Рекомендуемая стратегия: Инвестировать в программы лояльности для премиальных
 клиентов при сохранении массового сегмента, как источника стабильного cash flow.
 
 */
-EXPLAIN ANALYZE 
-SELECT 
-    unnest(ARRAY[
-   	'count', 
-    'min', 
+EXPLAIN ANALYZE
+SELECT unnest(ARRAY [
+    'count',
+    'min',
     'max',
-    'median', 
-    'average', 
-    'stddev', 
+    'median',
+    'average',
+    'stddev',
     'variance'
-    ]) as metric,
-    
-    unnest(ARRAY[
-    count(*)::text,
-    min(total_amount)::text,
-    max(total_amount)::text,
-    percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount)::text,
-    round(avg(total_amount), 2)::text,
-    round(stddev_pop(total_amount), 2)::text,
-    round(var_pop(total_amount), 2)::text
-    ]) as value
-FROM bookings ----TABLESAMPLE BERNOULLI(1);
+    ])        as metric,
 
-/*Попытайтесь объяснить разницу во времени выполнения в пользу запроса 
+       unnest(ARRAY [
+           count(*)::text,
+           min(total_amount)::text,
+           max(total_amount)::text,
+           percentile_disc(0.5) WITHIN GROUP (ORDER BY total_amount)::text,
+           round(avg(total_amount), 2)::text,
+           round(stddev_pop(total_amount), 2)::text,
+           round(var_pop(total_amount), 2)::text
+           ]) as value
+FROM bookings
+----TABLESAMPLE BERNOULLI(1);
+
+/*Попытайтесь объяснить разницу во времени выполнения в пользу запроса
  * с конструкцией GROUPING SETS вместо UNION
 
 1. Первый запрос (UNION ALL) - "Наивный" подход
@@ -3141,7 +2938,7 @@ text
 Append
 ├── HashAggregate (GROUP BY airport, model)     -- 1-й подзапрос
 │   └── Hash Join (routes × aircrafts)
-├── HashAggregate (GROUP BY airport)            -- 2-й подзапрос  
+├── HashAggregate (GROUP BY airport)            -- 2-й подзапрос
 │   └── Seq Scan (routes)
 ├── HashAggregate (GROUP BY model)              -- 3-й подзапрос
 │   └── Hash Join (routes × aircrafts)
@@ -3153,58 +2950,44 @@ Append
 2 повторных JOIN с таблицей aircrafts
 Дублирование вычислений - одни и те же агрегаты считаются многократно
 Высокие накладные расходы на материализацию промежуточных результатов*/
- 
 
-SELECT
-	r.departure_airport_name AS airport,
-	a.model,
-	count(*) AS routes_count
-	--- количество маршрутов
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
-GROUP BY
-	airport,
-	model
+
+SELECT r.departure_airport_name AS airport,
+       a.model,
+       count(*)                 AS routes_count
+--- количество маршрутов
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
+GROUP BY airport,
+         model
 UNION ALL
 
-SELECT
-	r.departure_airport_name AS airport,
-	NULL AS model,
-	count(*) AS routes_count
-	--- количество маршрутов
-FROM
-	routes r
-GROUP BY
-	airport
-UNION ALL 
+SELECT r.departure_airport_name AS airport,
+       NULL                     AS model,
+       count(*)                 AS routes_count
+--- количество маршрутов
+FROM routes r
+GROUP BY airport
+UNION ALL
 
-SELECT
-	NULL AS airport,
-	a.model,
-	count(*) AS routes_count
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
-GROUP BY
-	a.model
-	
-UNION ALL 
+SELECT NULL     AS airport,
+       a.model,
+       count(*) AS routes_count
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
+GROUP BY a.model
 
-SELECT
-	NULL AS airprot,
-	NULL AS model,
-	count(*) AS routes_count
-FROM
-	routes
-ORDER BY
-	airport,
-	routes_count,
-	model;
+UNION ALL
 
-
+SELECT NULL     AS airprot,
+       NULL     AS model,
+       count(*) AS routes_count
+FROM routes
+ORDER BY airport,
+         routes_count,
+         model;
 
 
 /*2. Второй запрос (GROUPING SETS) - Оптимизированный подход
@@ -3225,106 +3008,98 @@ GroupAggregate
 
 */
 
-SELECT
-	CASE
-		WHEN r.departure_airport_name IS NULL AND a.model IS NULL 
-            THEN 'ИТОГО:'
-		WHEN a.model IS NULL 
-            THEN 'Всего по а/п: ' || r.departure_airport_name
-		ELSE r.departure_airport_name 
-	END AS airport,
-a.model,
+SELECT CASE
+           WHEN r.departure_airport_name IS NULL AND a.model IS NULL
+               THEN 'ИТОГО:'
+           WHEN a.model IS NULL
+               THEN 'Всего по а/п: ' || r.departure_airport_name
+           ELSE r.departure_airport_name
+           END  AS airport,
+       a.model,
 ---GROUPING(r.departure_airport_name, a.model) AS GROUPING,
-	count(*) AS routes_count
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
+       count(*) AS routes_count
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
 GROUP BY
-	GROUPING SETS 
-( 
-    (r.departure_airport_name, a.model),  -- детальные данные
-    (r.departure_airport_name),           -- итоги по аэропортам
-    (a.model),                            -- итоги по самолетам  
-    ()                                    -- общий итог
-)
-ORDER BY
-	departure_airport_name,
-	routes_count,
-	a.model;
+    GROUPING SETS
+    ( (r.departure_airport_name, a.model), -- детальные данные
+      (r.departure_airport_name),          -- итоги по аэропортам
+      (a.model),                           -- итоги по самолетам
+    ()                                     -- общий итог
+    )
+ORDER BY departure_airport_name,
+         routes_count,
+         a.model;
 
 /*Влияет ли порядок следования групп столбцов в конструкции
  * grouping sets на работу запроса
- * GROUPING SETS 
-(   
+ * GROUPING SETS
+(
     (a.model),                          -- Группа 1: только модели
-    (r.departure_airport_name, a.model), -- Группа 2: аэропорт + модель  
+    (r.departure_airport_name, a.model), -- Группа 2: аэропорт + модель
     (r.departure_airport_name),         -- Группа 3: только аэропорты
     ()                                  -- Группа 4: общий итог
 )
 
 
-Результаты могут измениться потому что, например, логика CASE не обрабатывает все 
-возможные комбинации NULL значений, возникающие при разных порядках GROUPING SETS. 
-Порядок групп влияет на то, какие строки будут неправильно обработаны 
+Результаты могут измениться потому что, например, логика CASE не обрабатывает все
+возможные комбинации NULL значений, возникающие при разных порядках GROUPING SETS.
+Порядок групп влияет на то, какие строки будут неправильно обработаны
 в CASE выражении.
 
-Рекомендация: Используйте функцию GROUPING() для надежного определения уровня 
+Рекомендация: Используйте функцию GROUPING() для надежного определения уровня
 агрегации или добавьте недостающие условия в CASE.
- * 
- * 
+ *
+ *
  */
 
- SELECT
-    CASE
-        WHEN r.departure_airport_name IS NULL AND a.model IS NULL 
-            THEN 'ИТОГО:'
-        WHEN r.departure_airport_name IS NULL 
-            THEN 'Всего по модели: '
-        WHEN a.model IS NULL 
-            THEN 'Всего по а/п: ' || r.departure_airport_name
-        ELSE r.departure_airport_name 
-    END AS airport,
-    a.model,
-    count(*) AS routes_count
+SELECT CASE
+           WHEN r.departure_airport_name IS NULL AND a.model IS NULL
+               THEN 'ИТОГО:'
+           WHEN r.departure_airport_name IS NULL
+               THEN 'Всего по модели: '
+           WHEN a.model IS NULL
+               THEN 'Всего по а/п: ' || r.departure_airport_name
+           ELSE r.departure_airport_name
+           END  AS airport,
+       a.model,
+       count(*) AS routes_count
 ---GROUPING(r.departure_airport_name, a.model) AS GROUPING,
-FROM
-	routes r
-JOIN aircrafts a ON
-	a.aircraft_code = r.aircraft_code
+FROM routes r
+         JOIN aircrafts a ON
+    a.aircraft_code = r.aircraft_code
 GROUP BY
-	GROUPING SETS 
-(   
-(a.model),
-(r.departure_airport_name, a.model),
-(r.departure_airport_name),
-()
-)
-ORDER BY
-	departure_airport_name,
-	routes_count,
-	a.model;
+    GROUPING SETS
+    ( (a.model),
+      (r.departure_airport_name, a.model),
+      (r.departure_airport_name),
+    ()
+    )
+ORDER BY departure_airport_name,
+         routes_count,
+         a.model;
 
- 
- /*
-* GROUPING(column) - это битовая маска, которая показывает, 
+
+/*
+* GROUPING(column) - это битовая маска, которая показывает,
 * был ли столбец агрегирован (свернут) в текущей строке результата.
-* GROUPING() - это по сути "флажок", который показывает, 
+* GROUPING() - это по сути "флажок", который показывает,
 * свернут ли столбец в итоге или показывает детальные данные.
 * GROUPING(столбец) = 1  ← столбец СВЕРНУТ (итог)
 * GROUPING(столбец) = 0  ← столбец ДЕТАЛЬНЫЙ (в группировке)
-* 
+*
 * КАК ЧИТАТЬ GROUPING() в CASE:
 * CASE
     -- Оба свернуты = ОБЩИЙ ИТОГ
     WHEN GROUPING(Магазин)=1 AND GROUPING(Товар)=1 THEN 'ОБЩИЙ ИТОГ'
-    
-    -- Товар свернут = ИТОГ ПО МАГАЗИНУ  
+
+    -- Товар свернут = ИТОГ ПО МАГАЗИНУ
     WHEN GROUPING(Товар)=1 THEN 'Итог по '   || Магазин
-    
+
     -- Магазин свернут = ИТОГ ПО ТОВАРУ
     WHEN GROUPING(Магазин)=1 THEN 'Итог по ' || Товар
-    
+
     -- Оба в группировке = ДЕТАЛЬНЫЕ ДАННЫЕ
     ELSE Магазин
 END
@@ -3349,7 +3124,7 @@ END
 (Магазин)           →        0                 1         ← ИТОГ по магазинам (товары свернуты)
 (Товар)             →        1                 0         ← ИТОГ по товарам (магазины свернуты)
 ()                  →        1                 1         ← ОБЩИЙ ИТОГ (все свернуто)
-* 
+*
 ┌──────────┬──────────┬────────┐
 │ Магазин  │ Товар    │ Продажи│
 ├──────────┼──────────┼────────┤
@@ -3359,7 +3134,7 @@ END
 │ Маг2     │ Груши    │ 250    │
 └──────────┴──────────┴────────┘
 SELECT
-    CASE 
+    CASE
         WHEN GROUPING(Магазин) = 1 AND GROUPING(Товар) = 1 THEN 'ОБЩИЙ ИТОГ'
         WHEN GROUPING(Товар) = 1 THEN 'Итог по '   || Магазин
         WHEN GROUPING(Магазин) = 1 THEN 'Итог по ' || Товар
@@ -3460,7 +3235,7 @@ GROUP BY GROUPING SETS (
     │ УСЛОВИЕ 3: model=1                  │ ← НИКОГДА НЕ ДОЙДЕМ СЮДА!
     │ УСЛОВИЕ 4: airport=1 AND model=1    │ ← НИКОГДА НЕ ДОЙДЕМ СЮДА!
     └─────────────────────────────────────┘
-    
+
 if airport==1 and model==1:    # условие 1 ← сначала самое специфичное
     return "ИТОГО"
 elif airport==0 and model==0:  # условие 2
@@ -3471,44 +3246,42 @@ elif model==1:                 # условие 4
     return "Всего по а/п"
 
  */
- 
- EXPLAIN ANALYZE
- SELECT
-    CASE
-        -- СНАЧАЛА проверяем ОБЩИЙ ИТОГ (оба = 1)
-        WHEN GROUPING(r.departure_airport_name) = 1 AND GROUPING(a.model) = 1 
-            THEN 'ИТОГО:'
-            
-        -- ПОТОМ проверяем детальные данные (оба = 0)
-        WHEN GROUPING(r.departure_airport_name) = 0 AND GROUPING(a.model) = 0 
-            THEN 'Детальные записи: ' || r.departure_airport_name
-            
-        -- ПОТОМ проверяем итоги по моделям (airport = 1)
-        WHEN GROUPING(r.departure_airport_name) = 1 
-            THEN 'Всего по модели: ' || a.model 
-            
-        -- В САМОМ КОНЦЕ проверяем итоги по аэропортам (model = 1)
-        WHEN GROUPING(a.model) = 1 
-            THEN 'Всего по а/п: ' || r.departure_airport_name
-    END AS airport,
-    
+
+EXPLAIN ANALYZE
+SELECT CASE
+           -- СНАЧАЛА проверяем ОБЩИЙ ИТОГ (оба = 1)
+           WHEN GROUPING(r.departure_airport_name) = 1 AND GROUPING(a.model) = 1
+               THEN 'ИТОГО:'
+
+           -- ПОТОМ проверяем детальные данные (оба = 0)
+           WHEN GROUPING(r.departure_airport_name) = 0 AND GROUPING(a.model) = 0
+               THEN 'Детальные записи: ' || r.departure_airport_name
+
+           -- ПОТОМ проверяем итоги по моделям (airport = 1)
+           WHEN GROUPING(r.departure_airport_name) = 1
+               THEN 'Всего по модели: ' || a.model
+
+           -- В САМОМ КОНЦЕ проверяем итоги по аэропортам (model = 1)
+           WHEN GROUPING(a.model) = 1
+               THEN 'Всего по а/п: ' || r.departure_airport_name
+           END  AS airport,
+
        CASE
-        WHEN GROUPING(r.departure_airport_name) = 0 AND GROUPING(a.model) = 0 
-            THEN a.model  -- только для детальных строк
-        ELSE NULL         -- для всех итоговых строк = NULL
-    END AS model,
-    
-    count(*) AS routes_count
-    
+           WHEN GROUPING(r.departure_airport_name) = 0 AND GROUPING(a.model) = 0
+               THEN a.model -- только для детальных строк
+           ELSE NULL -- для всех итоговых строк = NULL
+           END  AS model,
+
+       count(*) AS routes_count
+
 FROM routes r
-JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
-GROUP BY GROUPING SETS 
-(   
-    (r.departure_airport_name, a.model),  
-    (a.model),
-    (r.departure_airport_name),
+         JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+GROUP BY GROUPING SETS
+    ( (r.departure_airport_name, a.model),
+      (a.model),
+      (r.departure_airport_name),
     ()
-)
+    )
 ORDER BY departure_airport_name, a.model, routes_count;
 
 /*Конструкция ROLLUP и ее отражение в плане запроса
@@ -3521,80 +3294,69 @@ ROLLUP создает иерархию итогов:
 (month) - итоги по месяцам
 () - общий итог
  */
-EXPLAIN ANALYZE 
-SELECT
-	EXTRACT(MONTH FROM book_date) AS MONTH,
-	CASE
-		WHEN EXTRACT (DAY FROM book_date) <= 10 THEN 1
-		WHEN EXTRACT (DAY FROM book_date) <= 20 THEN 2
-		ELSE 3
-	END AS ten_days,
-	EXTRACT(DAY FROM book_date) AS DAY,
-	count(*) AS book_num,
-	round(sum(total_amount), 2) AS amount
-FROM
-	bookings
+EXPLAIN ANALYZE
+SELECT EXTRACT(MONTH FROM book_date) AS MONTH,
+       CASE
+           WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
+           WHEN EXTRACT(DAY FROM book_date) <= 20 THEN 2
+           ELSE 3
+           END                       AS ten_days,
+       EXTRACT(DAY FROM book_date)   AS DAY,
+       count(*)                      AS book_num,
+       round(sum(total_amount), 2)   AS amount
+FROM bookings
 GROUP BY
-	ROLLUP (month,
-	ten_days,
-	day)
-ORDER BY
-	month,
-	ten_days,
-	day;
+    ROLLUP (month,
+            ten_days,
+            day)
+ORDER BY month,
+         ten_days,
+         day;
 
 
 
 explain analyze
-SELECT
-    CASE 
-        WHEN day IS NULL AND ten_days IS NULL AND month IS NULL THEN 'ОБЩИЙ ИТОГ'
-        WHEN day IS NULL AND ten_days IS NULL THEN 'ИТОГ по месяцу ' || month
-        WHEN day IS NULL THEN 'ИТОГ по декаде ' || month || '-' || ten_days
-        ELSE 'День ' || month || '-' || ten_days || '-' || day
-    END AS period_description,
-    
-    month,
-    ten_days,
-    day,
-    book_num,
-    amount
-FROM (
-    SELECT
-        EXTRACT(MONTH FROM book_date) AS MONTH,
-        CASE
-            WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
-            WHEN EXTRACT(DAY FROM book_date) <= 20 THEN 2
-            ELSE 3
-        END AS ten_days,
-        EXTRACT(DAY FROM book_date) AS DAY,
-        count(*) AS book_num,
-        round(sum(total_amount), 2) AS amount
-    FROM
-        bookings
-    GROUP BY
-    ROLLUP (month,
-	ten_days,
-	day)
-) AS aggregated_data
-ORDER BY
-	month DESC,
-	ten_days DESC,
-	day DESC;
+SELECT CASE
+           WHEN day IS NULL AND ten_days IS NULL AND month IS NULL THEN 'ОБЩИЙ ИТОГ'
+           WHEN day IS NULL AND ten_days IS NULL THEN 'ИТОГ по месяцу ' || month
+           WHEN day IS NULL THEN 'ИТОГ по декаде ' || month || '-' || ten_days
+           ELSE 'День ' || month || '-' || ten_days || '-' || day
+           END AS period_description,
 
-----ВАЖНО !!!!    
-EXPLAIN ANALYZE 
-SELECT 
-    MAX(CASE WHEN fare_conditions = 'Economy' THEN count END) AS Economy,
-    MAX(CASE WHEN fare_conditions = 'Comfort' THEN count END) AS Comfort,
-    MAX(CASE WHEN fare_conditions = 'Business' THEN count END) AS Business
+       month,
+       ten_days,
+       day,
+       book_num,
+       amount
+FROM (SELECT EXTRACT(MONTH FROM book_date) AS MONTH,
+             CASE
+                 WHEN EXTRACT(DAY FROM book_date) <= 10 THEN 1
+                 WHEN EXTRACT(DAY FROM book_date) <= 20 THEN 2
+                 ELSE 3
+                 END                       AS ten_days,
+             EXTRACT(DAY FROM book_date)   AS DAY,
+             count(*)                      AS book_num,
+             round(sum(total_amount), 2)   AS amount
+      FROM bookings
+      GROUP BY
+          ROLLUP (month,
+                  ten_days,
+                  day)) AS aggregated_data
+ORDER BY month DESC,
+         ten_days DESC,
+         day DESC;
+
+----ВАЖНО !!!!
+EXPLAIN ANALYZE
+SELECT MAX(CASE WHEN fare_conditions = 'Economy' THEN count END)  AS Economy,
+       MAX(CASE WHEN fare_conditions = 'Comfort' THEN count END)  AS Comfort,
+       MAX(CASE WHEN fare_conditions = 'Business' THEN count END) AS Business
 FROM counts;
 
-EXPLAIN ANALYZE 
-SELECT 
-    MAX(count) FILTER (WHERE fare_conditions = 'Economy') AS Economy,
-    MAX(count) FILTER (WHERE fare_conditions = 'Comfort') AS Comfort,
-    MAX(count) FILTER (WHERE fare_conditions = 'Business') AS Business
+EXPLAIN ANALYZE
+SELECT MAX(count) FILTER (WHERE fare_conditions = 'Economy')  AS Economy,
+       MAX(count) FILTER (WHERE fare_conditions = 'Comfort')  AS Comfort,
+       MAX(count) FILTER (WHERE fare_conditions = 'Business') AS Business
 FROM counts;
 
 
@@ -3616,9 +3378,9 @@ PostgreSQL сканирует индекс в обратном порядке
 Время обслуживания - быстрее перестроение
 *
 **/
-CREATE INDEX CONCURRENTLY idx_counts_economy ON counts(count) WHERE fare_conditions = 'Economy';
-CREATE INDEX CONCURRENTLY idx_counts_comfort ON counts(count) WHERE fare_conditions = 'Comfort';
-CREATE INDEX CONCURRENTLY idx_counts_business ON counts(count) WHERE fare_conditions = 'Business';
+CREATE INDEX CONCURRENTLY idx_counts_economy ON counts (count) WHERE fare_conditions = 'Economy';
+CREATE INDEX CONCURRENTLY idx_counts_comfort ON counts (count) WHERE fare_conditions = 'Comfort';
+CREATE INDEX CONCURRENTLY idx_counts_business ON counts (count) WHERE fare_conditions = 'Business';
 
 -- Запрос использует индексы
 ---VACUUM FULL counts
@@ -3626,19 +3388,13 @@ CREATE INDEX CONCURRENTLY idx_counts_business ON counts(count) WHERE fare_condit
 ---ANALYZE counts;
 
 
-
-
 EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
-WITH count_t AS (
-SELECT 
-    (SELECT MAX(count) FROM counts WHERE fare_conditions = 'Economy')  AS Economy,
-    (SELECT MAX(count) FROM counts WHERE fare_conditions = 'Comfort')  AS Comfort,
-    (SELECT MAX(count) FROM counts WHERE fare_conditions = 'Business') AS Business
-)
+WITH count_t AS (SELECT (SELECT MAX(count) FROM counts WHERE fare_conditions = 'Economy')  AS Economy,
+                        (SELECT MAX(count) FROM counts WHERE fare_conditions = 'Comfort')  AS Comfort,
+                        (SELECT MAX(count) FROM counts WHERE fare_conditions = 'Business') AS Business)
 
 SELECT *
-FROM count_t 
-
+FROM count_t
 
 
 /*
@@ -3652,7 +3408,7 @@ FROM count_t
 row_id = это "группировочный ключ" который говорит crosstab:
 "Эти данные относятся к одной строке результата"
 "Сгруппируй их вместе и создай одну выходную строку"
-В вашем случае: поскольку у вас только одна группа данных (все максимумы), 
+В вашем случае: поскольку у вас только одна группа данных (все максимумы),
 используем row_id = 1 для всех строк.
 либо можно с VALUES ('Economy'), ('Comfort'), ('Business')
 
@@ -3667,65 +3423,62 @@ crosstab(
 
 */
 
-EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+         EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
 SELECT economy, comfort, business
 FROM crosstab(
-    $$
-    SELECT 
+             $$
+    SELECT
         1,
         fare_conditions,
         MAX(count)::int as max_value
     FROM counts
     GROUP BY fare_conditions$$
-   ---- $$select unnest(ARRAY['Economy', 'Comfort', 'Business'])$$
-    ----либо можно с VALUES ('Economy'), ('Comfort'), ('Business')
-) AS ct(
-    row_id   int,
-    Economy  int,
-    Comfort  int, 
-    Business int
-);
+         ---- $$select unnest(ARRAY['Economy', 'Comfort', 'Business'])$$
+         ----либо можно с VALUES ('Economy'), ('Comfort'), ('Business')
+     ) AS ct(
+             row_id int,
+             Economy int,
+             Comfort int,
+             Business int
+    );
 
 
 /*Конструкция CUBE,предложение HAVING и функция GROUPING*/
 
 
-SELECT 
-r.departure_airport AS da,
-GROUPING(r.departure_airport) AS da_g,
-r.arrival_airport   AS aa,
-GROUPING(r.arrival_airport) AS aa_g,
-a.model,
-GROUPING(a.model) AS m_g,
-left(tf.fare_conditions, 1) AS fc, ---LEFT(строка, количество_символов)
+SELECT r.departure_airport                                                                   AS da,
+       GROUPING(r.departure_airport)                                                         AS da_g,
+       r.arrival_airport                                                                     AS aa,
+       GROUPING(r.arrival_airport)                                                           AS aa_g,
+       a.model,
+       GROUPING(a.model)                                                                     AS m_g,
+       left(tf.fare_conditions, 1)                                                           AS fc,  ---LEFT(строка, количество_символов)
 ---tf.fare_conditions AS fc,
-GROUPING(tf.fare_conditions) AS fc_g,---Берет указанное количество символов с начала строки
-count(*),
-round(sum(tf.amount),2) AS t_amount,
-GROUPING(r.departure_airport, r.arrival_airport, a.model, tf.fare_conditions)::bit(4) AS mask,
-concat_ws(',',
-CASE WHEN GROUPING(r.departure_airport) = 0 THEN 'da' END,
-CASE WHEN GROUPING(r.arrival_airport) = 0 THEN 'aa' END,
-CASE WHEN GROUPING(a.model) = 0 THEN 'm' END,
-CASE WHEN GROUPING(tf.fare_conditions) = 0 THEN 'fc' END 
-) AS grouped_cols
+       GROUPING(tf.fare_conditions)                                                          AS fc_g,---Берет указанное количество символов с начала строки
+       count(*),
+       round(sum(tf.amount), 2)                                                              AS t_amount,
+       GROUPING(r.departure_airport, r.arrival_airport, a.model, tf.fare_conditions)::bit(4) AS mask,
+       concat_ws(',',
+                 CASE WHEN GROUPING(r.departure_airport) = 0 THEN 'da' END,
+                 CASE WHEN GROUPING(r.arrival_airport) = 0 THEN 'aa' END,
+                 CASE WHEN GROUPING(a.model) = 0 THEN 'm' END,
+                 CASE WHEN GROUPING(tf.fare_conditions) = 0 THEN 'fc' END
+       )                                                                                     AS grouped_cols
 FROM routes r
-JOIN flights f ON f.flight_no = r.flight_no 
-JOIN ticket_flights tf ON tf.flight_id = f.flight_id 
-JOIN aircrafts a ON a.aircraft_code = r.aircraft_code 
-GROUP BY CUBE (
-(da, aa), 
-a.model, 
-tf.fare_conditions 
+         JOIN flights f ON f.flight_no = r.flight_no
+         JOIN ticket_flights tf ON tf.flight_id = f.flight_id
+         JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+GROUP BY CUBE ( (da, aa),
+                a.model,
+                tf.fare_conditions
 ---fc
-)
+    )
 /*Выбираем только итоги по классам обслуживания*/
 HAVING tf.fare_conditions IS NOT NULL
-AND r.departure_airport IS NULL
-AND r.arrival_airport IS NULL
-AND a.model IS NULL
+   AND r.departure_airport IS NULL
+   AND r.arrival_airport IS NULL
+   AND a.model IS NULL
 ORDER BY da, aa, a.model, fc;
-
 
 
 /*Тот же самы запрос с подитогами класса обслуживания
@@ -3737,44 +3490,42 @@ ORDER BY da, aa, a.model, fc;
  * Возможно, более улобным
  *
  */
-SELECT 
-r.departure_airport AS da,
-GROUPING(r.departure_airport) AS da_g,
-r.arrival_airport   AS aa,
-GROUPING(r.arrival_airport) AS aa_g,
-a.model,
-GROUPING(a.model) AS m_g,
-left(tf.fare_conditions, 1) AS fc, ---LEFT(строка, количество_символов)
+SELECT r.departure_airport                                                                   AS da,
+       GROUPING(r.departure_airport)                                                         AS da_g,
+       r.arrival_airport                                                                     AS aa,
+       GROUPING(r.arrival_airport)                                                           AS aa_g,
+       a.model,
+       GROUPING(a.model)                                                                     AS m_g,
+       left(tf.fare_conditions, 1)                                                           AS fc,  ---LEFT(строка, количество_символов)
 ---tf.fare_conditions AS fc,
-GROUPING(tf.fare_conditions) AS fc_g,---Берет указанное количество символов с начала строки
-count(*),
-round(sum(tf.amount),2) AS t_amount,
-GROUPING(tf.fare_conditions, r.departure_airport, r.arrival_airport, a.model)::bit(4) AS mask,
-concat_ws(',',
-CASE WHEN GROUPING(r.departure_airport)  = 0 THEN 'da' END,
-CASE WHEN GROUPING(r.arrival_airport)    = 0 THEN 'aa' END,
-CASE WHEN GROUPING(a.model)              = 0 THEN 'm' END,
-CASE WHEN GROUPING(tf.fare_conditions)   = 0 THEN 'fc' END 
-) AS grouped_cols
+       GROUPING(tf.fare_conditions)                                                          AS fc_g,---Берет указанное количество символов с начала строки
+       count(*),
+       round(sum(tf.amount), 2)                                                              AS t_amount,
+       GROUPING(tf.fare_conditions, r.departure_airport, r.arrival_airport, a.model)::bit(4) AS mask,
+       concat_ws(',',
+                 CASE WHEN GROUPING(r.departure_airport) = 0 THEN 'da' END,
+                 CASE WHEN GROUPING(r.arrival_airport) = 0 THEN 'aa' END,
+                 CASE WHEN GROUPING(a.model) = 0 THEN 'm' END,
+                 CASE WHEN GROUPING(tf.fare_conditions) = 0 THEN 'fc' END
+       )                                                                                     AS grouped_cols
 FROM routes r
-JOIN flights f ON f.flight_no = r.flight_no 
-JOIN ticket_flights tf ON tf.flight_id = f.flight_id 
-JOIN aircrafts a ON a.aircraft_code = r.aircraft_code 
-GROUP BY CUBE (
-(da, aa), 
-a.model, 
-tf.fare_conditions 
+         JOIN flights f ON f.flight_no = r.flight_no
+         JOIN ticket_flights tf ON tf.flight_id = f.flight_id
+         JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+GROUP BY CUBE ( (da, aa),
+                a.model,
+                tf.fare_conditions
 ---fc
-)
-HAVING GROUPING(tf.fare_conditions, 
-r.departure_airport,
-r.arrival_airport,
-a.model)::bit(4)='0111'::bit(4)
+    )
+HAVING GROUPING(tf.fare_conditions,
+                r.departure_airport,
+                r.arrival_airport,
+                a.model)::bit(4) = '0111'::bit(4)
 ORDER BY da, aa, a.model, fc;
 
 /*Оконная функция ORDER BY можно ли обойтись без нее ?
- * 
-Что делает: Это самая важная и необычная часть! 
+ *
+Что делает: Это самая важная и необычная часть!
 Здесь:
 Для каждого самолета выполняется подзапрос, который считает количество мест
 (SELECT count(*) FROM seats AS s WHERE s.aircraft_code = a.aircraft_code) - коррелированный подзапрос
@@ -3784,27 +3535,25 @@ ORDER BY rank() OVER(seats_win)
 Что делает:
 rank() OVER(seats_win) - присваивает ранг каждому самолету на основе определенного окна
 ORDER BY rank() - сортирует результат по рангу
-* 
+*
 *Данны запрос выводит модели самолетов по убыванию числа кресел в салоне!!!
-* 
+*
 */
 
-EXPLAIN ANALYZE 
+EXPLAIN ANALYZE
 SELECT aircraft_code, model, range
 FROM aircrafts AS a
-WINDOW seats_win AS 
-(
+WINDOW seats_win AS
+           (
 ---PARTITION BY
-ORDER BY (
-SELECT count(*) 
-FROM seats AS s 
-WHERE s.aircraft_code = a.aircraft_code
-) DESC 
-)
-ORDER BY rank() OVER(seats_win)
+                   ORDER BY (SELECT count(*)
+                             FROM seats AS s
+                             WHERE s.aircraft_code = a.aircraft_code) DESC
+                   )
+ORDER BY rank() OVER (seats_win)
 
 /*Недостатком вышеприведеннго запроса является то, что у него
- * отсутствует в выборке столбец содержащий число кресел, то есть того 
+ * отсутствует в выборке столбец содержащий число кресел, то есть того
  * показателя по которому идет ранжирование
  * SELECT aircraft_code,  -- 5. Выбор столбцов
        model,
@@ -3822,36 +3571,30 @@ ORDER BY range_rank;   -- 6. Сортировка результатов
 FROM → WHERE → GROUP BY → HAVING → ОКОННЫЕ ФУНКЦИИ
 На этапе HAVING оконные функции еще не вычислены
 */
-EXPLAIN ANALYZE 
-SELECT 
-a.aircraft_code,
-a.model, 
-a."range",
-count(*) AS seats_count
+EXPLAIN ANALYZE
+SELECT a.aircraft_code,
+       a.model,
+       a."range",
+       count(*) AS seats_count
 FROM aircrafts AS a
-JOIN seats AS s ON  s.aircraft_code = a.aircraft_code 
-GROUP BY a.aircraft_code, a.model, a."range" 
+         JOIN seats AS s ON s.aircraft_code = a.aircraft_code
+GROUP BY a.aircraft_code, a.model, a."range"
 ORDER BY count(*) DESC;
 
-EXPLAIN ANALYZE 
-WITH air AS (
-SELECT 
-a.aircraft_code,
-a.model, 
-a."range",
-count(*) AS seats_count
-FROM aircrafts AS a
-JOIN seats AS s ON  s.aircraft_code = a.aircraft_code 
-GROUP BY a.aircraft_code, a.model, a."range" 
-ORDER BY count(*) DESC
-)
+EXPLAIN ANALYZE
+WITH air AS (SELECT a.aircraft_code,
+                    a.model,
+                    a."range",
+                    count(*) AS seats_count
+             FROM aircrafts AS a
+                      JOIN seats AS s ON s.aircraft_code = a.aircraft_code
+             GROUP BY a.aircraft_code, a.model, a."range"
+             ORDER BY count(*) DESC)
 SELECT *
-FROM  air 
+FROM air
 
 
-
-
-/*Порядок выполнения скрипта: 
+         /*Порядок выполнения скрипта:
  * ПОРЯДОК ВЫПОЛНЕНИЯ:
 1. FROM/JOIN       - чтение таблиц
 2. WHERE           - фильтрация строк (оконные функции НЕДОСТУПНЫ)
@@ -3873,31 +3616,29 @@ FROM  air
  * 3. Также разбить модели на группы - в зависиомсти от числа этих мест,
  * то одним из вариантов решения задачи может быть такой.
  */
-EXPLAIN ANALYZE 
-SELECT 
-aircraft_code AS a_code,
-model,
-range,
-(SELECT  count(*) 
-FROM seats AS s 
-WHERE s.aircraft_code = a.aircraft_code) AS seats_num, 
----Для каждого самолета подсчитывает количество 
+         EXPLAIN ANALYZE
+SELECT aircraft_code                             AS a_code,
+       model,
+       range,
+       (SELECT count(*)
+        FROM seats AS s
+        WHERE s.aircraft_code = a.aircraft_code) AS seats_num,
+---Для каждого самолета подсчитывает количество
 ---мест через коррелированный подзапрос.
-rank() over(range_win) AS r_rank,
-rank()   OVER (seats_win) AS s_rank,
-ntile(4) OVER (seats_win) AS s_ntile
+       rank() over (range_win)                   AS r_rank,
+       rank() OVER (seats_win)                   AS s_rank,
+       ntile(4) OVER (seats_win)                 AS s_ntile
 FROM aircrafts AS a
-WINDOW 
-range_win AS (ORDER BY range DESC), ---r_rank
-seats_win AS (ORDER BY (
-SELECT count(*) FROM seats AS s WHERE s.aircraft_code = a.aircraft_code
-  )DESC ----s_rank ----s_ntile
-)
-ORDER BY  r_rank;
+WINDOW range_win AS (ORDER BY range DESC), ---r_rank
+       seats_win AS (ORDER BY (SELECT count(*)
+                               FROM seats AS s
+                               WHERE s.aircraft_code = a.aircraft_code) DESC ----s_rank ----s_ntile
+               )
+ORDER BY r_rank;
 
 /*Недостатком явлляется то, что используется коррелированный подзапрос дважды
 SELECT count(*) FROM seats AS s WHERE s.aircraft_code = a.aircraft_code
-Коррелированный подзапрос = подзапрос, который выполняется для КАЖДОЙ 
+Коррелированный подзапрос = подзапрос, который выполняется для КАЖДОЙ
 строки внешнего запроса и использует данные из этой строки.
 Ключевые признаки коррелированного подзапроса:
 Ссылается на таблицу из внешнего запроса
@@ -3909,92 +3650,84 @@ SELECT count(*) FROM seats AS s WHERE s.aircraft_code = a.aircraft_code
 **/
 
 
-EXPLAIN ANALYZE 
-WITH seats_counts AS 
-(
-SELECT 
-aircraft_code AS a_code,
-model,
-range,
-(SELECT  count(*) 
-FROM seats AS s 
-WHERE s.aircraft_code = a.aircraft_code) AS seats_num
-FROM aircrafts AS a
-)
+EXPLAIN ANALYZE
+WITH seats_counts AS
+         (SELECT aircraft_code                             AS a_code,
+                 model,
+                 range,
+                 (SELECT count(*)
+                  FROM seats AS s
+                  WHERE s.aircraft_code = a.aircraft_code) AS seats_num
+          FROM aircrafts AS a)
 
 
-
-SELECT 
-a_code,
-model,
-range,
-seats_num, 
----Для каждого самолета подсчитывает количество 
+SELECT a_code,
+       model,
+       range,
+       seats_num,
+---Для каждого самолета подсчитывает количество
 ---мест через коррелированный подзапрос.
-rank()   OVER (range_win) AS r_rank,
-rank()   OVER (seats_win) AS s_rank,
-ntile(4) OVER (seats_win) AS s_ntile
+       rank() OVER (range_win)   AS r_rank,
+       rank() OVER (seats_win)   AS s_rank,
+       ntile(4) OVER (seats_win) AS s_ntile
 FROM seats_counts
-WINDOW 
-range_win AS (ORDER BY range DESC),    ----r_rank
-seats_win AS (ORDER BY seats_num DESC ----s_rank ----s_ntile
-)
-ORDER BY  r_rank;
+WINDOW range_win AS (ORDER BY range DESC), ----r_rank
+       seats_win AS (ORDER BY seats_num DESC ----s_rank ----s_ntile
+               )
+ORDER BY r_rank;
 
 /*Использование условия в определении раздела
  * средние значения, вычисленные для рабочих дней, выводились
  * в столбце avg_5_days и для выходных дней (в строках, где в столбце dow
- * стоят значения 6 и 7). 
+ * стоят значения 6 и 7).
  * Аналогично средние значения, вычисленные для выходных
  * дней, выводились в столбце avg_67_days и для рабочих дней ( в тех строках,
  * где в столбце dow стоят значения от 1 до 5)
- * 
+ *
  * Теперь значения в avg_5_days будут выводиться только в рабочих днях
  * А в avg_67_days будут выводиться значения только для выходных дней.
  * */
 
-SELECT 
-    to_char(date_trunc('day', b.book_date), 'YYYY-MM-DD') AS b_date,
-    EXTRACT(week FROM b.book_date) AS week,
-    extract(isodow FROM b.book_date) AS dow,
-    count(*) AS day_tf_count,
-    
- 
-    round(avg(count(*))
-    FILTER (WHERE EXTRACT(isodow FROM b.book_date) BETWEEN 1 AND 5)
-    OVER week_win, 0) AS avg_5_days,
+SELECT to_char(date_trunc('day', b.book_date), 'YYYY-MM-DD') AS b_date,
+       EXTRACT(week FROM b.book_date)                        AS week,
+       extract(isodow FROM b.book_date)                      AS dow,
+       count(*)                                              AS day_tf_count,
 
-    -- ТОЛЬКО для выходных показываем значение, для остальных - NULL
-        round(avg(count(*))
-        FILTER (WHERE EXTRACT(isodow FROM b.book_date) IN (6,7))
-        OVER week_win, 0) AS avg_67
+
+       round(avg(count(*))
+             FILTER (WHERE EXTRACT(isodow FROM b.book_date) BETWEEN 1 AND 5)
+                 OVER week_win, 0)                           AS avg_5_days,
+
+       -- ТОЛЬКО для выходных показываем значение, для остальных - NULL
+       round(avg(count(*))
+             FILTER (WHERE EXTRACT(isodow FROM b.book_date) IN (6, 7))
+                 OVER week_win, 0)                           AS avg_67
 
 FROM bookings b
-JOIN tickets t ON t.book_ref = b.book_ref
-JOIN ticket_flights tf ON tf.ticket_no = t.ticket_no 
+         JOIN tickets t ON t.book_ref = b.book_ref
+         JOIN ticket_flights tf ON tf.ticket_no = t.ticket_no
 GROUP BY b_date, week, dow
-WINDOW week_win AS 
-(PARTITION BY 
-EXTRACT(week   FROM b.book_date),
-EXTRACT(isodow FROM b.book_date) IN (6,7)
-) ---order by нет, значит выступают все строки раздела
+WINDOW week_win AS
+           (PARTITION BY
+               EXTRACT(week FROM b.book_date),
+               EXTRACT(isodow FROM b.book_date) IN (6, 7)
+                   )
+---order by нет, значит выступают все строки раздела
 ORDER BY b_date;
 
 /*Функции lag и lead*/
 
-WITH day_amounts(b_date, day_sum) AS 
-(SELECT date_trunc('day', book_date)  AS b_date, 
-round(sum(total_amount) / 1000000, 2) AS day_sum
-FROM bookings
-GROUP BY b_date
-)
+WITH day_amounts(b_date, day_sum) AS
+         (SELECT date_trunc('day', book_date)          AS b_date,
+                 round(sum(total_amount) / 1000000, 2) AS day_sum
+          FROM bookings
+          GROUP BY b_date)
 
-SELECT 
-to_char(b_date, 'YYYY-MM-DD') AS date,
-extract(isodow FROM b_date) AS dow, ----день недели
-day_sum,
-lead(day_sum, 7) OVER all_rows_win AS week_ago, ---неделю назад от текущей вычисляемой даты
-day_sum - lead(day_sum,7) OVER  all_rows_win AS delta ---разница между суммами фактической и неделю назад
+SELECT to_char(b_date, 'YYYY-MM-DD')                AS date,
+       extract(isodow FROM b_date)                  AS dow,      ----день недели
+       day_sum,
+       lead(day_sum, 7) OVER all_rows_win           AS week_ago, ---неделю назад от текущей вычисляемой даты
+       day_sum - lead(day_sum, 7) OVER all_rows_win AS delta     ---разница между суммами фактической и неделю назад
 FROM day_amounts
 WINDOW all_rows_win AS (PARTITION BY date_trunc('month', b_date) )
 ORDER BY b_date DESC;
@@ -4002,13 +3735,11 @@ ORDER BY b_date DESC;
 /*Распределение столбца**/
 
 
-SELECT 
-    (abs(hashtext(city::text)) % 10) as segment_simulation,
-    count(*) as airports_data
+SELECT (abs(hashtext(city::text)) % 10) as segment_simulation,
+       count(*)                         as airports_data
 FROM airports_data
 GROUP BY segment_simulation
 ORDER BY segment_simulation;
-
 
 
 /*Конструкция LATERAL расширяет возмодности команды Select
@@ -4017,12 +3748,12 @@ ORDER BY segment_simulation;
  * С помощью данной конструкции в ряде случаев удается значительно
  * упростить запрос, облегчить его интерпретацию.
  * Бывают ситуации, когда без этой инструкции трудно обойтись.
- * 
- * Ключевое слово LATERAL может предварять вложенный запрос SELECT в списке FROM. 
- * Оно позволяет обращаться в этом вложенном SELECT к столбцам элементов FROM, 
- * предшествующим ему в списке FROM. (Без LATERAL все вложенные подзапросы 
+ *
+ * Ключевое слово LATERAL может предварять вложенный запрос SELECT в списке FROM.
+ * Оно позволяет обращаться в этом вложенном SELECT к столбцам элементов FROM,
+ * предшествующим ему в списке FROM. (Без LATERAL все вложенные подзапросы
  * SELECT обрабатываются независимо и не могут ссылаться на другие элементы списка FROM.)
- * 
+ *
  * Алгоритм решения задачи может быть следующим: для каждого рейса,
  * имеющего статус Arrived, нужно случайным образом выбрать из таблицы
  * "Посадочные талоны" десятую часть строк, соответствующих этому рейсу,
@@ -4030,67 +3761,66 @@ ORDER BY segment_simulation;
  * Конечно реализовать этот алгоритм можно, используя процедурное расширение
  * но можно обойтись и одной командой Select. В этотм поможет
  * конструкция Lateral.
- * 
- * 
+ *
+ *
 Преимущества LATERAL подхода:
 Производительность - один проход по данным для каждого рейс
 Читаемость - логика сэмплирования ясна и локализована
 Гибкость - легко изменить процент выборки или логику отбора
 Масштабируемость - хорошо работает на больших объемах данных
-LATERAL позволяет выполнять "параметризованные подзапросы" - 
-для каждой строки внешнего запроса 
+LATERAL позволяет выполнять "параметризованные подзапросы" -
+для каждой строки внешнего запроса
 выполняется свой подзапрос с параметрами из этой строки.
  */
 
-SELECT  city, airport_code
-FROM airports 
-WHERE city IN ('Москва','Хабаровск','Владивосток', 'Южно-Сахалинск', 'Благовещенск')
+SELECT city, airport_code
+FROM airports
+WHERE city IN ('Москва', 'Хабаровск', 'Владивосток', 'Южно-Сахалинск', 'Благовещенск')
 ORDER BY city
 
 
 EXPLAIN ANALYZE
 SELECT f.flight_id, bp2.ticket_no
-FROM flights f 
+FROM flights f
 /*Для КАЖДОГО рейса 'f':
 1. Посчитать общее количество посадочных талонов для этого рейса
 2. Вычислить 10% от этого количества (округляя вверх)
 3. Взять случайную выборку этого размера
 4. Вернуть номера билетов из этой выборки*/
-CROSS JOIN LATERAL
-(SELECT ticket_no 
-FROM boarding_passes bp
-WHERE bp.flight_id = f.flight_id ---- Для КАЖДОГО рейса!
-ORDER BY random() ---- Случайное перемешивание
+         CROSS JOIN LATERAL
+    (SELECT ticket_no
+     FROM boarding_passes bp
+     WHERE bp.flight_id = f.flight_id ---- Для КАЖДОГО рейса!
+     ORDER BY random() ---- Случайное перемешивание
 /*ORDER BY random():
 Перемешивает посадочные талоны в случайном порядке
 LIMIT берет первые N строк из случайной последовательности
 Это создает случайную выборку*/
-LIMIT ceiling (
-(SELECT count(*)
-FROM boarding_passes bp 
-WHERE bp.flight_id = f.flight_id) * 0.1 ---- 10% от общего количества
+     LIMIT ceiling(
+             (SELECT count(*)
+              FROM boarding_passes bp
+              WHERE bp.flight_id = f.flight_id) * 0.1 ---- 10% от общего количества
 /*CEILING(COUNT * 0.1)  -- Округление ВВЕРХ
 -- 14.3 → 15
 -- 7.8 → 8
 -- Гарантирует хотя бы 1 билет, даже если 10% < 1*/
-  ) 
-)AS bp2
+           )
+    ) AS bp2
 /* Базовый фильтр рейсов:
 Рейсы Москва → Дальний Восток
 Рейсы Дальний Восток → Москва
 Только прибывшие рейсы
  */
-WHERE f.status = 'Arrived' 
-AND (
-(f.departure_airport IN ('DME','DME','VKO')  
-AND f.arrival_airport IN ('VVO','KHV','UUS','BQS')
-)
-OR 
-(f.departure_airport IN ('VVO','KHV','UUS','BQS')  
-AND f.arrival_airport IN ('DME','DME','VKO')
-)
-
-)
+WHERE f.status = 'Arrived'
+  AND (
+    (f.departure_airport IN ('DME', 'DME', 'VKO')
+        AND f.arrival_airport IN ('VVO', 'KHV', 'UUS', 'BQS')
+        )
+        OR
+    (f.departure_airport IN ('VVO', 'KHV', 'UUS', 'BQS')
+        AND f.arrival_airport IN ('DME', 'DME', 'VKO')
+        )
+    )
 ORDER BY f.flight_id, bp2.ticket_no
 
 /* Известно что в предложении FROM команды Select могут использоваться подзапросы
@@ -4099,30 +3829,30 @@ ORDER BY f.flight_id, bp2.ticket_no
  * При этом порядок следования элементов в данном списке не влияет на порядок выполнения
  * соединений, который выберет планировщик.
  * Однако можно сделать так, чтобы подзапрос мог ссылаться на столбцы таблиц или подзапросов,
- * находящихся перед ним в списке FROM. 
+ * находящихся перед ним в списке FROM.
  * Для этого необходимо использовать ключеве слово LATERAL
  * перед подзапросом, который должен иметь такую возможность. Наличие ключевого слова вынуждает
  * планировщик сначала выполнить соединение всех элементов списка FROM, находящихся левее
  * этого слова.
- * 
+ *
  * При наличии ключевого слова LATERAL запрос выполняется следующим образом:
  * -если слева от LATERAL стоит только одна таблица или подзапрос, то для ее строки выполняется
  * подзапрос, стоящий справа.
  * -если в нем есть ссылки на столбцы левой таблицы, то их значения берутся из ее текущей строки.
  * Такие ссылки могут быть например в предложении where или limit.
- * Затем строки, порожденные запросом соединяются с текущей строкой левой таблицы в соответствии с 
+ * Затем строки, порожденные запросом соединяются с текущей строкой левой таблицы в соответствии с
  * предписанием join. Эта процедура повторяется для всех строк левой таблицы.
  * Все сформированные подмножества строк объединяются в единое множество.
  * В том случае, когда слева от ключевого слова LATERAL стоят несколько таблиц или подзапросов, текущая
  * строка берется из результата их соединения.
- * 
- * Приведенное описание говорит о том, что обработка консутркции LATERAL представляет собой 
+ *
+ * Приведенное описание говорит о том, что обработка консутркции LATERAL представляет собой
  * параметризованный цикл
- * 
- * Берется строка таблицы "Рейсы" flights, удовлетворяющая условию where главного запроса 
+ *
+ * Берется строка таблицы "Рейсы" flights, удовлетворяющая условию where главного запроса
  * и далее выполняется уже подзапрос bp2 cс условием where bp.flight_id = f.flight_id.
  * Таким образом из таблицы "Посадочные талоны" (boarding passes) выбираются только номера билетов,
- * оформленных на данный рейс. 
+ * оформленных на данный рейс.
  * В результирующий набор попадает лишь случайная выборка из этих строк. После этого выполняется
  * декартово произведение текущей строки из таблицы "Рейсы" flights на все строки, которые возвращает
  * подзапрос bp2.
@@ -4135,7 +3865,7 @@ ORDER BY f.flight_id, bp2.ticket_no
  * Это позволяет выбрать пассажира для поощрения даже на тех рейсах, которыми
  * летели менее 10 человек.
  * Случайная выборка строк из таблицы "Посадочные талоны" (boarding passes) достигается сортировкой
- * на основе значений функции random!!!, вычисленных для каждой строки. 
+ * на основе значений функции random!!!, вычисленных для каждой строки.
  * Из документации известно, что элементами предложения order by могут быть и произвольные выражения, вычисленные
  * на основе значений исходных строк!!!
  * Для соединений строк план запроса воспользуется вложенным циклом Nested Loop.
@@ -4154,136 +3884,120 @@ ORDER BY f.flight_id, bp2.ticket_no
  * Модифицируем запрос:
  */
 
-WITH far_east_flights AS ( 
-SELECT flight_id
-FROM flights 
-WHERE status = 'Arrived' 
-AND (
-(departure_airport IN ('DME','DME','VKO')  
-AND arrival_airport IN ('VVO','KHV','UUS','BQS')
-)
-OR 
-(departure_airport IN ('VVO','KHV','UUS','BQS')  
-AND arrival_airport IN ('DME','DME','VKO')
-    )  
-  )
-)
-    
-,all_passengers AS (
-SELECT f.flight_id, count(*) AS all_pass
-FROM boarding_passes AS bp
-JOIN far_east_flights AS f ON f.flight_id = bp.flight_id
-GROUP BY f.flight_id
-)
+WITH far_east_flights AS (SELECT flight_id
+                          FROM flights
+                          WHERE status = 'Arrived'
+                            AND (
+                              (departure_airport IN ('DME', 'DME', 'VKO')
+                                  AND arrival_airport IN ('VVO', 'KHV', 'UUS', 'BQS')
+                                  )
+                                  OR
+                              (departure_airport IN ('VVO', 'KHV', 'UUS', 'BQS')
+                                  AND arrival_airport IN ('DME', 'DME', 'VKO')
+                                  )
+                              ))
+
+   , all_passengers AS (SELECT f.flight_id, count(*) AS all_pass
+                        FROM boarding_passes AS bp
+                                 JOIN far_east_flights AS f ON f.flight_id = bp.flight_id
+                        GROUP BY f.flight_id)
 
 
-,happy_passengers AS (
-SELECT 
-cnt.flight_id, 
-bp2.ticket_no
-FROM (SELECT
-f.flight_id, 
-ceiling(count(*) * 0.1) AS happy_pass_count
-FROM far_east_flights AS f
-JOIN boarding_passes AS bp ON bp.flight_id = f.flight_id
-GROUP BY f.flight_id
-) AS cnt
-CROSS JOIN LATERAL(
-SELECT ticket_no 
-FROM boarding_passes bp
-WHERE bp.flight_id = cnt.flight_id
-ORDER BY random()
-LIMIT cnt.happy_pass_count
-) AS bp2
-)
+   , happy_passengers AS (SELECT cnt.flight_id,
+                                 bp2.ticket_no
+                          FROM (SELECT f.flight_id,
+                                       ceiling(count(*) * 0.1) AS happy_pass_count
+                                FROM far_east_flights AS f
+                                         JOIN boarding_passes AS bp ON bp.flight_id = f.flight_id
+                                GROUP BY f.flight_id) AS cnt
+                                   CROSS JOIN LATERAL (
+                              SELECT ticket_no
+                              FROM boarding_passes bp
+                              WHERE bp.flight_id = cnt.flight_id
+                              ORDER BY random()
+                              LIMIT cnt.happy_pass_count
+                              ) AS bp2)
 
-,happy_passengers2 AS (
-SELECT 
-flight_id, count(*) AS happy_pass
-FROM happy_passengers
-GROUP BY flight_id
-)
+   , happy_passengers2 AS (SELECT flight_id,
+                                  count(*) AS happy_pass
+                           FROM happy_passengers
+                           GROUP BY flight_id)
 
 SELECT hp.flight_id, ap.all_pass, hp.happy_pass
 FROM happy_passengers2 AS hp
-JOIN all_passengers AS ap ON ap.flight_id = hp.flight_id
+         JOIN all_passengers AS ap ON ap.flight_id = hp.flight_id
 ORDER BY ap.all_pass DESC, hp.flight_id;
 
 
 /*В конструкции LATERAL можно использовать не только подзапросы, но и вызовы функций, возвращающих
  * множество строк
- * 
+ *
  * Согласованность данных является важным критерием  их качесива и пригодности для принятия
  * управленческих решений.
- * 
- * 
+ *
+ *
  * Талоны получают последовательные номера начиная с единицы в рамках каждого рейса,
  * тогда каким образом можно выявить возможные пропуски в номерах посадочных талонов?
  * Идея алгоритма такова - для каждого состоявшегося рейса нужно сформировать эталонный
  * список номеров посадочных талонов без пропусков, начиная с единицы и заканчивая
  * максимальным номером оформленного на этот рейс талона.
- * Затем используя это внешнее соединение нужно сопоставить этот полный список номеров 
+ * Затем используя это внешнее соединение нужно сопоставить этот полный список номеров
  * талонов со списком номеров талонов, фактически оформленных на этот рейс.
  * Те номера для которых не найдется пары из эталонного списка и будут являться пропущенными
  * номерами
- * 
+ *
  * */
 
 --SELECT generate_series(1, (SELECT max(boarding_no) AS boarding_no FROM boarding_passes))
 
 BEGIN;
-DELETE 
-FROM boarding_passes 
-WHERE(flight_id, boarding_no) IN ( (25,3), (25,6), (26,3), (27,5) );
+DELETE
+FROM boarding_passes
+WHERE (flight_id, boarding_no) IN ((25, 3), (25, 6), (26, 3), (27, 5));
 ROLLBACK;
 
 
-SELECT
-	f.flight_id,
-	nums.boarding_no
-FROM
-	flights f
-CROSS JOIN LATERAL generate_series(
-1, (SELECT max(boarding_no) AS boarding_no
-FROM boarding_passes AS bp
-WHERE bp.flight_id = f.flight_id
-   )
-) AS nums(boarding_no)
-LEFT OUTER JOIN boarding_passes AS bp ON bp.flight_id = f.flight_id AND bp.boarding_no = nums.boarding_no
-WHERE
-	f.status IN ('Departed', 'Arrived')
-	AND bp.boarding_no IS NULL
-ORDER BY
-	f.flight_id,
-	nums.boarding_no;
+SELECT f.flight_id,
+       nums.boarding_no
+FROM flights f
+         CROSS JOIN LATERAL generate_series(
+        1, (SELECT max(boarding_no) AS boarding_no
+            FROM boarding_passes AS bp
+            WHERE bp.flight_id = f.flight_id)
+                            ) AS nums(boarding_no)
+         LEFT OUTER JOIN boarding_passes AS bp ON bp.flight_id = f.flight_id AND bp.boarding_no = nums.boarding_no
+WHERE f.status IN ('Departed', 'Arrived')
+  AND bp.boarding_no IS NULL
+ORDER BY f.flight_id,
+         nums.boarding_no;
 
 /*Тип  json в конструкции lateral
- * 
+ *
  * Могут возникать ситуации, когда на основе структурированного описания требуется сформировать
  * строки для вставки в таблицу. В таких случаях использование в конструкции LATERAL функции,
  * возвращающих множество строк также поможет решить задачу
- * 
+ *
  * В качестве иллюстрации рассмотрим следующую задачу
- * Предположим, что мы только присутпаем к работе с базой данных Авиаперевозки и для 
+ * Предположим, что мы только присутпаем к работе с базой данных Авиаперевозки и для
  * начала требуется заполнить таблицу Места seats.
  * В этйо таблице три столбца:
- * - aircraft_code. 
+ * - aircraft_code.
  * - seat_no.
  * - fare_conditions.
  * Конфигурации планировок салонов представлены в виде json - массива.
  * Элементами массива являются json - объекты, представляющие класс обслуживания.
- * Объект включает в себя название класса обслуживания и два массива: 
+ * Объект включает в себя название класса обслуживания и два массива:
  * 1.Содержит номера первого и последнего рядов в этом классе
  * 2.Содержит буквенно обозначение мест в этих рядах.
  * Для примера возьмем только две модели самолетов SU9 и CN1.
  * Надо сказать, что не всегда салоны самолетов имеют регулярную структуру, как
  * в данном примере.Для планировок в которых количество кресел отличается
  * от ряда к ряду можно добавить в массив несколько элементов для одного класса.
- * 
- * В подзапросе 
+ *
+ * В подзапросе
  */
 
-WITH seats_conf(aircraft_code, seats_conf) AS 
+WITH seats_conf(aircraft_code, seats_conf) AS
 /*
  * Создаем временную таблицу seats_conf с двумя колонками: aircraft_code и seats_conf
 VALUES создает строки данных:
@@ -4294,34 +4008,61 @@ VALUES создает строки данных:
 ------------- | ------------------
 SU            | [{"fare_conditions": "Business", "rows": [1,3], "letters": ["A","C","D","F"]}, ...]
 CN1           | [{"fare_conditions": "Economy", "rows":  [1,6], "letters": ["A","B"]}]
- 
+
  * */
-(VALUES 
-   ('SU', '[ {"fare_conditions": "Business",
-              "rows":[1,3],
-              "letters":["A","C","D","F"] },
-              {"fare_conditions": "Economy",
-              "rows":[4,20],
-              "letters":["A","C","D","E", "F"] }
-           ]'::jsonb
-   ),
-   ('CN1', '[ {"fare_conditions": "Economy",
-              "rows":[1,6],
-              "letters":["A","B"] }
-           ]'::jsonb
-  )
-),
-fare_cond_confs AS 
+         (VALUES ('SU', '[
+           {
+             "fare_conditions": "Business",
+             "rows": [
+               1,
+               3
+             ],
+             "letters": [
+               "A",
+               "C",
+               "D",
+               "F"
+             ]
+           },
+           {
+             "fare_conditions": "Economy",
+             "rows": [
+               4,
+               20
+             ],
+             "letters": [
+               "A",
+               "C",
+               "D",
+               "E",
+               "F"
+             ]
+           }
+         ]'::jsonb),
+                 ('CN1', '[
+                   {
+                     "fare_conditions": "Economy",
+                     "rows": [
+                       1,
+                       6
+                     ],
+                     "letters": [
+                       "A",
+                       "B"
+                     ]
+                   }
+                 ]'::jsonb)),
+     fare_cond_confs AS
 /*
  * Что происходит:
 jsonb_array_elements(sc.seats_conf) - разворачивает JSON-массив в отдельные строки
 CROSS JOIN LATERAL - для каждой строки из seats_conf применяет функцию разворачивания
 Как работает разворачивание:
 Для самолета 'SU' массив из 2 элементов превращается в 2 строки:
-До разворачивания: 
+До разворачивания:
 SU: [ {Business config}, {Economy config} ]
 
- После разворачивания: 
+ После разворачивания:
 SU: {Business config}
 SU: {Economy config}
 
@@ -4330,12 +4071,11 @@ SU            | {"fare_conditions": "Business", "rows": [1,3], "letters": ["A","
 SU            | {"fare_conditions": "Economy", "rows":  [4,20], "letters": ["A","C","D","E","F"]}
 CN1           | {"fare_conditions": "Economy", "rows":  [1,6], "letters": ["A","B"]}
 
- * 
+ *
  * */
-(SELECT aircraft_code, conf
-FROM seats_conf sc
-CROSS JOIN LATERAL jsonb_array_elements(sc.seats_conf) AS conf
-)
+         (SELECT aircraft_code, conf
+          FROM seats_conf sc
+                   CROSS JOIN LATERAL jsonb_array_elements(sc.seats_conf) AS conf)
 
 
 SELECT aircraft_code, param.*
@@ -4346,80 +4086,108 @@ CROSS JOIN LATERAL - для каждой JSON-строки создает нес
 После jsonb_each:
 key               | value
 "fare_conditions" | "Business"
-"rows"            | [1,3] 
+"rows"            | [1,3]
 "letters"         | ["A","C","D","F"]*/
 FROM fare_cond_confs fcc
-CROSS JOIN LATERAL jsonb_each(fcc.conf) AS param
+         CROSS JOIN LATERAL jsonb_each(fcc.conf) AS param
 
 
 
 /*Теперь получим итоговые реузльтат для вставки в таблицу
- * Скрипт генерирует полный список всех мест в самолетах на основе JSON-конфигураций. 
+ * Скрипт генерирует полный список всех мест в самолетах на основе JSON-конфигураций.
  * Для каждого самолета и класса обслуживания он создает комбинации всех рядов (от начального до конечного) со всеми возможными буквами мест, формируя полный перечень мест типа "1A", "1C", "2A", "2C" и т.д.
  * */
 -- Создаем временную таблицу seats_conf с конфигурациями мест для разных самолетов
-WITH seats_conf(aircraft_code, seats_conf) AS 
-(VALUES 
-   -- Конфигурация для самолета с кодом 'SU'
-   ('SU', '[ {"fare_conditions": "Business",
-              "rows":[1,3],                      	
-              "letters":["A","C","D","F"] },     	
-              {"fare_conditions": "Economy",     	
-              "rows":[4,20],                     	
-              "letters":["A","C","D","E", "F"] } 	
-           ]'::jsonb                             	
- /* Класс обслуживания: Бизнес, 
+WITH seats_conf(aircraft_code, seats_conf) AS
+         (VALUES
+              -- Конфигурация для самолета с кодом 'SU'
+              ('SU', '[
+                {
+                  "fare_conditions": "Business",
+                  "rows": [
+                    1,
+                    3
+                  ],
+                  "letters": [
+                    "A",
+                    "C",
+                    "D",
+                    "F"
+                  ]
+                },
+                {
+                  "fare_conditions": "Economy",
+                  "rows": [
+                    4,
+                    20
+                  ],
+                  "letters": [
+                    "A",
+                    "C",
+                    "D",
+                    "E",
+                    "F"
+                  ]
+                }
+              ]'::jsonb
+                  /* Класс обслуживания: Бизнес,
   * Ряды с 1 по 3,
   * Буквы мест в ряду
   * Класс обслуживания: Эконом
   * Ряды с 4 по 20
   * Буквы мест в ряду
   * Приводим строку к типу jsonb
-  */ 
-   ),
-   -- Конфигурация для самолета с кодом 'CN1'
-   ('CN1', '[ {"fare_conditions": "Economy",    
-              "rows":[1,6],                      
-              "letters":["A","B"] }             
-           ]'::jsonb                             
-  )
-  /* Класс обслуживания: Эконом
+  */
+              ),
+              -- Конфигурация для самолета с кодом 'CN1'
+              ('CN1', '[
+                {
+                  "fare_conditions": "Economy",
+                  "rows": [
+                    1,
+                    6
+                  ],
+                  "letters": [
+                    "A",
+                    "B"
+                  ]
+                }
+              ]'::jsonb)
+             /* Класс обслуживания: Эконом
    * Ряды с 1 по 6
    * Буквы мест в ряду
    * Приводим строку к типу jsonb
    */
-  
-),
+
+         ),
 -- Преобразуем JSON конфигурации в реляционный формат
-fare_cond_confs AS 
-(SELECT aircraft_code, conf
-FROM seats_conf sc
-CROSS JOIN LATERAL jsonb_array_elements(sc.seats_conf) AS conf -- Разбиваем JSON массив на отдельные строки
-)
+     fare_cond_confs AS
+         (SELECT aircraft_code, conf
+          FROM seats_conf sc
+                   CROSS JOIN LATERAL jsonb_array_elements(sc.seats_conf) AS conf -- Разбиваем JSON массив на отдельные строки
+         )
 
 -- Генерируем все возможные места на основе конфигураций
-SELECT
-	aircraft_code,                                -- Код самолета
-	fcc.conf ->>'fare_conditions' AS fare_conditions, -- Извлекаем класс обслуживания из JSON
-	ROW || letter AS seat_no                      -- Формируем номер места: ряд + буква
-FROM
-	fare_cond_confs fcc
+SELECT aircraft_code,                                     -- Код самолета
+       fcc.conf ->> 'fare_conditions' AS fare_conditions, -- Извлекаем класс обслуживания из JSON
+       ROW || letter                  AS seat_no          -- Формируем номер места: ряд + буква
+FROM fare_cond_confs fcc
 -- Генерируем последовательность номеров рядов для каждого класса обслуживания
-CROSS JOIN LATERAL generate_series(
-(fcc.conf->'rows'->>0)::integer,    -- Извлекаем начальный номер ряда из JSON и приводим к integer
-(fcc.conf->'rows'->>1)::integer     -- Извлекаем конечный номер ряда из JSON и приводим к integer
-) AS ROW(ROW)                        -- Генерируем ряды от начального до конечного
+         CROSS JOIN LATERAL generate_series(
+        (fcc.conf -> 'rows' ->> 0)::integer, -- Извлекаем начальный номер ряда из JSON и приводим к integer
+        (fcc.conf -> 'rows' ->> 1)::integer -- Извлекаем конечный номер ряда из JSON и приводим к integer
+                            ) AS ROW(ROW) -- Генерируем ряды от начального до конечного
 -- Разбиваем массив букв мест на отдельные строки
-CROSS JOIN LATERAL jsonb_array_elements_text(fcc.conf->'letters') AS letters(letter)
+         CROSS JOIN LATERAL jsonb_array_elements_text(fcc.conf -> 'letters') AS letters(letter)
 -- Сортируем результаты для удобства чтения
-ORDER BY
-	aircraft_code,      -- Сначала по коду самолета
-	fare_conditions,    -- Затем по классу обслуживания
-	ROW,                -- Затем по номеру ряда
-	letter              -- И по букве места
-/* 
- * 
- * JSON_TABLE в PostgreSQL - это мощная функция для преобразования JSON-данных в табличный формат. 
+ORDER BY aircraft_code,   -- Сначала по коду самолета
+         fare_conditions, -- Затем по классу обслуживания
+         ROW,             -- Затем по номеру ряда
+         letter
+-- И по букве места
+/*
+ *
+ * JSON_TABLE в PostgreSQL - это мощная функция для преобразования JSON-данных в табличный формат.
  * Появилась в версии 16 и предоставляет SQL-Standard способ парсинга JSON.
  * JSON_TABLE(
     json_data,          -- JSON-документ для парсинга
@@ -4433,7 +4201,7 @@ ORDER BY
 SELECT *
 FROM JSON_TABLE(
     '[{"name": "John", "age": 30}, {"name": "Alice", "age": 25}]',
-    '$[*]' 
+    '$[*]'
     COLUMNS (
         name text PATH '$.name',
         age integer PATH '$.age'
@@ -4448,48 +4216,73 @@ FROM JSON_TABLE(
 
  */
 
-WITH seats_confs(aircraft_code, seats_conf) AS 
-(VALUES 
-   -- Конфигурация для самолета с кодом 'SU'
-   ('SU', '[ {"fare_conditions": "Business",
-              "rows":[1,3],                      	
-              "letters":["A","C","D","F"] },     	
-              {"fare_conditions": "Economy",     	
-              "rows":[4,20],                     	
-              "letters":["A","C","D","E", "F"] } 	
-           ]'::jsonb                             	
-
-   ),
-   -- Конфигурация для самолета с кодом 'CN1'
-   ('CN1', '[ {"fare_conditions": "Economy",    
-              "rows":[1,6],                      
-              "letters":["A","B"] }             
-           ]'::jsonb     
-    )
-) 
+WITH seats_confs(aircraft_code, seats_conf) AS
+         (VALUES
+              -- Конфигурация для самолета с кодом 'SU'
+              ('SU', '[
+                {
+                  "fare_conditions": "Business",
+                  "rows": [
+                    1,
+                    3
+                  ],
+                  "letters": [
+                    "A",
+                    "C",
+                    "D",
+                    "F"
+                  ]
+                },
+                {
+                  "fare_conditions": "Economy",
+                  "rows": [
+                    4,
+                    20
+                  ],
+                  "letters": [
+                    "A",
+                    "C",
+                    "D",
+                    "E",
+                    "F"
+                  ]
+                }
+              ]'::jsonb),
+              -- Конфигурация для самолета с кодом 'CN1'
+              ('CN1', '[
+                {
+                  "fare_conditions": "Economy",
+                  "rows": [
+                    1,
+                    6
+                  ],
+                  "letters": [
+                    "A",
+                    "B"
+                  ]
+                }
+              ]'::jsonb))
 
 --- Основной запрос для извлечения и преобразования JSON данных
-SELECT 
-sc.aircraft_code,     -- Код самолета из временной таблицы
-jt.*                  -- Все колонки из результата работы JSON_TABLE
+SELECT sc.aircraft_code, -- Код самолета из временной таблицы
+       jt.*              -- Все колонки из результата работы JSON_TABLE
 FROM seats_confs AS sc
 -- Используем LATERAL JOIN с функцией json_table для парсинга JSON
-CROSS JOIN LATERAL json_table(
-seats_conf,           -- JSON-колонка для парсинга
-'$[*]'                -- JSONPath выражение: обработать все элементы массива
-COLUMNS               -- Определение структуры выходных колонок
+         CROSS JOIN LATERAL json_table(
+        seats_conf, -- JSON-колонка для парсинга
+        '$[*]' -- JSONPath выражение: обработать все элементы массива
+            COLUMNS               -- Определение структуры выходных колонок
 (
 fare_condition text PATH  '$.fare_conditions',  -- Извлечь текст из поля fare_conditions
 row_from integer    PATH  '$.rows[0]',          -- Извлечь первый элемент массива rows как integer
-row_to integer      PATH  '$.rows[1]',          -- Извлечь второй элемент массива rows как integer  
+row_to integer      PATH  '$.rows[1]',          -- Извлечь второй элемент массива rows как integer
 letters text[]      PATH  '$."letters"'         -- Извлечь весь массив letters как text array
   )
-) AS jt               -- Псевдоним для результата json_table
+                            ) AS jt -- Псевдоним для результата json_table
 -- Сортировка результатов
-ORDER BY 
-aircraft_code,        -- Сначала сортируем по коду самолета
-row_from;             -- Затем по начальному номеру ряда (row_from)
-
+ORDER BY aircraft_code, -- Сначала сортируем по коду самолета
+         row_from;
+-- Затем по начальному номеру ряда (row_from)
 
 
 /*Усовершенствуем массив, чтобы он отдавал развернутый
@@ -4507,35 +4300,62 @@ PATH '$' - берет значение текущего элемента мас�
 
 
 
-WITH seats_confs(aircraft_code, seats_conf) AS 
-(VALUES 
-   /* CTE с конфигурациями самолетов: код самолета и JSON с расположением мест */
-   ('SU', '[ {"fare_conditions": "Business",
-              "rows":[1,3],                      	
-              "letters":["A","C","D","F"] },     	
-              {"fare_conditions": "Economy",     	
-              "rows":[4,20],                     	
-              "letters":["A","C","D","E", "F"] } 	
-           ]'::jsonb                             	
-   ),
-   /* Маленький самолет с двухместной конфигурацией в ряду */
-   ('CN1', '[ {"fare_conditions": "Economy",    
-              "rows":[1,6],                      
-              "letters":["A","B"] }             
-           ]'::jsonb     
-    )
-) 
+WITH seats_confs(aircraft_code, seats_conf) AS
+         (VALUES
+              /* CTE с конфигурациями самолетов: код самолета и JSON с расположением мест */
+              ('SU', '[
+                {
+                  "fare_conditions": "Business",
+                  "rows": [
+                    1,
+                    3
+                  ],
+                  "letters": [
+                    "A",
+                    "C",
+                    "D",
+                    "F"
+                  ]
+                },
+                {
+                  "fare_conditions": "Economy",
+                  "rows": [
+                    4,
+                    20
+                  ],
+                  "letters": [
+                    "A",
+                    "C",
+                    "D",
+                    "E",
+                    "F"
+                  ]
+                }
+              ]'::jsonb),
+              /* Маленький самолет с двухместной конфигурацией в ряду */
+              ('CN1', '[
+                {
+                  "fare_conditions": "Economy",
+                  "rows": [
+                    1,
+                    6
+                  ],
+                  "letters": [
+                    "A",
+                    "B"
+                  ]
+                }
+              ]'::jsonb))
 
-SELECT 
-sc.aircraft_code,     /* Код самолета для идентификации типа воздушного судна */
-jt.fare_conditions,   /* Класс обслуживания: Business или Economy */
-rows.row || jt.letter AS seat_no /* Формирование номера места путем конкатенации номера ряда и буквы */
+SELECT sc.aircraft_code, /* Код самолета для идентификации типа воздушного судна */
+       jt.fare_conditions, /* Класс обслуживания: Business или Economy */
+       rows.row || jt.letter AS seat_no /* Формирование номера места путем конкатенации номера ряда и буквы */
 FROM seats_confs AS sc
 /* Парсинг JSON конфигурации и преобразование в табличную структуру */
-CROSS JOIN LATERAL json_table(
-seats_conf,           /* JSON-поле с конфигурацией кресел самолета */
-'$[*]'                /* JSONPath для итерации по всем элементам верхнего уровня массива */
-COLUMNS               /* Определение структуры выходных колонок из JSON */
+         CROSS JOIN LATERAL json_table(
+        seats_conf, /* JSON-поле с конфигурацией кресел самолета */
+        '$[*]' /* JSONPath для итерации по всем элементам верхнего уровня массива */
+            COLUMNS               /* Определение структуры выходных колонок из JSON */
    (
 fare_conditions text PATH  '$.fare_conditions',  /* Извлечение класса обслуживания из JSON */
 row_from integer    PATH  '$.rows[0]',          /* Начальный номер ряда из массива rows */
@@ -4543,60 +4363,45 @@ row_to integer      PATH  '$.rows[1]',          /* Конечный номер �
 NESTED PATH '$.letters[*]' /* Развертывание массива букв в отдельные строки */
 COLUMNS (letter text PATH '$' )/* Извлечение каждой буквы как отдельного значения */
    )
-) AS jt /* Результат парсинга JSON с конфигурацией по классам обслуживания */
+                            ) AS jt /* Результат парсинга JSON с конфигурацией по классам обслуживания */
 /* Генерация последовательности номеров рядов для каждого класса обслуживания */
-CROSS JOIN LATERAL generate_series(jt.row_from, jt.row_to) AS rows(row)
+         CROSS JOIN LATERAL generate_series(jt.row_from, jt.row_to) AS rows(row)
 /* Сортировка итогового списка мест для удобного отображения */
 ORDER BY aircraft_code, row, letter
 
 
-
-
 /*Напишите эту конструкцию с использованием конструкции LATERAL*/
 
-EXPLAIN ANALYZE 
-SELECT
-	a.model,
-	count(*) AS seats_cnt
-FROM
-	aircrafts a
-JOIN seats s ON
-	s.aircraft_code = a.aircraft_code
-GROUP BY
-	a.model
-ORDER BY
-	seats_cnt DESC;
+EXPLAIN ANALYZE
+SELECT a.model,
+       count(*) AS seats_cnt
+FROM aircrafts a
+         JOIN seats s ON
+    s.aircraft_code = a.aircraft_code
+GROUP BY a.model
+ORDER BY seats_cnt DESC;
 
 
-EXPLAIN ANALYZE 
-SELECT
-    a.model,
-    (SELECT count(*) 
-     FROM seats s 
-     WHERE s.aircraft_code = a.aircraft_code) AS seats_cnt
-FROM
-    aircrafts a
-ORDER BY
-    seats_cnt DESC;
+EXPLAIN ANALYZE
+SELECT a.model,
+       (SELECT count(*)
+        FROM seats s
+        WHERE s.aircraft_code = a.aircraft_code) AS seats_cnt
+FROM aircrafts a
+ORDER BY seats_cnt DESC;
 
 
 
-EXPLAIN ANALYZE 
-SELECT
-	a.model,
-	seats_cnt
-FROM
-	aircrafts a
-CROSS JOIN LATERAL (
-	SELECT
-		count(*) AS seats_cnt
-	FROM
-		seats s
-	WHERE
-		s.aircraft_code = a.aircraft_code
-) AS seats_data
-ORDER BY
-	seats_cnt DESC;
+EXPLAIN ANALYZE
+SELECT a.model,
+       seats_cnt
+FROM aircrafts a
+         CROSS JOIN LATERAL (
+    SELECT count(*) AS seats_cnt
+    FROM seats s
+    WHERE s.aircraft_code = a.aircraft_code
+    ) AS seats_data
+ORDER BY seats_cnt DESC;
 /*
 Распиши, как работает этот скрипт, поставь многострочный комментарий по строкам:
 РАЗБОР ВЫПОЛНЕНИЯ ЗАПРОСА:
@@ -4655,12 +4460,17 @@ ORDER BY
  * значит имеет место пропуск в нумерации, надо отображать
  * такие пары и для каждой из них генерировать пропущенные значения*/
 
-CREATE TABLE numbers(a int);
-INSERT INTO numbers SELECT g FROM generate_series(1,100) AS g
+CREATE TABLE numbers
+(
+    a int
+);
+INSERT INTO numbers
+SELECT g
+FROM generate_series(1, 100) AS g
 
-DELETE 
-FROM numbers 
-WHERE a IN (19,58,51,52);
+DELETE
+FROM numbers
+WHERE a IN (19, 58, 51, 52);
 
 /*
 РАЗБОР СКРИПТА ПОИСКА ПРОПУЩЕННЫХ ЧИСЕЛ В ПОСЛЕДОВАТЕЛЬНОСТИ:
@@ -4685,7 +4495,7 @@ WHERE a IN (19,58,51,52);
    КАК РАБОТАЕТ CTE gaps:
    - Для каждого числа n1.a ищет ближайшее большее число n2.a
    - Отбирает только пары, где разница больше 1 (есть пропуски)
-   
+
    ПРИМЕР РАБОТЫ CTE gaps для [1, 2, 4, 7, 8]:
    n1.a | n2.a | Разница | Берем?
    1    | 2    | 1       | НЕТ (разница = 1)
@@ -4701,7 +4511,7 @@ WHERE a IN (19,58,51,52);
 
 2. Основной запрос - генерирует пропущенные числа:
    SELECT missing
-   FROM gaps 
+   FROM gaps
    CROSS JOIN generate_series(a1 + 1, a2 - 1) AS missing
 
    ДЛЯ КАЖДОЙ ПАРЫ ИЗ gaps:
@@ -4730,38 +4540,33 @@ ORDER BY missing;
 3. Поиск дырок в нумерации заказов, счетов и т.д.
 4. Валидация данных на целостность последовательностей
 
-ВЕРДИКТ: Скрипт эффективно находит все пропуски в числовой последовательности, 
+ВЕРДИКТ: Скрипт эффективно находит все пропуски в числовой последовательности,
 генерируя недостающие числа между существующими.
 
 */
 
 
-
-WITH gaps AS (
-SELECT a1, a2
-FROM numbers AS n1
-CROSS JOIN LATERAL (
-SELECT n1.a AS a1, n2.a AS a2
-FROM numbers AS n2
-WHERE n2.a > n1.a
-ORDER BY n2.a
-LIMIT 1
-) AS n2
-WHERE a2 - a1 > 1
-)
+WITH gaps AS (SELECT a1, a2
+              FROM numbers AS n1
+                       CROSS JOIN LATERAL (
+                  SELECT n1.a AS a1, n2.a AS a2
+                  FROM numbers AS n2
+                  WHERE n2.a > n1.a
+                  ORDER BY n2.a
+                  LIMIT 1
+                  ) AS n2
+              WHERE a2 - a1 > 1)
 
 SELECT missing
-FROM gaps 
-CROSS JOIN generate_series(a1 + 1, a2 - 1) AS missing
+FROM gaps
+         CROSS JOIN generate_series(a1 + 1, a2 - 1) AS missing
 ORDER BY missing
 
 /*Более упрощенный вариант*/
-WITH all_numbers AS (
-    SELECT generate_series(
-        (SELECT min(a) FROM numbers),
-        (SELECT max(a) FROM numbers)
-    ) AS expected
-) ----весь числовой ряд без пропусков.
+WITH all_numbers AS (SELECT generate_series(
+                                    (SELECT min(a) FROM numbers),
+                                    (SELECT max(a) FROM numbers)
+                            ) AS expected) ----весь числовой ряд без пропусков.
 
 SELECT expected AS missing
 FROM all_numbers
@@ -4771,23 +4576,23 @@ ORDER BY missing;
 /*Подпрограммы routines
  * дополняют его элементами императивного стиля программирования
  * Postgres изначально проектировался так, чтобы пользователь мог расширять функциональность СУБД своими
- * собственными объектами, в том числе типами данных, операторами, агрегатами, 
+ * собственными объектами, в том числе типами данных, операторами, агрегатами,
  * пользовательскими функциями.
  * При этом создаваемые объекты подключаются к серверу на лету.
  * Такая гибкость обеспечивается тем, что в Postgresql значительная часть метаинформации не закодирована
  * жестко, а хранится в специальных системных таблицах
- * 
+ *
  * Функции можно разрабатывать на таких языках как Python, Perl, PL/pgsql - который является
  * процедурным расширением PostgreSQL, так же возможно создавать их на языке SQL, возможностей
  * которого вполне достаточно, чтобы решить весьма сложные задачи.
- * 
+ *
  * Пользовательские функции создаются на стороне сервера и позволяют разработчику:
  * -декомпозировать задачу (наряду с подзапросами и табличными выражениями)
  * -повторно использовать серверный код в нескольких приложениях;
  * -упрощать программный код в нескольких приложениях;
  * -упрощать программный код приложения, заменяя несколько запросов, выполняющих общую задачу,
  * вызовом функции;
- * -избегать модификации приложения при изменении схемы базы данных или алгоритмов выполнения 
+ * -избегать модификации приложения при изменении схемы базы данных или алгоритмов выполнения
  * операций за счет сохранения программного интерфейса(API) предоставляемого функцией.
  */
 
@@ -4797,7 +4602,7 @@ ORDER BY missing;
  * указанному классу обсулживания*/
 
 CREATE FUNCTION count_seats(a_code char(3), fare_cond text)
-RETURNS bigint AS 
+    RETURNS bigint AS
 /*создается тип возвращаемого значения, мы использовали  bigint потому как функция count
 возвращает значение именно такого типа
 Тело функции представляет из себя символьную строку, предваряется ключевым словом AS
@@ -4807,18 +4612,18 @@ $$
 select count(*)
 from seats s
 where s.aircraft_code = a_code
-and s.fare_conditions = fare_cond;
-$$ LANGUAGE SQL 
+  and s.fare_conditions = fare_cond;
+$$ LANGUAGE SQL
 
 EXPLAIN ANALYZE
-SELECT count_seats('773','Business')
-/*Функции могут порождать таблицы и вызваться в преложении from
+SELECT count_seats('773', 'Business')
+           /*Функции могут порождать таблицы и вызваться в преложении from
  * Функция можети возвращать таблицу и с несколькими столбцами*/
 
 /*Можно задавать псевдонимы функции и имени столбца*/
-EXPLAIN ANALYZE
+           EXPLAIN ANALYZE
 SELECT *
-FROM count_seats('773','Business') AS c_seats (сs)
+FROM count_seats('773', 'Business') AS c_seats (сs)
 
 
 /*Если число параметров функции велико, их порядок будет трудно запомнить
@@ -4832,50 +4637,45 @@ SELECT count_seats(fare_cond =>'Business', a_code => 'SU9');
 /*Как увидеть информацию о функции*/
 -- Этот запрос нужно выполнять из базы данных postgres
 -- Этот запрос нужно выполнять из базы данных postgres
-SELECT 
-    current_database() AS database,  -- Добавлено: имя текущей базы данных
-    n.nspname AS schema,
-    p.proname AS function_name,
-    CASE p.prokind
-        WHEN 'f' THEN 'function'
-        WHEN 'p' THEN 'procedure' 
-        WHEN 'a' THEN 'aggregate'
-        WHEN 'w' THEN 'window'
-    END AS function_type,
-    pg_get_function_arguments(p.oid) AS arguments,
-    (
-        SELECT string_agg(pt.typname, ', ' ORDER BY pa.ordinality)
-        FROM unnest(coalesce(p.proargtypes, ARRAY[]::oid[])) WITH ORDINALITY AS pa(oid, ordinality)
-        JOIN pg_type pt ON pt.oid = pa.oid
-    ) AS argument_types,
-    pg_get_function_result(p.oid) AS return_type,
-    t.typname AS return_type_name,
-    CASE 
-        WHEN p.provolatile = 'i' THEN 'immutable'
-        WHEN p.provolatile = 's' THEN 'stable' 
-        WHEN p.provolatile = 'v' THEN 'volatile'
-    END AS volatility,
-    CASE 
-        WHEN p.proisstrict THEN 'yes' 
-        ELSE 'no' 
-    END AS returns_null_on_null_input,
-    l.lanname AS language,
-    p.prosrc AS source_code
+SELECT current_database()                            AS database, -- Добавлено: имя текущей базы данных
+       n.nspname                                     AS schema,
+       p.proname                                     AS function_name,
+       CASE p.prokind
+           WHEN 'f' THEN 'function'
+           WHEN 'p' THEN 'procedure'
+           WHEN 'a' THEN 'aggregate'
+           WHEN 'w' THEN 'window'
+           END                                       AS function_type,
+       pg_get_function_arguments(p.oid)              AS arguments,
+       (SELECT string_agg(pt.typname, ', ' ORDER BY pa.ordinality)
+        FROM unnest(coalesce(p.proargtypes, ARRAY []::oid[])) WITH ORDINALITY AS pa(oid, ordinality)
+                 JOIN pg_type pt ON pt.oid = pa.oid) AS argument_types,
+       pg_get_function_result(p.oid)                 AS return_type,
+       t.typname                                     AS return_type_name,
+       CASE
+           WHEN p.provolatile = 'i' THEN 'immutable'
+           WHEN p.provolatile = 's' THEN 'stable'
+           WHEN p.provolatile = 'v' THEN 'volatile'
+           END                                       AS volatility,
+       CASE
+           WHEN p.proisstrict THEN 'yes'
+           ELSE 'no'
+           END                                       AS returns_null_on_null_input,
+       l.lanname                                     AS language,
+       p.prosrc                                      AS source_code
 FROM pg_proc p
-LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
-LEFT JOIN pg_type t ON p.prorettype = t.oid
-LEFT JOIN pg_language l ON p.prolang = l.oid
+         LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
+         LEFT JOIN pg_type t ON p.prorettype = t.oid
+         LEFT JOIN pg_language l ON p.prolang = l.oid
 -- Раскомментируйте одну из строк ниже для фильтрации:
---WHERE 
+--WHERE
 --p.proname = 'count_seats'  -- замените на имя вашей функции
-WHERE p.proname LIKE '%count%'  -- поиск по части имени
-AND 
-n.nspname = 'bookings'  -- фильтр по схеме
-AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-ORDER BY 
-    database,  -- Добавлено в сортировку
-    n.nspname, 
-    p.proname;
+WHERE p.proname LIKE '%count%' -- поиск по части имени
+  AND n.nspname = 'bookings'   -- фильтр по схеме
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY database, -- Добавлено в сортировку
+         n.nspname,
+         p.proname;
 
 /*Существует еще один способ обозначения параметров - по их порядковым номерам
  * номеру должен предшествовать знак $
@@ -4884,30 +4684,31 @@ ORDER BY
  * Здесь в данном скрипте создания функции применение именованных аргументов невозможно*/
 
 CREATE FUNCTION count_seats2(char, text)
-RETURNS bigint AS 
+    RETURNS bigint AS
 $$
 select count(*)
 from seats s
 where s.aircraft_code = $1
-and s.fare_conditions = $2;
+  and s.fare_conditions = $2;
 $$ LANGUAGE SQL
 
-SELECT * FROM count_seats2('SU9', 'Business')
+SELECT *
+FROM count_seats2('SU9', 'Business')
 
 /* Параметры функций могут иметь параметры in, out, inout
  * По умолчанию подразумевается in поэтому мы его и не указывали в нашей первой
  * функции.
  * Параметр с таким модификатором является входным, то есть служит для передачи
  * внутрь функции какого-то значения, существующего вне ее.
- * 
- * Модификатор out означает что параметр является входным. Таких параметров у 
+ *
+ * Модификатор out означает что параметр является входным. Таких параметров у
  * функции тоже может быть несколько. В случае отсутствия предложения RETURNS
  * именно параметры с модификаторами out определят выходные значения,
  * сформированные внутри функции, таким образом она сможет вернуть несколько
  * значений.
  * Если же наряду с такими параметрами присуствует и предложение RETURNS, то типы
  * данных этих параметров должны совпадать с типами, заданными в этом предложении!!!
- * Это объясняется тем, что параметры с модификатороами out и предложение returns 
+ * Это объясняется тем, что параметры с модификатороами out и предложение returns
  * не дополняют друг друга, а по разному определяют одну и туже информацию
  * и в традиционных языках программирования, и в таких языках СУБД как PL SQL иди
  * Transact-sql, возвращаемое значение и выходные параметры действуют независимо друг
@@ -4915,13 +4716,13 @@ SELECT * FROM count_seats2('SU9', 'Business')
  * Но в Postgresql out параметры и returns - просто разные способы указать тип возвращаемого
  * значения
  * Модификатор inout дает возможность сочетать свойства входных и выходных параметров.
- * Параметр с таким модификатором позволяет передать значение в функцию, а затем через 
+ * Параметр с таким модификатором позволяет передать значение в функцию, а затем через
  * него жее вернуть значение (возможно другое) вовне!!!
- * 
+ *
  * Давайте несколько модифицируем исходную задачу и напишем функцию, которая подсчитввает число
  * мест для каждого класса обслуживания в салоне выбранной модели самолета.
  * Предложение returns позволяет указать тип только одного возвращаемого значения,
- * поэтому нужно предусмотреть 4 параметра с модификатором out (Модификатор - 
+ * поэтому нужно предусмотреть 4 параметра с модификатором out (Модификатор -
  * это служебное слово, которое уточняет назначение параметра.).
  * У первой версии функции было два входных параметра. Новая версия будет иметь один
  * входнной параметр.
@@ -4930,29 +4731,27 @@ SELECT * FROM count_seats2('SU9', 'Business')
  * -код модели самолета
  */
 
-CREATE FUNCTION count_seats3
-(
-INOUT a_code char DEFAULT 'SU9',
-OUT   a_model text,
-OUT   seats_business bigint,
-OUT   seats_comfort  bigint,
-OUT   seats_economy  bigint
-) AS 
+CREATE FUNCTION count_seats3(
+    INOUT a_code char DEFAULT 'SU9',
+    OUT a_model text,
+    OUT seats_business bigint,
+    OUT seats_comfort bigint,
+    OUT seats_economy bigint
+) AS
 $$
-SELECT 
-a.aircraft_code,
-a.model,
-count(*) filter (where s.fare_conditions = 'Business') AS business,
-count(*) filter (where s.fare_conditions = 'Comfort')  AS comfort,
-count(*) filter (where s.fare_conditions = 'Economy')  AS economy
+SELECT a.aircraft_code,
+       a.model,
+       count(*) filter (where s.fare_conditions = 'Business') AS business,
+       count(*) filter (where s.fare_conditions = 'Comfort')  AS comfort,
+       count(*) filter (where s.fare_conditions = 'Economy')  AS economy
 FROM aircrafts a
-JOIN seats s ON s.aircraft_code = a.aircraft_code
+         JOIN seats s ON s.aircraft_code = a.aircraft_code
 WHERE a.aircraft_code = a_code
-GROUP BY  a.aircraft_code, a.model
+GROUP BY a.aircraft_code, a.model
 $$ LANGUAGE SQL;
 
 /*
-SELECT 
+SELECT
     a.aircraft_code,
     a.model,
     SUM(CASE WHEN s.fare_conditions = 'Business' THEN 1 ELSE 0 END) AS business,
@@ -4973,76 +4772,74 @@ FROM count_seats3('319')
  * внутри функции в SQL-запросе.
  * При этом параметры out при вызове функции ей передавать не нужно, а
  * параметр имеющий модификатор  inout, если только для него не задано значение
- * по умолчанию, - нужно. 
+ * по умолчанию, - нужно.
  * Модификатор -  это служебное слово, которое уточняет назначение параметра
- * Если у функциФункция в SQL - это именованная группа SQL-операторов, которая принимает 
- * параметры, выполняет определенные действия и возвращает результат. 
+ * Если у функциФункция в SQL - это именованная группа SQL-операторов, которая принимает
+ * параметры, выполняет определенные действия и возвращает результат.
  * Функции инкапсулируют логику для многократного использования.
- * Аргумент функции - это входное значение или переменная, которая передается 
+ * Аргумент функции - это входное значение или переменная, которая передается
  * в функцию при ее вызове и используется в вычислениях внутри функции.
- * 
+ *
  * */
 
 SELECT *
-FROM count_seats3() ---с параметром по умолчанию
+FROM count_seats3()
+---с параметром по умолчанию
 
 /*Также можно использовать функцию и таким образом*/
 
-SELECT  seats_business +  seats_comfort + seats_economy AS total_seats
-FROM count_seats3('319') 
+SELECT seats_business + seats_comfort + seats_economy AS total_seats
+FROM count_seats3('319')
 
-/*В этом запросе мы не указали псевдонимы для столбцов, которые возвращает 
+/*В этом запросе мы не указали псевдонимы для столбцов, которые возвращает
  * функция.
  * В таком случае нам нужно знать имена выходных параметров, которые были заданы
  * при создании функции, что воспользоваться имя*/
 
-SELECT
-	code,
-	moodel,
-	seats_b,
-	seats_c,
-	seats_e,
-	seats_b + seats_c + seats_e AS total_seats
-FROM
-	count_seats3('319') AS cnt_seats (code,
-	moodel,
-	seats_b,
-	seats_c,
-	seats_e)
-	
-	
-	
-	
+SELECT code,
+       moodel,
+       seats_b,
+       seats_c,
+       seats_e,
+       seats_b + seats_c + seats_e AS total_seats
+FROM count_seats3('319') AS cnt_seats (code,
+                                       moodel,
+                                       seats_b,
+                                       seats_c,
+                                       seats_e)
+
+
 /*Можно получить результат выполнения функции в виде значения так называемого составного
  * типа, которое представлено как группа полей, заключенных в скобки
  * Раздел 8.16 справки составные типы
- * 
+ *
  * Система типов данных устроена так, что когда создается таблица,
  * вместе с ней создается и новый составной тип данных, имя которого совпадает
  * с ее именем, а поля этого типа соответствуют столбцами таблицы.
- * Составной тип по сути является список имен полей и их типов данных, 
+ * Составной тип по сути является список имен полей и их типов данных,
  * таким образом он является описанием структуры ее строк.
  * Для возвращаемого функцией результата тоже автоматически создается составной
  * тип, но анонимный
- * 
+ *
  * Сейчас реализуем варинат с возвратом значения (предвариетельно созданного) составного типа,
  * взяв за основу функцию count_seats3 и модифицировав ее соответствующимм образом.
- * 
+ *
  * !!!ТАкой способ с созданием специального составного типа может иметь смысл, если этот
  * тип может понадобиться и в других ситуациях!!!
- * 
+ *
  * */
 
 SELECT cnt_seats
 FROM count_seats3('319') AS cnt_seats ---(319,"Аэробус A319-100",20,0,96)
 
 
-CREATE TYPE cnt_seats AS (
-aircraft_code char(3),
-model text,
-seats_business bigint,
-seats_comfort  bigint,
-seats_economy  bigint
+CREATE TYPE cnt_seats AS
+(
+    aircraft_code  char(3),
+    model          text,
+    seats_business bigint,
+    seats_comfort  bigint,
+    seats_economy  bigint
 );
 
 /*Тело функции остается без изменений, изменяется только список параметров
@@ -5053,32 +4850,30 @@ seats_economy  bigint
  * */
 
 
-CREATE FUNCTION count_seats4
-(
-a_code char DEFAULT 'SU9'
-) 
-RETURNS cnt_seats AS
+CREATE FUNCTION count_seats4(
+    a_code char DEFAULT 'SU9'
+)
+    RETURNS cnt_seats AS
 $$
-SELECT 
-a.aircraft_code,
-a.model,
-count(*) filter (where s.fare_conditions = 'Business') AS business,
-count(*) filter (where s.fare_conditions = 'Comfort')  AS comfort,
-count(*) filter (where s.fare_conditions = 'Economy')  AS economy
+SELECT a.aircraft_code,
+       a.model,
+       count(*) filter (where s.fare_conditions = 'Business') AS business,
+       count(*) filter (where s.fare_conditions = 'Comfort')  AS comfort,
+       count(*) filter (where s.fare_conditions = 'Economy')  AS economy
 FROM aircrafts a
-JOIN seats s ON s.aircraft_code = a.aircraft_code
+         JOIN seats s ON s.aircraft_code = a.aircraft_code
 WHERE a.aircraft_code = a_code
-GROUP BY  a.aircraft_code, a.model
+GROUP BY a.aircraft_code, a.model
 $$ LANGUAGE SQL;
 
 
 SELECT *
-FROM count_seats4('773') 
+FROM count_seats4('773')
 
 
 /*Теперь поместим вызов функции в select*/
 
-SELECT count_seats4('319') 
+SELECT count_seats4('319')
 
 /*Получим отдельное поле*
  * нотация требует наличия дополнительных скобок во избежание
@@ -5094,45 +4889,43 @@ SELECT seats_business(count_seats4('319'))
 
 /*Перегрузка функции
  * Сигнатура функции должна быть уникальной
- * Перегрузка функций - это возможность создать несколько 
- * функций с одинаковым именем, но разными параметрами (сигнатурами). 
+ * Перегрузка функций - это возможность создать несколько
+ * функций с одинаковым именем, но разными параметрами (сигнатурами).
  * PostgreSQL различает их по типам и количеству аргументов
  * Разные сигнатуры = разные функции
 
 Перегрузка - создание функций с одинаковым именем, но разными параметрами
 Сигнатура - уникальный идентификатор: имя(тип1, тип2, ...)
 PostgreSQL выбирает функцию на основе совпадения типов аргументов
-Это мощный механизм для создания гибких API, где одно имя функции может 
+Это мощный механизм для создания гибких API, где одно имя функции может
 работать с разными типами данных.
 Перегрузим функцию cunt_seats
 
  */
 
 
-CREATE FUNCTION count_seats
-(
-INOUT a_code char DEFAULT 'SU9',
-OUT   a_model text,
-OUT   seats_business bigint,
-OUT   seats_comfort  bigint,
-OUT   seats_economy  bigint
+CREATE FUNCTION count_seats(
+    INOUT a_code char DEFAULT 'SU9',
+    OUT a_model text,
+    OUT seats_business bigint,
+    OUT seats_comfort bigint,
+    OUT seats_economy bigint
 ) AS
 $$
-SELECT 
-a.aircraft_code,
-a.model,
-count(*) filter (where s.fare_conditions = 'Business') AS business,
-count(*) filter (where s.fare_conditions = 'Comfort')  AS comfort,
-count(*) filter (where s.fare_conditions = 'Economy')  AS economy
+SELECT a.aircraft_code,
+       a.model,
+       count(*) filter (where s.fare_conditions = 'Business') AS business,
+       count(*) filter (where s.fare_conditions = 'Comfort')  AS comfort,
+       count(*) filter (where s.fare_conditions = 'Economy')  AS economy
 FROM aircrafts a
-JOIN seats s ON s.aircraft_code = a.aircraft_code
+         JOIN seats s ON s.aircraft_code = a.aircraft_code
 WHERE a.aircraft_code = a_code
-GROUP BY  a.aircraft_code, a.model
+GROUP BY a.aircraft_code, a.model
 $$ LANGUAGE SQL;
 
 ---передаем два аргумента и видим, что вызывается первая версия функции
 SELECT *
-FROM count_seats('773','Business')
+FROM count_seats('773', 'Business')
 
 ---передаем один аргумент и срабатывает вторая версия фукнции, также
 ---при вызове без аргументов сработает вторая версия функции.
@@ -5145,11 +4938,11 @@ FROM count_seats('773')
  * только указать только имя функции и типы данных, которые имеют
  * ее параметры, а их имена можно не указывать
  * При этом можно пускать молдификаторы типов
- * 
+ *
  * Попробуем удалить одну из двух перегруженных функций*/
 
-DROP FUNCTION count_seats(char, text, bigint, bigint, bigint)
-/*SQL Error [42883]: ERROR: function count_seats(character, text, bigint, bigint, bigint) 
+         DROP FUNCTION count_seats(char, text, bigint, bigint, bigint)
+/*SQL Error [42883]: ERROR: function count_seats(character, text, bigint, bigint, bigint)
  * does not exist
  *
  *Ошибка объясняется тем, что в команде удаления функции нужно задать только
@@ -5162,62 +4955,62 @@ DROP FUNCTION IF EXISTS count_seats(char)
 
 /*Функции, включающие несколько SQL-команд
  * Напишем функцию записывающую сведения о продаже билета в базу данных.
- * У функции будет целый ряд параметров, а возвращать она будет только 
+ * У функции будет целый ряд параметров, а возвращать она будет только
  * полную сумму бронирования.
  * Она позволяет в одном броинровании оформить несколько билетов
  * с несколькими перелетами в каждом
  */
 
-CREATE FUNCTION make_or_update_booking
-(
-b_ref char,     ---номер бронирования
-t_no  char,     ---номер билета
-p_id  varchar,  ---идентификатор пассажира
-p_name text,    ---имя пассажира
-c_data jsonb,   ---контактные данные пассажира
-f_id integer,   ---идентификатор рейса
-f_cond varchar, ---класс обслуживания
-amt NUMERIC     ---стоимость перелета
+CREATE FUNCTION make_or_update_booking(
+    b_ref char, ---номер бронирования
+    t_no char, ---номер билета
+    p_id varchar, ---идентификатор пассажира
+    p_name text, ---имя пассажира
+    c_data jsonb, ---контактные данные пассажира
+    f_id integer, ---идентификатор рейса
+    f_cond varchar, ---класс обслуживания
+    amt NUMERIC ---стоимость перелета
 )
-
-RETURNS NUMERIC AS 
+    RETURNS NUMERIC AS
 $$
 insert into bookings
-(book_ref, book_date, total_amount)
-values(b_ref, bookings.now(), 0)
+    (book_ref, book_date, total_amount)
+values (b_ref, bookings.now(), 0)
 on conflict do nothing;
 
 insert into tickets
-(ticket_no, book_ref, passenger_id, passenger_name, contact_data)
-values(t_no, b_ref, p_id, p_name, c_data)
+    (ticket_no, book_ref, passenger_id, passenger_name, contact_data)
+values (t_no, b_ref, p_id, p_name, c_data)
 on conflict do nothing;
 
 insert into ticket_flights
-(ticket_no, flight_id, fare_conditions, amount)
-values(t_no, f_id, f_cond, amt);
+    (ticket_no, flight_id, fare_conditions, amount)
+values (t_no, f_id, f_cond, amt);
 
 update bookings
 set total_amount = total_amount + amt
 where book_ref = b_ref
-returning total_amount;  ----функция возвращает сумму бронирования
+returning total_amount; ----функция возвращает сумму бронирования
 $$
-LANGUAGE SQL;
+    LANGUAGE SQL;
 
 /*Оформим билет на рейс Нижний Новгород - Пермь*/
 BEGIN;
-SELECT  make_or_update_booking
-( b_ref => 'ABC123'
-,t_no => '1234567890123'
-,p_id => '000 123456'
-,p_name =>'IVAN KRESOV'
-,c_data => '{"phone":"+7(967)3007080"}'::jsonb
-,f_id => 20502
-,f_cond =>'Economy'
-,amt => 10000::numeric
-) AS total_amount ----= - это оператор сравнения, а => - это синтаксис именованных параметров.
+SELECT make_or_update_booking
+       (b_ref => 'ABC123'
+           , t_no => '1234567890123'
+           , p_id => '000 123456'
+           , p_name =>'IVAN KRESOV'
+           , c_data => '{
+          "phone": "+7(967)3007080"
+        }'::jsonb
+           , f_id => 20502
+           , f_cond =>'Economy'
+           , amt => 10000::numeric
+       ) AS total_amount ----= - это оператор сравнения, а => - это синтаксис именованных параметров.
 
 SELECT *
-FROM bookings 
+FROM bookings
 WHERE book_ref = 'ABC123'
 
 SELECT *
@@ -5225,13 +5018,13 @@ FROM tickets
 WHERE ticket_no = '1234567890123'
 
 SELECT *
-FROM  ticket_flights 
+FROM ticket_flights
 WHERE ticket_no = '1234567890123'
-AND flight_id ='20502'
+  AND flight_id = '20502'
 
-ROLLBACK; 
+ROLLBACK;
 
-/*Таким образом функция возвращает результат выполнения 
+/*Таким образом функция возвращает результат выполнения
  * своего последнего оператора. Если он порождает одну
  * строку, то она и будет возвращена в качестве результата.
  * Если же оператор порождает множество строк, то будет возвращена
@@ -5243,12 +5036,12 @@ ROLLBACK;
  * Тело каждой функции, созданной нами до сих пор, представляло собой строковую
  * константу!!!
  * Однако стандарт языка SQL предлагает другой способ, который можно
- * назвать "функция в стиле стандарта SQL" 
+ * назвать "функция в стиле стандарта SQL"
  * При использовании этого способа тело функции представляет
  * собой блок операторов, входящих в состав функции, или одно выражение, возвращаемое
  * оператором RETURN
- * 
- * 
+ *
+ *
  * Между этими способами есть ряд принципиальных различий. При представлении функции
  * в виде строки разбор производится в процессе выполнения функции, а при использовании SQL-стиля
  * - в процессе ее определения. В результате становится возможным отслеживание зависимостей
@@ -5258,55 +5051,53 @@ ROLLBACK;
  */
 
 CREATE FUNCTION count_seats_sql(a_code char, fare_cond text)
-RETURNS bigint 
-RETURN (
-SELECT count(*)
-FROM seats s
-WHERE s.aircraft_code = a_code
-AND s.fare_conditions = fare_cond
-);
+    RETURNS bigint
+RETURN (SELECT count(*)
+        FROM seats s
+        WHERE s.aircraft_code = a_code
+          AND s.fare_conditions = fare_cond);
 
 SELECT count_seats_sql('SU9', 'Economy')
 
 /*Теперь создадим новую версию функции make_or_update_booking в стиле стандарта
  * SQL, обратите внимание на конструкцию bigin atomic ... end.
- * 
+ *
  */
 
-CREATE FUNCTION make_or_update_booking_sql
-(
-b_ref char,     ---номер бронирования
-t_no  char,     ---номер билета
-p_id  varchar,  ---идентификатор пассажира
-p_name text,    ---имя пассажира
-c_data jsonb,   ---контактные данные пассажира
-f_id integer,   ---идентификатор рейса
-f_cond varchar, ---класс обслуживания
-amt NUMERIC     ---стоимость перелета
+CREATE FUNCTION make_or_update_booking_sql(
+    b_ref char, ---номер бронирования
+    t_no char, ---номер билета
+    p_id varchar, ---идентификатор пассажира
+    p_name text, ---имя пассажира
+    c_data jsonb, ---контактные данные пассажира
+    f_id integer, ---идентификатор рейса
+    f_cond varchar, ---класс обслуживания
+    amt NUMERIC ---стоимость перелета
 )
+    RETURNS NUMERIC
+BEGIN
+    ATOMIC -- Начало атомарной (транзакционной) операции
 
-RETURNS NUMERIC
-BEGIN ATOMIC -- Начало атомарной (транзакционной) операции
+    insert into bookings
+        (book_ref, book_date, total_amount)
+    values (b_ref, bookings.now(), 0)
+    on conflict do nothing;
 
-insert into bookings
-(book_ref, book_date, total_amount)
-values(b_ref, bookings.now(), 0)
-on conflict do nothing;
+    insert into tickets
+        (ticket_no, book_ref, passenger_id, passenger_name, contact_data)
+    values (t_no, b_ref, p_id, p_name, c_data)
+    on conflict do nothing;
 
-insert into tickets
-(ticket_no, book_ref, passenger_id, passenger_name, contact_data)
-values(t_no, b_ref, p_id, p_name, c_data)
-on conflict do nothing;
+    insert into ticket_flights
+        (ticket_no, flight_id, fare_conditions, amount)
+    values (t_no, f_id, f_cond, amt);
 
-insert into ticket_flights
-(ticket_no, flight_id, fare_conditions, amount)
-values(t_no, f_id, f_cond, amt);
-
-update bookings
-set total_amount = total_amount + amt
-where book_ref = b_ref
-returning total_amount;
-END;----функция возвращает сумму бронирования
+    update bookings
+    set total_amount = total_amount + amt
+    where book_ref = b_ref
+    returning total_amount;
+END;
+----функция возвращает сумму бронирования
 
 /*
 Особенности реализации:
@@ -5325,36 +5116,37 @@ RETURNING total_amount:
 Можно использовать результат в приложении
 
 -- Вызов 1: amt = 10000 → total_amount = 10000
--- Вызов 2: amt = 5000  → total_amount = 15000  
+-- Вызов 2: amt = 5000  → total_amount = 15000
 -- Вызов 3: amt = 7000  → total_amount = 22000
 */
 
 BEGIN;
-SELECT  make_or_update_booking_sql
-( b_ref => 'ABC123'
-,t_no => '1234567890123'
-,p_id => '000 123456'
-,p_name =>'IVAN KRESOV'
-,c_data => '{"phone":"+7(967)3007080"}'::jsonb
-,f_id => 20502
-,f_cond =>'Economy'
-,amt => 10000::numeric
-) AS total_amount ----= - это оператор сравнения, а => - это синтаксис именованных параметров.
+SELECT make_or_update_booking_sql
+       (b_ref => 'ABC123'
+           , t_no => '1234567890123'
+           , p_id => '000 123456'
+           , p_name =>'IVAN KRESOV'
+           , c_data => '{
+          "phone": "+7(967)3007080"
+        }'::jsonb
+           , f_id => 20502
+           , f_cond =>'Economy'
+           , amt => 10000::numeric
+       ) AS total_amount ----= - это оператор сравнения, а => - это синтаксис именованных параметров.
 
 SELECT *
-FROM bookings 
+FROM bookings
 WHERE book_ref = 'ABC123'
 
 ROLLBACK;
 
 /*В функции с телом в виде строковой константы
  * в столбце prosqlbody будет стоять null,
- * а для функции SQL-стиле NULL будет в столбце 
+ * а для функции SQL-стиле NULL будет в столбце
  * prosrc*/
-SELECT 
-proname,
-LEFT(prosrc,90)     AS  source_code,
-LEFT(prosqlbody,90) AS  parsed_code
+SELECT proname,
+       LEFT(prosrc, 90)     AS source_code,
+       LEFT(prosqlbody, 90) AS parsed_code
 FROM pg_proc
 WHERE proname ~ 'make_or_update_book'
 
@@ -5378,52 +5170,49 @@ SELECT count_seats_sql('SU9', NULL)
 ---DROP  FUNCTION count_seats_sql
 
 CREATE FUNCTION count_seats_sql(a_code char, fare_cond text)
-RETURNS bigint 
-STRICT ----STRICT в функции PostgreSQL означает, что функция будет 
-       ----возвращать NULL немедленно, если любой из её аргументов равен NULL.
-RETURN (
-SELECT count(*)
-FROM seats s
-WHERE s.aircraft_code = a_code
-AND s.fare_conditions = fare_cond
-);
+    RETURNS bigint
+    STRICT ----STRICT в функции PostgreSQL означает, что функция будет
+----возвращать NULL немедленно, если любой из её аргументов равен NULL.
+RETURN (SELECT count(*)
+        FROM seats s
+        WHERE s.aircraft_code = a_code
+          AND s.fare_conditions = fare_cond);
 
 EXPLAIN ANALYZE ---запрос стал выполняться быстрее
 SELECT count_seats_sql('SU9', NULL)
 
-/*Существует альтернативный варинат предложения strict 
+/*Существует альтернативный варинат предложения strict
 Эти две строки делают одно и то же:
 STRICT
 RETURNS NULL ON NULL INPUT - это синоним для STRICT. Оба означают одно и то же!
  */
 
-ALTER FUNCTION count_seats_sql
-RETURNS NULL ON NULL INPUT 
+           ALTER FUNCTION count_seats_sql
+RETURNS NULL ON NULL INPUT
 
 
-SELECT 
-    unnest(ARRAY[
-        'oid', 'proname', 'pronamespace', 'proowner', 'prolang', 
-        'procost', 'prorows', 'provariadic', 'prosupport', 'prokind',
-        'prosecdef', 'proleakproof', 'proisstrict', 'proretset', 'provolatile',
-        'proparallel', 'pronargs', 'pronargdefaults', 'prorettype', 'proargtypes',
-        'proallargtypes', 'proargmodes', 'proargnames', 'proargdefaults',
-        'protrftypes', 'prosrc', 'probin', 'prosqlbody', 'proconfig', 'proacl'
-    ]) AS column_name,
-    unnest(ARRAY[
-        oid::text, proname::text, pronamespace::text, proowner::text, prolang::text,
-        procost::text, prorows::text, provariadic::text, prosupport::text, prokind::text,
-        prosecdef::text, proleakproof::text, proisstrict::text, proretset::text, provolatile::text,
-        proparallel::text, pronargs::text, pronargdefaults::text, prorettype::text, proargtypes::text,
-        proallargtypes::text, proargmodes::text, proargnames::text, proargdefaults::text,
-        protrftypes::text, prosrc::text, probin::text, prosqlbody::text, proconfig::text, proacl::text
-    ]) AS column_value
+SELECT unnest(ARRAY [
+    'oid', 'proname', 'pronamespace', 'proowner', 'prolang',
+    'procost', 'prorows', 'provariadic', 'prosupport', 'prokind',
+    'prosecdef', 'proleakproof', 'proisstrict', 'proretset', 'provolatile',
+    'proparallel', 'pronargs', 'pronargdefaults', 'prorettype', 'proargtypes',
+    'proallargtypes', 'proargmodes', 'proargnames', 'proargdefaults',
+    'protrftypes', 'prosrc', 'probin', 'prosqlbody', 'proconfig', 'proacl'
+    ])        AS column_name,
+       unnest(ARRAY [
+           oid::text, proname::text, pronamespace::text, proowner::text, prolang::text,
+           procost::text, prorows::text, provariadic::text, prosupport::text, prokind::text,
+           prosecdef::text, proleakproof::text, proisstrict::text, proretset::text, provolatile::text,
+           proparallel::text, pronargs::text, pronargdefaults::text, prorettype::text, proargtypes::text,
+           proallargtypes::text, proargmodes::text, proargnames::text, proargdefaults::text,
+           protrftypes::text, prosrc::text, probin::text, prosqlbody::text, proconfig::text, proacl::text
+           ]) AS column_value
 FROM pg_proc
 WHERE proname = 'count_seats_sql';
 
 /*Функции и зависимости между объектами баз данных
- * 
- * Объекты в базе данных зависят друг от дурга. При удалении объектов связи между ними разрываются, 
+ *
+ * Объекты в базе данных зависят друг от дурга. При удалении объектов связи между ними разрываются,
  * что может приводить к ошибкам в процессе выполнения запросов. Функции также участвуют в связях
  * с другими объектами, и нам необходимо рассмотреть два вопроса:
  * - что происходит с другими объектами, когда удаляется функция, на которую они ссылаются (например
@@ -5431,13 +5220,13 @@ WHERE proname = 'count_seats_sql';
  * - что происходит с функцией, когда удаляются объекты, используемые в ней.
  * Каждый объект в базе данных имеет идентификатор объекта oid, который представляется значениями
  * oid и используется в качестве первичного ключа соответствующего системного каталога.
- * 
+ *
  * В Postgresql насчитывается несколько десятков системных каталогов из которых нас будут интересовать
  * следующие:
- * 
+ *
  * pg_class - описывает таблицы, индексы, последовательности, представления, составные типы
  * данных и дургие объекты, объединяемые термином "отношение".
- * pg_proc  - хранит сведения о функциях (в том числе о оконных и агрегатных) и процедурах, то 
+ * pg_proc  - хранит сведения о функциях (в том числе о оконных и агрегатных) и процедурах, то
  * есть о подпрограммах.
  * pg_consraint - содержит ограничения первичных ключей, уникальных, внешних ключей, ограчения
  * check и ряд других ограничений.
@@ -5448,18 +5237,18 @@ WHERE proname = 'count_seats_sql';
  * вышестоящий объект.
  * refobjid - ссылается на какой-либо столбец oid - oid вышестоящего объекта
  * deptype  - код, определяющий вид зависимости.
- * 
+ *
  * Факт наличия записи в каталоге pg_depend говорит о том, что нельзя удалить вышестоящий объект,
  * не удалив также зависимый подчиненный.
  * Будем учитывать два варианта зависимости, задаваемых в столбце deptype, представлены они в подразделе
  * 51.18 pg_depend.
  * Обычная зависимость (n)  - зависимость между лбъектами, создаваемыми отдельно. Зависимый объект можно
  * удалить, не затрагивая вышестоящий.
- * 
+ *
  * Однако вышестоящий объект при наличии зависимого можно удалить, только добавив слово cascade в команду
  * удаления. При этом зависимый объект также будет удален. В качестве примера можно привести зависимость столбца
  * таблицы от его типа данных или внешнего ключа от таблицы, на которую он ссылается.
- * Автоматическая зависимость (a) - зависимый объект, как и в предыдущем варинате зависимости, 
+ * Автоматическая зависимость (a) - зависимый объект, как и в предыдущем варинате зависимости,
  * можно удалить, не затрагивая вышестоящий. Однако при удалении вышестоящего объекта зависимый
  * должен быть удален автоматически,независимо от наличия предложения cascade в команде удаления.
  * В качестве примера может служить именованное ограничение, наложенное на таблицу, которое автоматически
@@ -5469,29 +5258,28 @@ WHERE proname = 'count_seats_sql';
 
 CREATE VIEW pg_depend_v AS
 (
-SELECT 
-objid, 
-classid::regclass::text AS classname, 
-CASE classid
-WHEN 'pg_proc'::regclass       THEN objid::regproc::text
-WHEN 'pg_class'::regclass      THEN objid::regclass::text
-WHEN 'pg_constraint'::regclass THEN (SELECT conname FROM pg_constraint WHERE oid = pg_depend.objid)
-END AS objname,
-refclassid::regclass::text AS refclassname,
-refobjid,
-CASE refclassid
-WHEN 'pg_proc'::regclass       THEN refobjid::regproc::text
-WHEN 'pg_class'::regclass      THEN refobjid::regclass::text
-WHEN 'pg_constraint'::regclass THEN (SELECT conname FROM pg_constraint WHERE oid = pg_depend.refobjid)
-END AS refobjname,
+SELECT objid,
+       classid::regclass::text    AS classname,
+       CASE classid
+           WHEN 'pg_proc'::regclass THEN objid::regproc::text
+           WHEN 'pg_class'::regclass THEN objid::regclass::text
+           WHEN 'pg_constraint'::regclass THEN (SELECT conname FROM pg_constraint WHERE oid = pg_depend.objid)
+           END                    AS objname,
+       refclassid::regclass::text AS refclassname,
+       refobjid,
+       CASE refclassid
+           WHEN 'pg_proc'::regclass THEN refobjid::regproc::text
+           WHEN 'pg_class'::regclass THEN refobjid::regclass::text
+           WHEN 'pg_constraint'::regclass THEN (SELECT conname FROM pg_constraint WHERE oid = pg_depend.refobjid)
+           END                    AS refobjname,
 
-CASE deptype 
-WHEN 'n' THEN 'normal'
-WHEN 'a' THEN 'auto'
-ELSE 'other'
-END AS deptype
+       CASE deptype
+           WHEN 'n' THEN 'normal'
+           WHEN 'a' THEN 'auto'
+           ELSE 'other'
+           END                    AS deptype
 FROM pg_depend
-);
+    );
 
 SELECT *
 FROM pg_depend_v
@@ -5501,94 +5289,86 @@ pg_class - таблица, индекс, последовательность
 pg_constraint - ограничение (внешний ключ, уникальность)
 pg_proc - функция
 pg_type - тип данных
-* 
+*
 */
 
 
 -- Проверить, можно ли безопасно удалить таблицу
-WITH RECURSIVE table_levels AS (
-    SELECT 
-        c.oid,
-        c.relname as table_name,
-        0 as level,
-        ARRAY[c.relname::text] as path
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.relkind = 'r'
-      AND n.nspname = 'bookings'
-      AND NOT EXISTS (
-          SELECT 1 FROM pg_constraint 
-          WHERE conrelid = c.oid AND contype = 'f'
-      )
-    
-    UNION ALL
-    
-    SELECT 
-        c.oid,
-        c.relname as table_name,
-        tl.level + 1 as level,
-        tl.path || c.relname::text
-    FROM pg_constraint con
-    JOIN pg_class c ON c.oid = con.conrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    JOIN table_levels tl ON tl.oid = con.confrelid
-    WHERE con.contype = 'f'
-      AND n.nspname = 'bookings'
-      AND c.relname != ALL(tl.path)
-      AND con.oid = (
-          SELECT MIN(con2.oid) 
-          FROM pg_constraint con2 
-          WHERE con2.conrelid = con.conrelid 
-          AND con2.confrelid = con.confrelid
-      )
-),
-distinct_tables AS (
-    SELECT DISTINCT ON (level, table_name)
-        level,
-        table_name,
-        (SELECT path FROM table_levels t2 
-         WHERE t2.level = t1.level AND t2.table_name = t1.table_name 
-         LIMIT 1) as sample_path
-    FROM table_levels t1
-    ORDER BY level, table_name
-)
-SELECT 
-    ROW_NUMBER() OVER (ORDER BY level DESC, table_name) as "№",
-    level as "Уровень",
-    table_name as "Таблица",
-    array_to_string(sample_path, ' → ') as "Пример_зависимостей",
-    CASE level
-        WHEN 0 THEN '🟢 УДАЛЯТЬ ПОСЛЕДНИМИ - независимые таблицы'
-        WHEN 1 THEN '🟡 УДАЛЯТЬ ТРЕТЬИМИ - зависят от справочников' 
-        WHEN 2 THEN '🟠 УДАЛЯТЬ ВТОРЫМИ - промежуточные таблицы'
-        WHEN 3 THEN '🔴 УДАЛЯТЬ ПЕРВЫМИ - самые дочерние таблицы'
-        ELSE '⚪ УДАЛЯТЬ на уровне ' || level
-    END as "Инструкция"
+WITH RECURSIVE
+    table_levels AS (SELECT c.oid,
+                            c.relname               as table_name,
+                            0                       as level,
+                            ARRAY [c.relname::text] as path
+                     FROM pg_class c
+                              JOIN pg_namespace n ON n.oid = c.relnamespace
+                     WHERE c.relkind = 'r'
+                       AND n.nspname = 'bookings'
+                       AND NOT EXISTS (SELECT 1
+                                       FROM pg_constraint
+                                       WHERE conrelid = c.oid
+                                         AND contype = 'f')
+
+                     UNION ALL
+
+                     SELECT c.oid,
+                            c.relname    as table_name,
+                            tl.level + 1 as level,
+                            tl.path || c.relname::text
+                     FROM pg_constraint con
+                              JOIN pg_class c ON c.oid = con.conrelid
+                              JOIN pg_namespace n ON n.oid = c.relnamespace
+                              JOIN table_levels tl ON tl.oid = con.confrelid
+                     WHERE con.contype = 'f'
+                       AND n.nspname = 'bookings'
+                       AND c.relname != ALL (tl.path)
+                       AND con.oid = (SELECT MIN(con2.oid)
+                                      FROM pg_constraint con2
+                                      WHERE con2.conrelid = con.conrelid
+                                        AND con2.confrelid = con.confrelid)),
+    distinct_tables AS (SELECT DISTINCT ON (level, table_name) level,
+                                                               table_name,
+                                                               (SELECT path
+                                                                FROM table_levels t2
+                                                                WHERE t2.level = t1.level
+                                                                  AND t2.table_name = t1.table_name
+                                                                LIMIT 1) as sample_path
+                        FROM table_levels t1
+                        ORDER BY level, table_name)
+SELECT ROW_NUMBER() OVER (ORDER BY level DESC, table_name) as "№",
+       level                                               as "Уровень",
+       table_name                                          as "Таблица",
+       array_to_string(sample_path, ' → ')                 as "Пример_зависимостей",
+       CASE level
+           WHEN 0 THEN '🟢 УДАЛЯТЬ ПОСЛЕДНИМИ - независимые таблицы'
+           WHEN 1 THEN '🟡 УДАЛЯТЬ ТРЕТЬИМИ - зависят от справочников'
+           WHEN 2 THEN '🟠 УДАЛЯТЬ ВТОРЫМИ - промежуточные таблицы'
+           WHEN 3 THEN '🔴 УДАЛЯТЬ ПЕРВЫМИ - самые дочерние таблицы'
+           ELSE '⚪ УДАЛЯТЬ на уровне ' || level
+           END                                             as "Инструкция"
 FROM distinct_tables
 ORDER BY level DESC, table_name;
 
 
 /*Узнать какие ключи поддерживаю каскадное удаление, а какие нет*/
-SELECT 
-    c.relname as child_table,
-    p.relname as parent_table,
-    con.conname as foreign_key,
-    CASE con.confdeltype
-        WHEN 'a' THEN '❌ NO ACTION'
-        WHEN 'r' THEN '❌ RESTRICT' 
-        WHEN 'c' THEN '✅ CASCADE'
-        WHEN 'n' THEN '🔵 SET NULL'
-        WHEN 'd' THEN '🟡 SET DEFAULT'
-        ELSE '❓ UNKNOWN'
-    END as delete_rule,
-    CASE 
-        WHEN con.confdeltype IN ('c', 'n', 'd') THEN 'МОЖНО каскадно'
-        ELSE 'НЕЛЬЗЯ каскадно'
-    END as cascade_possible
+SELECT c.relname   as child_table,
+       p.relname   as parent_table,
+       con.conname as foreign_key,
+       CASE con.confdeltype
+           WHEN 'a' THEN '❌ NO ACTION'
+           WHEN 'r' THEN '❌ RESTRICT'
+           WHEN 'c' THEN '✅ CASCADE'
+           WHEN 'n' THEN '🔵 SET NULL'
+           WHEN 'd' THEN '🟡 SET DEFAULT'
+           ELSE '❓ UNKNOWN'
+           END     as delete_rule,
+       CASE
+           WHEN con.confdeltype IN ('c', 'n', 'd') THEN 'МОЖНО каскадно'
+           ELSE 'НЕЛЬЗЯ каскадно'
+           END     as cascade_possible
 FROM pg_constraint con
-JOIN pg_class c ON c.oid = con.conrelid
-JOIN pg_class p ON p.oid = con.confrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_class p ON p.oid = con.confrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE con.contype = 'f'
   AND n.nspname = 'bookings'
 ORDER BY p.relname, c.relname;
@@ -5597,16 +5377,16 @@ ORDER BY p.relname, c.relname;
  * не важно представлено ли ее тело ввиде символьной строки или
  * она написана в стиле сандарта SQL */
 
-CREATE TEMP TABLE aircrafts_tmp 
-AS 
-SELECT * 
+CREATE TEMP TABLE aircrafts_tmp
+AS
+SELECT *
 FROM aircrafts
 
 /* Создадим функцию для проверки допустимости кода модели самолета
  * в реальной жизни обходимся проверкой ограничения check*/
 
 CREATE FUNCTION air_code_correct(a_code char)
-RETURNS boolean
+    RETURNS boolean
 RETURN a_code ~ '^[0-9A-Z]{3}$';
 
 
@@ -5619,79 +5399,75 @@ A-Z - заглавные буквы от A до Z
 
 /*Добавим данное ограничение, основанное на этой фкнции*/
 
-ALTER TABLE  aircrafts_tmp ADD CHECK(air_code_correct(aircraft_code)); 
+ALTER TABLE aircrafts_tmp
+    ADD CHECK (air_code_correct(aircraft_code));
 
 -- Детальная информация о таблице
 -- Индексы таблицы
 -- Полная информация о таблице aircrafts_tmp (аналог \d+)
 WITH table_info AS (
     -- 1. Столбцы таблицы
-    SELECT 
-        1 as section,
-        a.attnum as order_num,
-        a.attname AS "Name",
-        pg_catalog.format_type(a.atttypid, a.atttypmod) AS "Definition",
-        CASE 
-            WHEN a.attnotnull THEN 'not null'
-            ELSE ''
-        END AS "Modifiers"
+    SELECT 1                                               as section,
+           a.attnum                                        as order_num,
+           a.attname                                       AS "Name",
+           pg_catalog.format_type(a.atttypid, a.atttypmod) AS "Definition",
+           CASE
+               WHEN a.attnotnull THEN 'not null'
+               ELSE ''
+               END                                         AS "Modifiers"
     FROM pg_catalog.pg_attribute a
     WHERE a.attrelid = 'aircrafts_tmp'::regclass
-        AND a.attnum > 0
-        AND NOT a.attisdropped
-    
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+
     UNION ALL
-    
+
     -- 2. Индексы
-    SELECT 
-        2 as section,
-        row_number() OVER () as order_num,
-        i.relname AS "Name",
-        array_to_string(array_agg(a.attname), ', ') AS "Definition",
-        CASE 
-            WHEN idx.indisunique THEN 'UNIQUE'
-            ELSE ''
-        END AS "Modifiers"
+    SELECT 2                                           as section,
+           row_number() OVER ()                        as order_num,
+           i.relname                                   AS "Name",
+           array_to_string(array_agg(a.attname), ', ') AS "Definition",
+           CASE
+               WHEN idx.indisunique THEN 'UNIQUE'
+               ELSE ''
+               END                                     AS "Modifiers"
     FROM pg_catalog.pg_index idx
-    JOIN pg_catalog.pg_class i ON i.oid = idx.indexrelid
-    JOIN pg_catalog.pg_class t ON t.oid = idx.indrelid
-    JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(idx.indkey)
+             JOIN pg_catalog.pg_class i ON i.oid = idx.indexrelid
+             JOIN pg_catalog.pg_class t ON t.oid = idx.indrelid
+             JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY (idx.indkey)
     WHERE t.relname = 'aircrafts_tmp'
     GROUP BY i.relname, idx.indisunique
-    
-    UNION ALL
-    
-    -- 3. Ограничения проверки
-    SELECT 
-        3 as section,
-        row_number() OVER () as order_num,
-        conname AS "Name",
-        pg_get_constraintdef(oid) AS "Definition",
-        '' AS "Modifiers"
-    FROM pg_constraint 
-    WHERE conrelid = 'aircrafts_tmp'::regclass 
-        AND contype = 'c'
-)
 
-SELECT 
-    CASE section
-        WHEN 1 THEN 'Column'
-        WHEN 2 THEN 'Index'
-        WHEN 3 THEN 'Check'
-    END AS "Type",
-    "Name",
-    "Definition",
-    "Modifiers"
+    UNION ALL
+
+    -- 3. Ограничения проверки
+    SELECT 3                         as section,
+           row_number() OVER ()      as order_num,
+           conname                   AS "Name",
+           pg_get_constraintdef(oid) AS "Definition",
+           ''                        AS "Modifiers"
+    FROM pg_constraint
+    WHERE conrelid = 'aircrafts_tmp'::regclass
+      AND contype = 'c')
+
+SELECT CASE section
+           WHEN 1 THEN 'Column'
+           WHEN 2 THEN 'Index'
+           WHEN 3 THEN 'Check'
+           END AS "Type",
+       "Name",
+       "Definition",
+       "Modifiers"
 FROM table_info
 ORDER BY section, order_num;
 
 INSERT INTO aircrafts_tmp
-VALUES('96','Ильюшин ИЛ-96-300',10000)
+VALUES ('96', 'Ильюшин ИЛ-96-300', 10000)
 
 SELECT *
 FROM pg_depend_v
 WHERE refobjname = 'aircrafts_tmp'
-AND classname = 'pg_constraint'
+  AND classname = 'pg_constraint'
 
 /*Между двумя объектами может существовать и более одной связи,
  * теперь вясним какие ограничения зависят от функции air_code_correct
@@ -5699,108 +5475,110 @@ AND classname = 'pg_constraint'
 SELECT *
 FROM pg_depend_v
 WHERE refobjname = 'air_code_correct'
-AND classname = 'pg_constraint'
+  AND classname = 'pg_constraint'
 
 /*Попробуем удалить функцию*/
 DROP FUNCTION air_code_correct;
-/*SQL Error [2BP01]: ERROR: cannot drop function air_code_correct(character) because other 
+/*SQL Error [2BP01]: ERROR: cannot drop function air_code_correct(character) because other
  *objects depend on it
-  Подробности: constraint aircrafts_tmp_aircraft_code_check on table aircrafts_tmp depends 
+  Подробности: constraint aircrafts_tmp_aircraft_code_check on table aircrafts_tmp depends
   on function air_code_correct(character)
   Подсказка: Use DROP ... CASCADE to drop the dependent objects too.
  */
 DROP FUNCTION air_code_correct CASCADE;
 
-/*Воссоздадим функцию но само ограничение не 
+/*Воссоздадим функцию но само ограничение не
  * восстановится при этом*/
 CREATE OR REPLACE FUNCTION air_code_correct(a_code char)
-RETURNS boolean
+    RETURNS boolean
 RETURN a_code ~ '^[0-9A-Z]{3}$';
 
 /*В представленной команде есть важное отличие от предыдущей команды создания функции
  * а именно предложение OR REPLACE. Его наличие позволяет заменить тело существующей
- * функции не прибегая к помощи команды DROP FUNCTION. 
- * Важно,что удаление существующей функции с помощью команды drop function 
+ * функции не прибегая к помощи команды DROP FUNCTION.
+ * Важно,что удаление существующей функции с помощью команды drop function
  * и последующее создание функций с той же  сигнатурой (то есть с тем же именем и с теми же входными параметрами) с помощью
  * команды create function не тождественно использованию лишь команды CREATE FUNCTION,
  * дополненной предложением OR REPLACE.
  * В первом случае воссозданная функция будет являться уже другой сущностью, отличной от первоначальной.
  * Функцию нельзя удалить, не удалив при этом и ссылающиеся на нее другие объекты.
- * 
+ *
  */
 
 
 /*Добавим ограничение на таблицу aircrafts_tmp с задействованной функцией в check
  * Далее мы проверим изменится ли значение oid при пересоздании функции*/
-ALTER TABLE  aircrafts_tmp 
-ADD CHECK(air_code_correct(aircraft_code)); 
+ALTER TABLE aircrafts_tmp
+    ADD CHECK (air_code_correct(aircraft_code));
 
 
 CREATE OR REPLACE FUNCTION air_code_correct(a_code char)
-RETURNS boolean
-LANGUAGE SQL
+    RETURNS boolean
+    LANGUAGE SQL
 RETURN a_code ~ '^[0-9A-z]{3}$'; ---цифры и строчные буквы
 
 SELECT oid, proname
-FROM pg_proc 
+FROM pg_proc
 WHERE proname = 'air_code_correct'
 ---68582 идентификатор остался тем же,значит для системы это один и тот же объект.
 /* Ограничение сохранилось Column	aircraft_code	character(3)
 Column	model	text
 Column	range	integer
-Check	aircrafts_tmp_aircraft_code_check	CHECK (air_code_correct(aircraft_code)) 
+Check	aircrafts_tmp_aircraft_code_check	CHECK (air_code_correct(aircraft_code))
 */
 
 
 /*Таким образом,если от конкретной функции зависят конкретные объекты базы данных то при
  * ее удалении эти объекты также будут удалены
- * с учетом вида зависимости - deptype. 
- * Однако при использовании предложения OR REPLACE  функция сохраняется с одним и тем же oid, 
- * поэтому зависимые объекты также сохраняются. 
+ * с учетом вида зависимости - deptype.
+ * Однако при использовании предложения OR REPLACE  функция сохраняется с одним и тем же oid,
+ * поэтому зависимые объекты также сохраняются.
  */
 
 CREATE EXTENSION IF NOT EXISTS dblink; ----использование dblink
-SELECT proname FROM pg_proc WHERE proname LIKE 'dblink%';
+SELECT proname
+FROM pg_proc
+WHERE proname LIKE 'dblink%';
 
-SELECT * FROM dblink(
-    'dbname=demo user=postgres password=Meduzafighter900',
-    'SELECT acc_id,client_id
-     from bookings.acc'
-) AS t(acc_id bigint, client_id int);
+SELECT *
+FROM dblink(
+             'dbname=demo user=postgres password=Meduzafighter900',
+             'SELECT acc_id,client_id
+             from bookings.acc'
+     ) AS t(acc_id bigint, client_id int);
 
 /*зависимость функций от объектов базы данных
  * обратимся к системному каталогу pg_depend и
  * посмотрим от каких функций зависят
- * две наши функции  
- * 
+ * две наши функции
+ *
  * Таким образом:
  * - если тело функции представлено строкой, ее зависимость
  * от удаляемых объектов обнаруживается только во время выполнения
  * запроса с этой функцией*
- * 
+ *
  * - если функция написана на стандарте SQL, то  при попытке удаления объекта,
  * который она использует, возникает ошибка. Однако если команда удаления включает
- * в себя cascade, то будет удален не только этот объект,но и сама функция. 
- * 
+ * в себя cascade, то будет удален не только этот объект,но и сама функция.
+ *
  * В общем случае на выполнение операции удаления влияет вид зависимости между
- * объектами, который отражается в столбце depend системного каталога PG_DEPEND!!! 
+ * объектами, который отражается в столбце depend системного каталога PG_DEPEND!!!
  */
 
-SELECT DISTINCT 
-classname, 
-objname,
-refclassname,
-refobjname,
-deptype
+SELECT DISTINCT classname,
+                objname,
+                refclassname,
+                refobjname,
+                deptype
 FROM pg_depend_v
 WHERE classname = 'pg_proc'
-AND objname IN ('make_or_update_booking', 'make_or_update_booking_sql')
-AND refclassname IN ('pg_proc', 'pg_class');
+  AND objname IN ('make_or_update_booking', 'make_or_update_booking_sql')
+  AND refclassname IN ('pg_proc', 'pg_class');
 
 
 /*Функции, возвращающие множество строк
  *Функция определена как возвращающая setof routes это означает множество
- *значений типа routes 
+ *значений типа routes
  *1.SETOF = "набор, множество"
  * Функция возвращает не одну строку, а несколько строк (как таблица)
  * Можно использовать как обычную таблицу в запросах
@@ -5811,61 +5589,55 @@ AND refclassname IN ('pg_proc', 'pg_class');
  * использоваться по умолчанию
  */
 
-CREATE OR REPLACE FUNCTION list_routes (
-d_city text DEFAULT 'Москва',
-a_city text DEFAULT 'Санкт_петербург'
+CREATE OR REPLACE FUNCTION list_routes(
+    d_city text DEFAULT 'Москва',
+    a_city text DEFAULT 'Санкт_петербург'
 )
-
-RETURNS SETOF routes AS 
+    RETURNS SETOF routes AS
 $$
 select *
 from routes
 where departure_city = d_city
-and arrival_city = a_city; 
+  and arrival_city = a_city;
 $$ LANGUAGE SQL;
 
 
 /*Нужно учитывать то, что при позиционной передачие аргументов мы не сможем передать
  * значение второго из них, не передав значение первого!!!
  * Однако это можно сделать с помощью именованного аргумента*/
-SELECT 
-flight_no,
-departure_city AS dep_city, 
-departure_airport AS dep_ap,
-arrival_city AS arr_city,
-arrival_airport AS arr_ap,
-days_of_week 
+SELECT flight_no,
+       departure_city    AS dep_city,
+       departure_airport AS dep_ap,
+       arrival_city      AS arr_city,
+       arrival_airport   AS arr_ap,
+       days_of_week
 FROM list_routes(a_city => 'Курган') ---по умолчанию  d_city = 'Москва'
 
 
-
-
-CREATE OR REPLACE FUNCTION list_routes_2 (
-d_city text DEFAULT 'Москва',
-a_city text DEFAULT 'Санкт_петербург'
+CREATE OR REPLACE FUNCTION list_routes_2(
+    d_city text DEFAULT 'Москва',
+    a_city text DEFAULT 'Санкт_петербург'
 )
-
-RETURNS SETOF record AS 
+    RETURNS SETOF record AS
 $$
 select r.flight_no, r.departure_city, r.arrival_city, a.model
-from routes r 
-join aircrafts AS a on a.aircraft_code = r.aircraft_code 
+from routes r
+         join aircrafts AS a on a.aircraft_code = r.aircraft_code
 where r.departure_city = d_city
-and   r.arrival_city   = a_city; 
+  and r.arrival_city = a_city;
 $$ LANGUAGE SQL;
 
 
-/*Для того чтобы не было ошибки вывода данных, определим струткуру значения составного 
+/*Для того чтобы не было ошибки вывода данных, определим струткуру значения составного
  * типа, то есть зададим список с определениями столбцов.
  * Определение столбца - это его имя и тип данных а не просто псевдоним, которого
  * достаточно в других случаях. Конечно имена столбцов в этом списке могут не совпадать
  * с именами столбцов, которые используются внутри функции*/
-SELECT
-f_no, 
-dep_city, 
-arr_city, 
-model
-FROM list_routes_2('Москва','Курган') AS lr (f_no char(6), dep_city text, arr_city text, model text)
+SELECT f_no,
+       dep_city,
+       arr_city,
+       model
+FROM list_routes_2('Москва', 'Курган') AS lr (f_no char(6), dep_city text, arr_city text, model text)
 ORDER BY f_no
 
 
@@ -5875,22 +5647,21 @@ ORDER BY f_no
  * самой функции с помощью out параметров
 */
 
-CREATE OR REPLACE FUNCTION list_routes_3 (
-d_city text DEFAULT 'Москва',
-a_city text DEFAULT 'Санкт_петербург', 
-OUT f_no char,
-OUT dep_city text,
-OUT arr_city text,
-OUT model text
+CREATE OR REPLACE FUNCTION list_routes_3(
+    d_city text DEFAULT 'Москва',
+    a_city text DEFAULT 'Санкт_петербург',
+    OUT f_no char,
+    OUT dep_city text,
+    OUT arr_city text,
+    OUT model text
 )
-
-RETURNS SETOF record AS 
+    RETURNS SETOF record AS
 $$
 select r.flight_no, r.departure_city, r.arrival_city, a.model
-from routes r 
-join aircrafts AS a on a.aircraft_code = r.aircraft_code 
+from routes r
+         join aircrafts AS a on a.aircraft_code = r.aircraft_code
 where r.departure_city = d_city
-and   r.arrival_city   = a_city; 
+  and r.arrival_city = a_city;
 $$ LANGUAGE SQL;
 
 Select *
@@ -5909,64 +5680,66 @@ FROM list_routes_3(d_city => 'Москва', a_city => 'Новосибирск')
  * Здесь нельзя определять параметры с модификаторами out и inout
  */
 
-CREATE OR REPLACE FUNCTION list_routes_4 (
-d_city text DEFAULT 'Москва',
-a_city text DEFAULT 'Санкт_петербург'
+CREATE OR REPLACE FUNCTION list_routes_4(
+    d_city text DEFAULT 'Москва',
+    a_city text DEFAULT 'Санкт_петербург'
 )
-RETURNS TABLE (
-f_no char,
-dep_city text,
-arr_city text,
-model text) AS 
+    RETURNS TABLE
+            (
+                f_no     char,
+                dep_city text,
+                arr_city text,
+                model    text
+            )
+AS
 $$
 select r.flight_no, r.departure_city, r.arrival_city, a.model
-from routes r 
-join aircrafts AS a on a.aircraft_code = r.aircraft_code 
+from routes r
+         join aircrafts AS a on a.aircraft_code = r.aircraft_code
 where r.departure_city = d_city
-and   r.arrival_city   = a_city; 
+  and r.arrival_city = a_city;
 $$ LANGUAGE SQL;
 
 /*Функции с переменным числом аргументов
 Продолжим модернизировать исходную задачу
-Число городов прибытия может быть различным,то есть не один,при 
+Число городов прибытия может быть различным,то есть не один,при
 вызовах функции.
 Реализовать такую логику работы можно с помощью параметра с модификатором
-VARIADIC. 
+VARIADIC.
 Он позволяет при вызове функции передавать ей переменное число
 аргументов, аналогично функциям printf в языке C. Хотя параметр с модификатором
 VARIADIC задается в виде массива, но на самом деле функция ожидает скалярные аргументы,
 имеющие тип элементов этого массива.
-Скалярные аргументы - это аргументы функций, которые принимают отдельные значения (скаляры), 
+Скалярные аргументы - это аргументы функций, которые принимают отдельные значения (скаляры),
 а не наборы или таблицы данных.
 При вызове функции, аргументы синтаксически-оформленные как скалярные, помещаются в массив и
-передаются функции - как единый входной аргумент. 
-Внутри функции эти значения будут доступны ей в виде массива. 
+передаются функции - как единый входной аргумент.
+Внутри функции эти значения будут доступны ей в виде массива.
 Неявно предполагается, чтопараметры с модификатором VARIADIC имеют модификатор IN.
-Модификатор (modifier) в контексте SQL и баз данных - это ключевое слово или конструкция, которая 
+Модификатор (modifier) в контексте SQL и баз данных - это ключевое слово или конструкция, которая
 изменяет поведение оператора, функции, запроса или определения объекта.
 
 Первым параметром является город отправления, вторым список городов прибытия.
 Он объявлен как массив a_cities, содержащий элементы типа text. При этом длина массива
 не указана, поскольку модификаторы при создании функции отбрасываются, зато он имеет
 модификатор variadic.
-Поскольку внутри функции список городов назначения будет представлен в виде массива, можно 
+Поскольку внутри функции список городов назначения будет представлен в виде массива, можно
 воспользоваться оператором ANY.
 
 */
 
-CREATE OR REPLACE FUNCTION list_routes_5
-(
-d_city text,
-VARIADIC a_cities text[]
+CREATE OR REPLACE FUNCTION list_routes_5(
+    d_city text,
+    VARIADIC a_cities text[]
 )
-RETURNS SETOF routes AS 
---SETOF - модификатор, который означает: Функция возвращает набор строк (множество записей).
+    RETURNS SETOF routes AS
+    --SETOF - модификатор, который означает: Функция возвращает набор строк (множество записей).
 --А не одну строку
 $$
 select *
-from routes 
+from routes
 where departure_city = d_city
-and arrival_city = ANY(a_cities);
+  and arrival_city = ANY (a_cities);
 /*ANY() - функция-предикат, которая:
 Проверяет, равен ли arrival_city ЛЮБОМУ элементу массива a_cities
 Эквивалент: arrival_city IN ('Санкт-Петербург', 'Казань', 'Сочи')
@@ -5976,29 +5749,27 @@ $$ LANGUAGE SQL;
 
 
 SELECT *
-FROM list_routes_5('Москва','Кемерово','Красноярск','Элиста')
-ORDER BY 
-arrival_city, 
-days_of_week
+FROM list_routes_5('Москва', 'Кемерово', 'Красноярск', 'Элиста')
+ORDER BY arrival_city,
+         days_of_week
 
 /*Параметры с модификатором Variadic также могут иметь значения по умолчанию.
  * Представлять их нужно в виде массива, а не ввиде списка скалярных значений
  */
 
 
-CREATE OR REPLACE FUNCTION list_routes_6
-(
-d_city text,
-VARIADIC a_cities text[] DEFAULT ARRAY['Москва', 'Санкт-Петербург']::text[] ---массив по умолчанию
+CREATE OR REPLACE FUNCTION list_routes_6(
+    d_city text,
+    VARIADIC a_cities text[] DEFAULT ARRAY ['Москва', 'Санкт-Петербург']::text[] ---массив по умолчанию
 )
-RETURNS SETOF routes AS 
---SETOF - модификатор, который означает: Функция возвращает набор строк (множество записей).
+    RETURNS SETOF routes AS
+    --SETOF - модификатор, который означает: Функция возвращает набор строк (множество записей).
 --А не одну строку
 $$
 select *
-from routes 
+from routes
 where departure_city = d_city
-and arrival_city = ANY(a_cities);
+  and arrival_city = ANY (a_cities);
 /*ANY() - функция-предикат, которая:
 Проверяет, равен ли arrival_city ЛЮБОМУ элементу массива a_cities
 Эквивалент: arrival_city IN ('Санкт-Петербург', 'Казань', 'Сочи')
@@ -6008,110 +5779,106 @@ $$ LANGUAGE SQL;
 
 SELECT *
 FROM list_routes_6('Элиста')
-ORDER BY 
-arrival_city, 
-days_of_week
+ORDER BY arrival_city,
+         days_of_week
 
 /*Также список городов можно получить с помощью подзапроса, тонаша функция подойдет
  * и для такого случая. Массив можно сформировать с помощью конструктора ARRAY (
- * конструкторы массивов) Передавая функции параметр-массив вместо списка 
+ * конструкторы массивов) Передавая функции параметр-массив вместо списка
  * скалярных значений, следует обяхательно добавить модификатор variadic
- * 
- * Таким образом можно выбирать способ передачи аргументов с параметр с 
+ *
+ * Таким образом можно выбирать способ передачи аргументов с параметр с
  * модификатором VARIADIC: либо список скалярных значений одного и того же типа
  * либо массив но вто втором случае приходится добавлять это же ключевое слово
  * при вызове функции
- */ 
+ */
 
 EXPLAIN ANALYZE
 SELECT *
 FROM list_routes_6('Санкт-Петербург',
-
-VARIADIC ARRAY(SELECT city FROM airports WHERE city = 'Москва')
-)
-ORDER BY 
-arrival_city, 
-days_of_week
+                   VARIADIC ARRAY(SELECT city FROM airports WHERE city = 'Москва')
+     )
+ORDER BY arrival_city,
+         days_of_week
 
 
 EXPLAIN ANALYZE
 SELECT *
-FROM list_routes_6('Санкт-Петербург','Moscow')
-ORDER BY 
-arrival_city, 
-days_of_week
+FROM list_routes_6('Санкт-Петербург', 'Moscow')
+ORDER BY arrival_city,
+         days_of_week
 
 
 /*Создадим функция формирует несколько столбцов, совокупность которых не соответствует
  * какому либо существующему составному типу данных*/
 
-CREATE OR REPLACE FUNCTION list_routes_7 (
-d_city text DEFAULT 'Москва',
-VARIADIC a_cities text[] DEFAULT ARRAY['Москва', 'Санкт-Петербург']::text[], ---массив по умолчанию
-OUT f_no char,
-OUT dep_city text,
-OUT arr_city text,
-OUT model text
+CREATE OR REPLACE FUNCTION list_routes_7(
+    d_city text DEFAULT 'Москва',
+    VARIADIC a_cities text[] DEFAULT ARRAY ['Москва', 'Санкт-Петербург']::text[], ---массив по умолчанию
+    OUT f_no char,
+    OUT dep_city text,
+    OUT arr_city text,
+    OUT model text
 )
-
-RETURNS SETOF record AS 
+    RETURNS SETOF record AS
 $$
 select r.flight_no, r.departure_city, r.arrival_city, a.model
-from routes r 
-join aircrafts AS a on a.aircraft_code = r.aircraft_code 
+from routes r
+         join aircrafts AS a on a.aircraft_code = r.aircraft_code
 where r.departure_city = d_city
-and   r.arrival_city   = ANY(a_cities); 
+  and r.arrival_city = ANY (a_cities);
 $$ LANGUAGE SQL;
 
-EXPLAIN ANALYZE 
+EXPLAIN ANALYZE
 SELECT *
-FROM  list_routes_7()
+FROM list_routes_7()
 
 
 /*С использованием ETURNS TABLE */
-CREATE OR REPLACE FUNCTION list_routes_8 (
+CREATE OR REPLACE FUNCTION list_routes_8(
     d_city text DEFAULT 'Москва',
-    VARIADIC a_cities text[] DEFAULT ARRAY['Москва', 'Санкт-Петербург']::text[]
+    VARIADIC a_cities text[] DEFAULT ARRAY ['Москва', 'Санкт-Петербург']::text[]
 )
-RETURNS TABLE (
-    f_no char(6),
-    dep_city text,
-    arr_city text,
-    model text
-) 
-AS 
+    RETURNS TABLE
+            (
+                f_no     char(6),
+                dep_city text,
+                arr_city text,
+                model    text
+            )
+AS
 $$
-SELECT 
-    r.flight_no,
-    r.departure_city,
-    r.arrival_city,
-    a.model
-FROM routes r 
-JOIN aircrafts AS a ON a.aircraft_code = r.aircraft_code 
+SELECT r.flight_no,
+       r.departure_city,
+       r.arrival_city,
+       a.model
+FROM routes r
+         JOIN aircrafts AS a ON a.aircraft_code = r.aircraft_code
 WHERE r.departure_city = d_city
-  AND r.arrival_city = ANY(a_cities);
-$$ 
-LANGUAGE SQL;
+  AND r.arrival_city = ANY (a_cities);
+$$
+    LANGUAGE SQL;
 
-EXPLAIN ANALYZE 
+EXPLAIN ANALYZE
 SELECT *
-FROM  list_routes_8()
+FROM list_routes_8()
 
-/*Удаление перегруженных функций 
+/*Удаление перегруженных функций
  */
 
-DROP FUNCTION IF EXISTS list_routes_6(text,text[])
+         DROP FUNCTION IF EXISTS list_routes_6(text,text[])
 
-DROP FUNCTION IF EXISTS list_routes_5 ---если перегруженной функции нет, то можно опустить список данных
+DROP FUNCTION IF EXISTS list_routes_5
+---если перегруженной функции нет, то можно опустить список данных
 
-/*Конструкция Lateral и функции 
+/*Конструкция Lateral и функции
 Все табличные функции, разработанные нами до сих пор, получали в качестве аргумента название только
 ондого города отправления.
 А если нам потребуется выбрать все маршруты между городами того или иного часвого пояса?
 Возьмем для примера часовой пояс, в котором число городов слишком велико для того, чтобы
 легко решить задачу, выполняя несколько однотипных запросов.
 Для эксперимента подходит часовой пояс Asia/Yekaterinburg, в котором 22 аэропорта.
-Мы бы решили задачу, если бы могли в рамках одного запроса выбирающего все города в часовом поясе 
+Мы бы решили задачу, если бы могли в рамках одного запроса выбирающего все города в часовом поясе
 Asia/Yekaterinburg, вызывать функцию list_routes_7 для каждой выбираемой строки, так чтобы из
 этой строки функция получала значение своего первого параметра.
 Такая возможность есть при помощи Lateral команды Select.
@@ -6130,39 +5897,33 @@ Asia/Yekaterinburg, вызывать функцию list_routes_7 для каж�
 */
 
 ---Всегда показывает города, даже если нет рейсов
-EXPLAIN(ANALYZE, costs OFF, timing OFF) 
-SELECT
-	a.city AS dep_city,
-	lr.arr_city,
-	lr.f_no,
-	lr.model
-FROM
-	airports AS a
-LEFT JOIN LATERAL list_routes_7(
-a.city,
-VARIADIC ARRAY(SELECT city FROM airports WHERE timezone = 'Asia/Yekaterinburg') 
-) AS lr ON TRUE 
+EXPLAIN(ANALYZE, costs OFF, timing OFF)
+SELECT a.city AS dep_city,
+       lr.arr_city,
+       lr.f_no,
+       lr.model
+FROM airports AS a
+         LEFT JOIN LATERAL list_routes_7(
+        a.city,
+        VARIADIC ARRAY(SELECT city FROM airports WHERE timezone = 'Asia/Yekaterinburg')
+                           ) AS lr ON TRUE
 WHERE a.timezone = 'Asia/Yekaterinburg'
 ORDER BY dep_city, lr.arr_city;
 
 
 
-
-
 ---Показывает ТОЛЬКО города, у которых ЕСТЬ рейсы
 ---Это как "дайте только тех, у кого есть"
-EXPLAIN(ANALYZE, costs OFF, timing OFF) 
-SELECT
-	a.city AS dep_city,
-	lr.arr_city,
-	lr.f_no,
-	lr.model
-FROM
-	airports AS a
-CROSS JOIN LATERAL list_routes_7(
-a.city,
-VARIADIC ARRAY(SELECT city FROM airports WHERE timezone = 'Asia/Yekaterinburg') 
-) AS lr
+EXPLAIN(ANALYZE, costs OFF, timing OFF)
+SELECT a.city AS dep_city,
+       lr.arr_city,
+       lr.f_no,
+       lr.model
+FROM airports AS a
+         CROSS JOIN LATERAL list_routes_7(
+        a.city,
+        VARIADIC ARRAY(SELECT city FROM airports WHERE timezone = 'Asia/Yekaterinburg')
+                            ) AS lr
 WHERE a.timezone = 'Asia/Yekaterinburg'
 ORDER BY dep_city, lr.arr_city;
 
@@ -6185,7 +5946,7 @@ ORDER BY dep_city, lr.arr_city;
 Итог: Вы сделаете 22 × 21 = 462 проверки!
 
 Почему LEFT JOIN LATERAL ... ON TRUE?
-Это значит "соедини ВСЕГДА". Даже если для города нет рейсов, 
+Это значит "соедини ВСЕГДА". Даже если для города нет рейсов,
 всё равно покажи этот город в результатах (просто колонки рейсов будут пустые).
 
 */
@@ -6199,21 +5960,21 @@ ORDER BY dep_city, lr.arr_city;
  * Второй стороной категории изменичовсти является видимость собственных изменений,
  * доступны ли функции, вызываемой в SQL операторе, те изменения базы данных, которые
  * произвел этот оператор
- * 
+ *
  * Всего существет три категории изменчивости функции
- * volatile - изменчивая, 
- * stable - стабильная, 
- * immutable - постоянная  
- * 
+ * volatile - изменчивая,
+ * stable - стабильная,
+ * immutable - постоянная
+ *
  * volatile - изменчивая функция может не только читать, но и изменять данные,
  * важно чтов рамках одного sql запроса она может возвращать различные результаты,
- * если будет вызвана несколько раз с одинаковыми аргументами или без аргументов, 
+ * если будет вызвана несколько раз с одинаковыми аргументами или без аргументов,
  * если у функции нет параметров. Если аргменты различаются, тои возвращаемые параметры
  * не обязаны быть одними и теми же.
- * Когда в запросе присутствует изменчивая функция то оптимизатор не делает никаких 
+ * Когда в запросе присутствует изменчивая функция то оптимизатор не делает никаких
  * предположений о ее поведении, поэтому значение фукнции будет вычисляться каждый раз,
  * когда потребуется.
- * 
+ *
  * stable - функция не может модифицировать базу данных, она получает одинаковые аргументы
  * и возвращает одинаковые результаты. Это позволяет оптимизатору заменить множество
  * вызовов этой функции одним.
@@ -6221,46 +5982,46 @@ ORDER BY dep_city, lr.arr_city;
  * Но при индексном доступе значение вычисляется только один раз, а не для каждой строки,
  * поэтому функция должна быть стабильной, планировщик не будет использовать индекс,
  * если в условии присутствует функция с характеристиками volatile!!!
- * 
+ *
  * Самой строгой категорией является постоянная - immutable. Функция с такой категорией
  * не может модифицировать базу данных, она всегда возвращает одинаковые результаты
  * для одинаковых значений аргументов. Если аргументы являются константами, то оптимизатор
  * может вычислить значение функции еще на стадии планирования.
- * 
+ *
  * Важно понимать что первичным является содержание функции а не категория изменчивости,
  * то есть катогрия назначается в зависимости от операций, выполняемых фукнцией.
- * 
- * 
- * 
+ *
+ *
+ *
  */
 
-SELECT 
+SELECT
     -- Схема.Имя
     (SELECT nspname FROM pg_namespace WHERE oid = pronamespace) || '.' || proname AS "Function",
-    proargtypes::regtype[], 
+    proargtypes::regtype[],
     -- Аргументы
-    pg_get_function_arguments(oid) AS "Arguments",
-    
+    pg_get_function_arguments(oid)                                                AS "Arguments",
+
     -- Возвращаемый тип
-    CASE proretset 
-        WHEN true THEN 'SETOF ' 
-        ELSE '' 
-    END || format_type(prorettype, NULL) AS "Result type",
-    
+    CASE proretset
+        WHEN true THEN 'SETOF '
+        ELSE ''
+        END || format_type(prorettype, NULL)                                      AS "Result type",
+
     -- Изменчивость
     CASE provolatile
         WHEN 'i' THEN 'Immutable'
         WHEN 's' THEN 'Stable'
         WHEN 'v' THEN 'Volatile'
-    END AS "Vol",
-    
+        END                                                                       AS "Vol",
+
     -- Параллельность
     CASE proparallel
         WHEN 's' THEN 'SAFE'
         WHEN 'u' THEN 'UNSAFE'
         WHEN 'r' THEN 'RESTRICTED'
-    END AS "Par",
-     
+        END                                                                       AS "Par",
+
     -- Тип
     CASE prokind
         WHEN 'f' THEN 'func'
@@ -6268,69 +6029,68 @@ SELECT
         WHEN 'a' THEN 'agg'
         WHEN 'w' THEN 'win'
         ELSE '???'
-    END AS "Type",
-    
+        END                                                                       AS "Type",
+
     -- Язык
-    (SELECT lanname FROM pg_language WHERE oid = prolang) AS "Lang",
-    
+    (SELECT lanname FROM pg_language WHERE oid = prolang)                         AS "Lang",
+
     -- Владелец
-    (SELECT usename FROM pg_user WHERE usesysid = proowner) AS "Owner",
-    
+    (SELECT usename FROM pg_user WHERE usesysid = proowner)                       AS "Owner",
+
     -- Описание (кратко)
     COALESCE(
-        (SELECT SUBSTRING(description FROM 1 FOR 50) || 
-                CASE WHEN LENGTH(description) > 50 THEN '...' ELSE '' END 
-         FROM pg_description WHERE objoid = pg_proc.oid),
-        '-'
-    ) AS "Description"
-    
+            (SELECT SUBSTRING(description FROM 1 FOR 50) ||
+                    CASE WHEN LENGTH(description) > 50 THEN '...' ELSE '' END
+             FROM pg_description
+             WHERE objoid = pg_proc.oid),
+            '-'
+    )                                                                             AS "Description"
+
 FROM pg_proc
-WHERE proname LIKE '%random%' OR proname LIKE '%date_part%'
-  AND pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog')
+WHERE proname LIKE '%random%'
+   OR proname LIKE '%date_part%'
+    AND pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog')
 ORDER BY proname, pronargs;
 
 
-SELECT random(1,20), random(1,20)
-FROM generate_series(1,6) AS g
+SELECT random(1, 20), random(1, 20)
+FROM generate_series(1, 6) AS g
 
 
-EXPLAIN ANALYZE 
+EXPLAIN ANALYZE
 SELECT current_timestamp
 
 
 /*Три вызова current_timestamp и date_part заменяются одним*/
-EXPLAIN ANALYZE 
+           EXPLAIN ANALYZE
 SELECT *
-FROM generate_series(1,3)
-WHERE date_part('year', current_timestamp ) = '2025'
+FROM generate_series(1, 3)
+WHERE date_part('year', current_timestamp) = '2025'
 
-/*Филтрация строк теперь отсутствует проверка условия 
+/*Филтрация строк теперь отсутствует проверка условия
  * whrere была выполнена еще на этапе планирования*/
-EXPLAIN ANALYZE 
+EXPLAIN ANALYZE
 SELECT *
-FROM generate_series(1,3)
-WHERE date_part('year', '2025-12-06 19:08:33'::timestamp ) = '2025'
+FROM generate_series(1, 3)
+WHERE date_part('year', '2025-12-06 19:08:33'::timestamp) = '2025'
 
 
-WITH distinct_letters(aircraft_code, letter) AS 
-(SELECT DISTINCT aircraft_code, RIGHT(seat_no, 1)
-FROM seats
-),
+WITH distinct_letters(aircraft_code, letter) AS
+         (SELECT DISTINCT aircraft_code, RIGHT(seat_no, 1)
+          FROM seats),
 
-arrays_of_letters AS (
-SELECT aircraft_code, array_agg(letter ORDER BY letter) AS letters
-FROM distinct_letters
-GROUP BY aircraft_code
-)
+     arrays_of_letters AS (SELECT aircraft_code, array_agg(letter ORDER BY letter) AS letters
+                           FROM distinct_letters
+                           GROUP BY aircraft_code)
 
 SELECT aircraft_code, letters
 FROM arrays_of_letters
-ORDER BY array_length(letters, 1) DESC , aircraft_code 
+ORDER BY array_length(letters, 1) DESC, aircraft_code;
 ---array_length(массив, размерность) возвращает длину массива по указанной размерности.
 
 /*
 array_length(ARRAY['A','B','C'], 1) → 3
-array_length(ARRAY['A'], 1)         → 1 
+array_length(ARRAY['A'], 1)         → 1
 */
 
 /*Физический смысл PREPARE
@@ -6357,57 +6117,55 @@ array_length(ARRAY['A'], 1)         → 1
  * Ответ на него также зависит от категории изменчивости функции, а вот от уровня изоляции
  * транзакции не зависит.
  * У функций, написанных на SQL или на любом другом стандартном процедурном языке, есть ещё одно важное свойство,
- *  определяемое характеристикой изменчивости, а именно видимость изменений, произведённых 
- * командой SQL, которая вызывает эту функцию. Функция VOLATILE будет видеть такие изменения, 
- * тогда как STABLE и IMMUTABLE — нет. Это поведение реализуется посредством снимков в MVCC 
- * (см. Главу 13): STABLE и IMMUTABLE используют снимок, полученный в начале вызывающего запроса, 
- * тогда как функции VOLATILE получают свежий снимок в начале каждого запроса, который они 
+ *  определяемое характеристикой изменчивости, а именно видимость изменений, произведённых
+ * командой SQL, которая вызывает эту функцию. Функция VOLATILE будет видеть такие изменения,
+ * тогда как STABLE и IMMUTABLE — нет. Это поведение реализуется посредством снимков в MVCC
+ * (см. Главу 13): STABLE и IMMUTABLE используют снимок, полученный в начале вызывающего запроса,
+ * тогда как функции VOLATILE получают свежий снимок в начале каждого запроса, который они
  * выполняют.
- * 
+ *
  * В качестве иллюстарции раширим демобазу уетом числа мест багажа и его общего веса
  * при регистрации каждого пассажаира. К завершению регистрации будут получены итоговые
- * значения, необходимые службе, доставляющей багаж на борт самолета, и пилотам для 
+ * значения, необходимые службе, доставляющей багаж на борт самолета, и пилотам для
  * расчета взлетных характеристик.
  * Созадидм таблиwe Багаж - luggage.
  */
 
 CREATE TABLE luggage
 (
-flight_id integer,
-boarding_no integer,
-piece_no SMALLINT NOT NULL CHECK (piece_no > 0),
-weight numeric(3,1) CHECK(weight >0.0 ),
-PRIMARY KEY(flight_id, boarding_no, piece_no),
-FOREIGN KEY(flight_id, boarding_no)
-REFERENCES boarding_passes(flight_id, boarding_no) ON DELETE CASCADE
+    flight_id   integer,
+    boarding_no integer,
+    piece_no    SMALLINT NOT NULL CHECK (piece_no > 0),
+    weight      numeric(3, 1) CHECK (weight > 0.0 ),
+    PRIMARY KEY (flight_id, boarding_no, piece_no),
+    FOREIGN KEY (flight_id, boarding_no)
+        REFERENCES boarding_passes (flight_id, boarding_no) ON DELETE CASCADE
 );
 
-/*Нам необходимо две функции - первая будет 
+/*Нам необходимо две функции - первая будет
  * вводить в таблицы сведения об очередном пассажире,
  * включая его багаж, а вторая подводить текущие итоги*/
 
-CREATE OR REPLACE FUNCTION BOARDING (
-	FLIGHT_ID INTEGER,
-	BOARDING_NO INTEGER,
-	VARIADIC WEIGHTS NUMERIC[]
-	---VARIADIC позволяет передать произвольное количество 
-	---аргументов, которые автоматически упаковываются в массив.
+CREATE OR REPLACE FUNCTION BOARDING(
+    FLIGHT_ID INTEGER,
+    BOARDING_NO INTEGER,
+    VARIADIC WEIGHTS NUMERIC[]
+    ---VARIADIC позволяет передать произвольное количество
+    ---аргументов, которые автоматически упаковываются в массив.
 ) RETURNS VOID AS ---void НЕ ВОЗВРАЩАЕТ никакого значения
 $$
-with luggage_pieces as 
-(select 
-boarding.flight_id,
-boarding.boarding_no,
-num,
-weight
-from unnest(weights) with ordinality lw(weight, num)
-)
-insert into luggage(flight_id, boarding_no, piece_no, weight)
-select 
-boarding.flight_id,
-boarding.boarding_no,
-num,
-weight
+with luggage_pieces as
+         (select boarding.flight_id,
+                 boarding.boarding_no,
+                 num,
+                 weight
+          from unnest(weights) with ordinality lw(weight, num))
+insert
+into luggage(flight_id, boarding_no, piece_no, weight)
+select boarding.flight_id,
+       boarding.boarding_no,
+       num,
+       weight
 from luggage_pieces;
 $$ LANGUAGE SQL VOLATILE;
 
@@ -6416,52 +6174,48 @@ $$ LANGUAGE SQL VOLATILE;
  */
 DROP FUNCTION BOARDING_INFO
 
-CREATE OR REPLACE FUNCTION BOARDING_INFO (
-	INOUT FLIGHT_ID INTEGER,
-	OUT TOTAL_PASSENGERS BIGINT,
-	OUT TOTAL_LUGGAGE_PIECES BIGINT,
-	OUT TOTAL_LUGGAGE_WEIGHT NUMERIC
+CREATE OR REPLACE FUNCTION BOARDING_INFO(
+    INOUT FLIGHT_ID INTEGER,
+    OUT TOTAL_PASSENGERS BIGINT,
+    OUT TOTAL_LUGGAGE_PIECES BIGINT,
+    OUT TOTAL_LUGGAGE_WEIGHT NUMERIC
 )
-RETURNS RECORD AS $$
-with boarding_pass_info as 
-(select count(*) as total_passengers
-from boarding_passes
-where flight_id = boarding_info.flight_id
-),
+    RETURNS RECORD AS
+$$
+with boarding_pass_info as
+         (select count(*) as total_passengers
+          from boarding_passes
+          where flight_id = boarding_info.flight_id),
 
-luggage_info as 
-(
-select count(*) as total_luggage_pieces,
-sum(weight) as total_luggage_weight
-from luggage
-where flight_id = boarding_info.flight_id
-)
+     luggage_info as
+         (select count(*)    as total_luggage_pieces,
+                 sum(weight) as total_luggage_weight
+          from luggage
+          where flight_id = boarding_info.flight_id)
 
-select 
-flight_id,
-bpi.total_passengers,
-li.total_luggage_pieces,
-li.total_luggage_weight
+select flight_id,
+       bpi.total_passengers,
+       li.total_luggage_pieces,
+       li.total_luggage_weight
 from boarding_pass_info as bpi,
-luggage_info as li;
-$$ LANGUAGE SQL STABLE
+     luggage_info as li;
+$$ LANGUAGE SQL STABLE;
 
 /*Число посадочных талонов равно 0*/
 SELECT count(*)
-FROM boarding_passes 
-WHERE flight_id = 13841
+FROM boarding_passes
+WHERE flight_id = 13841;
 
-/*для регистрации понадобятся номера билетов купленных на этот рейс 
+/*для регистрации понадобятся номера билетов купленных на этот рейс
  */
 
-SELECT 
-tf.ticket_no, 
-tf.fare_conditions 
-FROM ticket_flights tf 
+SELECT tf.ticket_no,
+       tf.fare_conditions
+FROM ticket_flights tf
 WHERE flight_id = 13841
 ORDER BY tf.ticket_no;
 
-/*также нам необходимо знать компоновку салона самолета 
+/*также нам необходимо знать компоновку салона самолета
  * Аэробус A-319 для корректного размещения регистриуремых пассажиров
  * в соответствии с классом обслуживания, указанных в билете
  * На всех уровнях изоляции  транзакций изменичвая функция
@@ -6469,39 +6223,36 @@ ORDER BY tf.ticket_no;
  * из которого она вызвана,  стабильная stable - нет.
  */
 
-SELECT seat_no, fare_conditions 
+SELECT seat_no, fare_conditions
 FROM seats
 WHERE aircraft_code = '319'
-ORDER BY left(seat_no, length(seat_no)-1)::integer, right(seat_no,1);
+ORDER BY left(seat_no, length(seat_no) - 1)::integer, right(seat_no, 1);
 ----- Сначала по числу (ряду)
 ----- Затем по букве
 
-BEGIN ISOLATION LEVEL READ COMMITTED; 
+BEGIN ISOLATION LEVEL READ COMMITTED;
 -- Теперь:
 -- 1. Вы НЕ увидите незафиксированные изменения других транзакций
 -- 2. Вы УВИДИТЕ изменения других транзакций после их COMMIT
 -- 3. В рамках одной транзакции может быть "неповторяемое чтение"
 
 ALTER FUNCTION boarding_info VOLATILE;
-----BEGIN ISOLATION LEVEL READ COMMITTED; 
+----BEGIN ISOLATION LEVEL READ COMMITTED;
 
-WITH make_boarding AS 
-(
-INSERT
-	INTO
-		boarding_passes(ticket_no, flight_id, boarding_no, seat_no)
-	VALUES('0005433846800', 13841, 1, '1A')
-RETURNING * 
-)
-SELECT
-	bi.flight_id,
-	bi.total_passengers,
-	bi.total_luggage_pieces,
-	bi.total_luggage_weight
-FROM
-	make_boarding AS mb,
-	boarding(mb.flight_id, mb.boarding_no, 15.0, 12.5) AS b,
-	boarding_info(mb.flight_id) AS bi
+WITH make_boarding AS
+         (
+             INSERT
+                 INTO
+                     boarding_passes (ticket_no, flight_id, boarding_no, seat_no)
+                     VALUES ('0005433846800', 13841, 1, '1A')
+                     RETURNING *)
+SELECT bi.flight_id,
+       bi.total_passengers,
+       bi.total_luggage_pieces,
+       bi.total_luggage_weight
+FROM make_boarding AS mb,
+     boarding(mb.flight_id, mb.boarding_no, 15.0, 12.5) AS b,
+     boarding_info(mb.flight_id) AS bi
 
 /*Дополнительные сведения о функциях
  * Подстановка кода функций в запрос
@@ -6511,7 +6262,7 @@ FROM
  */
 
 CREATE OR REPLACE FUNCTION count_passengers(OUT f_no char, OUT pass_num bigint)
-RETURNS SETOF record AS
+    RETURNS SETOF record AS
 /*
 Что такое SETOF record?
 SETOF = множество (может быть 0, 1 или много строк)
@@ -6519,14 +6270,14 @@ record = запись (строка с неопределённой структ
 Вместе: возвращает таблицу с двумя колонками
 */
 $$
-select 
-flight_no, count(*)
+select flight_no,
+       count(*)
 from flights as f
-join boarding_passes AS bp ON bp.flight_id = f.flight_id
-where status in ('Departed','Arrived')
+         join boarding_passes AS bp ON bp.flight_id = f.flight_id
+where status in ('Departed', 'Arrived')
 group by flight_no;
 $$
-LANGUAGE SQL VOLATILE;
+    LANGUAGE SQL VOLATILE;
 
 
 EXPLAIN ANALYZE
@@ -6568,19 +6319,19 @@ Execution Time: 0.461 ms
 
 Функция тсала прозрачной для планировщика запросов
  */
-ALTER FUNCTION count_passengers STABLE;
+    ALTER FUNCTION count_passengers STABLE;
 
 EXPLAIN ANALYZE
 SELECT f_no, pass_num
 FROM count_passengers()
-WHERE f_no IN ('PG0149','PG0148');
+WHERE f_no IN ('PG0149', 'PG0148');
 
 /*Функции и параллельный режим выполнения запросов
- * 
+ *
  * В Postgresql при выполнении ряда условий запрос может быть
  * выполнен в параллельном режиме. В этом случае в помощь основному
  * ведущему процессу создаются один или несколько фоновых рабочих процессов,
- * которые берут его часть работы на себя. Глава 15 в справке Postgresql Pro- 
+ * которые берут его часть работы на себя. Глава 15 в справке Postgresql Pro-
  * Параллельный запрос.
  *
  * Характеристика функции parallel может влиять на принятие планировщиком решения о выборке
@@ -6590,33 +6341,30 @@ WHERE f_no IN ('PG0149','PG0148');
  * но не препятствует распараллеливанию запроса.
  * UNSAFE - функция запрещает распараллеливание запроса (это значение выбирается
  * по умолчанию при создании функции)
- * Для многих запросов параллельное выполнение не даёт никакого выигрыша, либо из-за 
- * ограничений текущей реализации, либо из-за принципиальной невозможности построить 
- * параллельный план, который был бы быстрее последовательного!!! Однако для запросов, в 
+ * Для многих запросов параллельное выполнение не даёт никакого выигрыша, либо из-за
+ * ограничений текущей реализации, либо из-за принципиальной невозможности построить
+ * параллельный план, который был бы быстрее последовательного!!! Однако для запросов, в
  * которых это может быть полезно, распараллеливание часто даёт очень значительное ускорение.
- *  Многие такие запросы могут выполняться в параллельном режиме как минимум вдвое быстрее, 
- * а некоторые — быстрее в четыре и даже более раз. Обычно наибольший выигрыш можно получить 
- * с запросами, обрабатывающими большой объём данных, но возвращающими пользователю всего 
+ *  Многие такие запросы могут выполняться в параллельном режиме как минимум вдвое быстрее,
+ * а некоторые — быстрее в четыре и даже более раз. Обычно наибольший выигрыш можно получить
+ * с запросами, обрабатывающими большой объём данных, но возвращающими пользователю всего
  * несколько строк!!!
  */
 
 CREATE OR REPLACE
-FUNCTION get_amount_range(
-amount NUMERIC, 
-range_width integer,
-OUT min_amount integer,
-OUT max_amount integer
+    FUNCTION get_amount_range(
+    amount NUMERIC,
+    range_width integer,
+    OUT min_amount integer,
+    OUT max_amount integer
 )
-LANGUAGE SQL IMMUTABLE PARALLEL SAFE
-BEGIN ATOMIC 
-SELECT
-	RANGE * range_width,
-	(RANGE + 1) * range_width
-FROM
-	(
-	SELECT
-		div(amount, range_width) AS RANGE
-);
+    LANGUAGE SQL
+    IMMUTABLE PARALLEL SAFE
+BEGIN
+    ATOMIC
+    SELECT RANGE * range_width,
+           (RANGE + 1) * range_width
+    FROM (SELECT div(amount, range_width) AS RANGE);
 END;
 
 /*Вторая функци похожа на первую но предназначена для дат и
@@ -6629,25 +6377,22 @@ END;
 
 
 CREATE OR REPLACE
-FUNCTION get_date_range(
-dt date, 
-OUT monday date,
-OUT sunday date
+    FUNCTION get_date_range(
+    dt date,
+    OUT monday date,
+    OUT sunday date
 )
-LANGUAGE SQL IMMUTABLE PARALLEL SAFE
-BEGIN ATOMIC 
-SELECT
-	prev_sunday + 1,
-	prev_sunday + 7
-FROM
-	(
-	SELECT
-		dt - extract(isodow FROM dt)::integer AS prev_sunday
-);
+    LANGUAGE SQL
+    IMMUTABLE PARALLEL SAFE
+BEGIN
+    ATOMIC
+    SELECT prev_sunday + 1,
+           prev_sunday + 7
+    FROM (SELECT dt - extract(isodow FROM dt)::integer AS prev_sunday);
 END;
 
 
-/* 
+/*
 ┌─────────────────────────────────────────────────────────────┐
 │                    ШАГ 0: ИСХОДНЫЕ ДАННЫЕ                   │
 └─────────────────────────────────────────────────────────────┘
@@ -6665,7 +6410,7 @@ END;
 │     7       │    85,000    │      ...        │
 │     8       │   190,000    │      ...        │
 └─────────────┴──────────────┴─────────────────┘
- 
+
 ┌─────────────────────────────────────────────────────────────┐
 │         ШАГ 1: CROSS JOIN LATERAL (строка за строкой)       │
 └─────────────────────────────────────────────────────────────┘
@@ -6759,27 +6504,26 @@ END;
                   │  РЕЗУЛЬТАТ      │
                   │  (5 строк)      │
                   └─────────────────┘
-                  
-                  
+
+
 1. FROM/JOIN → "Какие данные берём и как соединяем"
-2. WHERE → "Какие строки фильтруем"  
+2. WHERE → "Какие строки фильтруем"
 3. GROUP BY → "Как группируем"
 4. Агрегации → "Что считаем в группах"
 5. HAVING → "Какие группы фильтруем"
 6. SELECT → "Что показываем"
-7. ORDER BY → "Как сортируем"                  
- 
- 
+7. ORDER BY → "Как сортируем"
+
+
  */
 
-SELECT 
-    amount_range.min_amount  AS min_amount_k,
-    amount_range.max_amount  AS max_amount_k,
-    COUNT(*) AS booking_count,           -- ← ДОБАВИЛИ!
-    SUM(b.total_amount)  AS total_sum     -- ← ДОБАВИЛИ!
+SELECT amount_range.min_amount AS min_amount_k,
+       amount_range.max_amount AS max_amount_k,
+       COUNT(*)                AS booking_count, -- ← ДОБАВИЛИ!
+       SUM(b.total_amount)     AS total_sum      -- ← ДОБАВИЛИ!
 FROM bookings b
-CROSS JOIN LATERAL get_amount_range(b.total_amount, 100000) AS amount_range
-----CROSS JOIN LATERAL func(...) = 
+         CROSS JOIN LATERAL get_amount_range(b.total_amount, 100000) AS amount_range
+----CROSS JOIN LATERAL func(...) =
 ----"Для каждой строки левой таблицы → вызвать функцию → добавить результат"
 GROUP BY amount_range.min_amount, amount_range.max_amount
 ORDER BY min_amount_k;
@@ -6791,7 +6535,7 @@ SELECT week.monday         AS monday,
        SUM(b.total_amount) AS total_sum      -- ← ДОБАВИЛИ!
 FROM bookings b
          CROSS JOIN LATERAL get_date_range(b.book_date::date) AS week
-----CROSS JOIN LATERAL func(...) = 
+----CROSS JOIN LATERAL func(...) =
 ----"Для каждой строки левой таблицы → вызвать функцию → добавить результат"
 GROUP BY week.sunday, week.monday
 
@@ -6889,25 +6633,27 @@ FROM generate_series('2024-03-11'::date, '2024-03-31'::date, '1 day') as dt;
   оптимального решения.
   */
 
-  create table meal
-  (meal_code text primary key, ---код обеда
-    price numeric(6,2) not null, ---цена
-    calories smallint not null, ---калорийность
-    variety smallint not null ---число блюд
-  );
+create table meal
+(
+    meal_code text primary key,       ---код обеда
+    price     numeric(6, 2) not null, ---цена
+    calories  smallint      not null, ---калорийность
+    variety   smallint      not null  ---число блюд
+);
 
-  insert into meal (meal_code, price, calories, variety)
-  values
-  ('A',550.00,1500,3),
-  ('B',490.00,1300,4),
-  ('C',600.00,1400,4),
-  ('D',580.00,1600,5),
-  ('E',570.00,1380,5),
-  ('F',520.00,1450,3),
-  ('G',580.00,1580,4),
-  ('H',570.00,1380,4),
-  ('I',510.00,1450,3),
-  ('J',530.00,1450,6);
+truncate table meal
+insert into meal (meal_code, price, calories, variety)
+values ('A', 550.00, 1500, 3),
+       ('B', 490.00, 1300, 4),
+       ('C', 600.00, 1400, 4),
+       ('D', 580.00, 1600, 5),
+       ('E', 570.00, 1380, 5),
+       ('F', 520.00, 1450, 3),
+       ('G', 580.00, 1580, 4),
+       ('H', 570.00, 1380, 4),
+       ('I', 510.00, 1450, 3),
+       ('J', 530.00, 1450, 6),
+       ('K', 540.00, 1580, 4);
 
 SELECT *
 from meal;
@@ -6933,17 +6679,476 @@ from meal;
   Поскольку нам важен факт наличия или отсутствия таких побед и поражений, приходится использовать
   именно массив, а не скалярную величину, представляющую собой разницу в счете*/
 
-  create or replace function compare_pairwise(a1 meal, a2 meal)
-  returns smallint[] as
-      $$
-      select array[
-      ---подсчет числа побед первой альтернативы
-      (case when a1.price    < a2.price then 1 else 0 end) +
-      (case when a1.calories > a2.calories then 1 else 0 end) +
-      (case when a1.variety  > a2.variety then 1 else 0 end),
-      ---подсчет числа поражений первой альтернативы
-        (case when a1.price  > a2.price then 1 else 0 end) +
-      (case when a1.calories < a2.calories then 1 else 0 end) +
-      (case when a1.variety  < a2.variety then 1 else 0 end)
-      ]::smallint[] as score
+create or replace function compare_pairwise(a1 meal, a2 meal)
+    returns smallint[] as
+$$
+select array [
+           ---подсчет числа побед первой альтернативы
+           (case when a1.price < a2.price then 1 else 0 end) +
+           (case when a1.calories > a2.calories then 1 else 0 end) +
+           (case when a1.variety > a2.variety then 1 else 0 end),
+           ---подсчет числа поражений первой альтернативы
+           (case when a1.price > a2.price then 1 else 0 end) +
+           (case when a1.calories < a2.calories then 1 else 0 end) +
+           (case when a1.variety < a2.variety then 1 else 0 end)
+           ]::smallint[] as score
 $$ language sql;
+
+
+/*Параметрами функции будут значения составного типа meal. До сих пор в разрабатываемых
+  функциях мы не использовали такие параметры, настало время восполнить этот пробел.
+  Напомним, что при создании таблицы создается составной тип, имя которого совпадает
+  с ее именем. Внутри функции к элементам такого значения можно обращаться также,
+  как и к столбцам таблицы (a1.calories)
+  При сравнении пары альтернатив не важно сколько раз каждая из них превзошла другую по отдельным
+  критериям. Важно лишь зафиксировать, превзошла ли первая альтернатива вторую хотя бы по одному
+  критерию. Поэтому результат можно представить, например, целым числом с помощью побитовых строк.
+  При такой реализации значение 0 будет означать, что альтернативы совпадают, 1 - что лучше
+  первая альтернатива, 2 - что лучше вторая альтернатива, 3 - что альтернативы несравнимы.
+
+  */
+
+create or replace function compare_pairwise_2(a1 meal, a2 meal)
+    returns smallint as
+$$
+select (case
+            when a1.price < a2.price then b'01' ---первая альтернатива лучше
+            when a2.price < a1.price then b'10' ---вторая альтернатива лучше
+            else b'00' ---значения одинаковые
+            end |
+        case
+            when a1.calories > a2.calories then b'01'
+            when a2.calories > a1.calories then b'10'
+            else b'00'
+            end |
+        case
+            when a1.variety > a2.variety then b'01'
+            when a2.variety > a1.variety then b'10'
+            else b'00'
+            end) ::integer as score
+$$ language sql;
+
+
+/*
+При такой реализации значение 0 будет означать, что альтернативы совпадают, 1 - что лучше
+  первая альтернатива, 2 - что лучше вторая альтернатива, 3 - что альтернативы несравнимы.
+*/
+
+select m1.meal_code               as alt1,
+       m2.meal_code               as al2,
+       m1.price                   as price1,
+       m2.price                   as price2,
+       m1.calories                as calories1,
+       m2.calories                as calories2,
+       m1.variety                 as variety1,
+       m2.variety                 as variety2,
+       compare_pairwise_2(m1, m2) as score
+from meal as m1,
+     meal as m2
+where m1.meal_code = 'D'
+order by m2.meal_code, score;
+
+
+/*На основании результатов выполнения запроса, можно сказать, что
+  альтернативы С и G не войдут в множество Парето
+  📋 Таблица исключений:
+Сравнение	Результат	Доминирование	В Парето?
+D vs C	{3,0}	D строго доминирует C	❌ C не в Парето
+D vs G	{2,0}	D слабо доминирует G	❌ G не в Парето
+D vs A	{2,1}	Нет доминирования	? (нужны сравнения с другими)
+D vs J	{1,2}	Нет доминирования	? (нужны сравнения с другими)
+🔚 Итог:
+На основании этого запроса можно гарантированно утверждать, что C и G не войдут в множество Парето, потому что:
+C доминируема D (D лучше по всем 3 критериям)
+G доминируема D (D не хуже по всем критериям и строго лучше по двум)
+Для остальных альтернатив нужны дополнительные сравнения — нельзя сказать, войдут они в Парето или нет,
+только на основе сравнений с D.
+Красивая аналогия:
+Если в спортивном турнире команда D уже обыграла команды C и G со счётом 3:0 и 2:0, то C и G
+точно не будут чемпионами.
+Но про остальные команды нельзя сказать, пока они не сыграют между собой!
+
+
+1. Альтернатива A: {2,1}
+Статус: НЕИЗВЕСТНО (но есть шансы)
+D лучше по калориям (1600 > 1500) и разнообразию (5 > 3)
+A лучше по цене (550 < 580)
+Нет доминирования → A может быть в Парето
+Но! Может существовать альтернатива, которая дешевле A И имеет больше калорий/разнообразия
+
+2. Альтернатива B: {2,1}
+Статус: НЕИЗВЕСТНО (вероятно в Парето)
+D лучше по калориям (1600 > 1300) и разнообразию (5 > 4)
+B лучше по цене (490 < 580) — значительно лучше!
+B — самая дешёвая из всех (490)
+Высокая вероятность, что B в Парето как "бюджетный вариант"
+
+3. Альтернатива E: {1,1}
+Статус: НЕИЗВЕСТНО (сомнительно)
+D лучше по калориям (1600 > 1380)
+E лучше по цене (570 < 580)
+По разнообразию равны (5 = 5)
+E может быть доминируема: есть ли вариант дешевле 570 с калориями > 1380?
+
+4. Альтернатива F: {2,1}
+Статус: НЕИЗВЕСТНО
+D лучше по калориям (1600 > 1450) и разнообразию (5 > 3)
+F лучше по цене (520 < 580)
+Похож на B, но дороже (520 vs 490) и с лучшими калориями (1450 vs 1300)
+
+5. Альтернатива H: {2,1}
+Статус: НЕИЗВЕСТНО (сомнительно)
+Идентичен E по цене (570) и калориям (1380)
+Но разнообразие хуже (4 vs 5 у E)
+H вероятно доминируема E (та же цена и калории, но меньше разнообразие)
+
+6. Альтернатива I: {2,1}
+Статус: ВЕРОЯТНО в Парето
+
+D лучше по калориям (1600 > 1450) и разнообразию (5 > 3)
+I лучше по цене (510 < 580) — вторая по дешевизне после B
+Сильный "бюджетный" кандидат
+
+7. Альтернатива J: {1,2}
+Статус: ВЕРОЯТНО в Парето
+D лучше только по калориям (1600 > 1450)
+J лучше по цене (530 < 580) и разнообразию (6 > 5)
+J имеет максимальное разнообразие (6) среди всех
+Сильный кандидат как "вариант с максимальным выбором"
+
+Сильные кандидаты в Парето:
+B (490) — самый дешёвый
+I (510) — второй по дешевизне, хорошие калории
+J (530) — максимальное разнообразие (6)
+D (580) — рекордные калории (1600)
+
+Сомнительные:
+A (550) — средний по всем параметрам
+E (570) — баланс цена/калории, но разнообразие 5
+F (520) — между B и I
+
+  */
+select m1.meal_code             as alt1,
+       m2.meal_code             as al2,
+       m1.price                 as price1,
+       m2.price                 as price2,
+       m1.calories              as calories1,
+       m2.calories              as calories2,
+       m1.variety               as variety1,
+       m2.variety               as variety2,
+       compare_pairwise(m1, m2) as score
+from meal as m1,
+     meal as m2
+where m1.meal_code = 'D'
+order by m2.meal_code, score;
+
+
+/*Переходя к функции формирования множества Парето, примем такой алгоритм ее работы:
+  сначала на основе результатов попарных сравнений сформируем множество доминируемых
+  альтернатив, а затем отберем из исходного множества только те альтернативы, которых
+  нет в списке доминируемых.
+  Эти альтернативы могут быть и не сравнимы по данным критериям. Возможно также
+  совпадение значений их показателей. В двух последних случаях конструкция CASE
+  возвратит NULL
+
+  Обратите внимание на условие соединения строк в предложении ON. Здесь используется
+  операция "меньше", поскольку порядок сравниваемых альтернатив в паре не имеет значения.
+  Сравнение альтернативы А с альтернативой В даст туже информацию, что и сравнение В с А,
+  только лишь в массиве содержащем числовые результаты сравнения, поменяются местами
+  значения первого и второго элементов. Таким образом использование декартового произведения
+  или условия "не равно" - привело бы к дублированию работы.
+
+
+
+  */
+
+create or replace function pareto()
+    returns setof meal as
+$$
+with dominated_alternatives AS
+         (select distinct case---первая альтернатива побеждала, а вторая нет
+                              when score[1] > 0 and score[2] = 0 then m2
+                              ---вторая альтернатива побеждала, а первая нет
+                              when score[1] = 0 and score[2] > 0 then m1
+                              ---Альтернативы несравнимы или равны
+                              else null
+                              end as dominated
+          from meal as m1
+                   join meal as m2 on m1.meal_code < m2.meal_code
+                   cross join compare_pairwise(m1.*, m2.*) as cp(score))
+select meal
+from meal
+except
+select dominated
+from dominated_alternatives;
+$$
+    language sql;
+
+/*Покажем результат попарного сравнения всех альтернатив
+  Поскольку мы проводим оценку с позиции альтернативы, указанной в столбце alt1, то у доминируемых
+  альтернатив первый элемент массива, содержащего результаты сравнения будет равен нулю, а второй
+  больше нуля.
+
+Пример 1: C доминируема D
+text
+C,D,"{0,3}"
+a1 = C, a2 = D
+Результат {0, 3} означает:
+0 побед у C (первый элемент = 0)
+3 поражения у C (второй элемент > 0)
+Вывод: C доминируема D
+
+Пример 2: D доминирует C
+text
+D,C,"{3,0}"
+a1 = D, a2 = C
+Результат {3, 0} означает:
+3 победы у D
+0 поражений у D
+Вывод: D доминирует C
+
+
+🎨 Визуализация правила:
+text
+{победы_a1, поражения_a1}
+
+ДОМИНИРУЕМА a1:     {0, >0}    ← первый 0, второй >0
+ДОМИНИРУЕТ a1:      {>0, 0}    ← первый >0, второй 0
+НЕСРАВНИМЫ:         {>0, >0}   ← оба >0
+ЭКВИВАЛЕНТНЫ:       {0, 0}     ← оба 0
+
+Пример:
+compare_pairwise(C, D) = {0,3} → C доминируема
+compare_pairwise(D, C) = {3,0} → D доминирует
+
+*/
+
+select m1.meal_code as alt1,
+       m2.meal_code as alt2,
+       score
+    from meal as m1
+    join meal as m2 on m1.meal_code < m2.meal_code
+    cross join compare_pairwise(m1.*, m2.*) as score
+order by alt1, alt2;
+
+/*Можем провести этап конкурса обедов для пассажиров
+  группа претендентов значительно сократилась однако единственный
+  победитель найден не был*/
+select *
+from pareto()
+order by variety,meal_code;
+
+/*Предположим чтоуже после проведения первоначального отбора обедов для
+  наших пассажиров к нам обратился еще один потенциальный поставщик, обозначаемый
+  буквой К, передадим значения показателей в функцию в качестве аргумента следующим
+  образом
+
+  Полученный результат говорит о том, что компания опоздавшая к началу конкурса могла бы
+  претендовать на получение контракта, поскольку для предлагаемого ею обеда не нашлось
+  ни одной доминирующей альтернативы.*/
+
+  select
+      'K' as alt1,
+      meal.meal_code as alt2,
+      compare_pairwise(
+      row('K', 540.00, 1580, 4)::meal,
+      meal.*) as score
+      from meal
+          order by alt2;
+
+/*Процедуры
+  В Postgres реализованы процедуры, представленные в разделе документации 36.4 пользовательские
+  процедуры, это объекты подобные функциям, поэтом глава посвященныя функциям, считается актуальной
+  и для процедур.
+  Однако между ними есть целый ряд отличий:
+
+  1.В процедурах можно использовать команды управления транзакциями, а внутри функций это
+  сделать невозможно. Правда, в процедурах, написанных на языке SQL это тоже невозможно,
+  годится только например PL\pgSQL.
+  2.Функция вызывается как часть команды манипулирования данными, например select или update,
+  а для вызова процедуры служит отдельная команда CALL/
+  3.Поскольку процедура выполняется отдельной командой, возврат значения из нее с помощью
+  оператору RETURN не предусмотрен: в отличие от функции, это значение было бы невозможно
+  использовать. Поэтому в определении процедуры нет RETURNS.
+  Процедура или функция может возвращать значения с помощью параметров имеющих модификаторы out
+  или inout. Однако таким способом может быть возвращена одна строка, поскольку предложения
+  returns setof и returns table в процедурах не используются.
+  4.Процедуры, опять же вследствие особенностей их вызова не имеютцелого ряда характеристик,
+  присущих функциям: категории изменчивости, способа реагирования на аргументы со значением null -
+  безопасности выполнения в параллельных запросах.
+  Процедуры используют общее пространство имен, поэтому из двух перегруженных объектов один может быть
+  функцией, а другой процедурой.
+  */
+
+  alter table meal
+  add column pareto_optimal bool; ---изначально альтернативы предполагаются недоминируемыми
+
+create or replace procedure pareto_proc() AS
+$$
+    update meal set pareto_optimal = 't';
+    with dominated_alternatives AS (
+    select distinct case---первая альтернатива побеждала, а вторая нет
+                              when score[1] > 0 and score[2] = 0 then m2
+                              ---вторая альтернатива побеждала, а первая нет
+                              when score[1] = 0 and score[2] > 0 then m1
+                              ---Альтернативы несравнимы или равны
+                              else null
+                              end as dominated
+          from meal as m1
+                   join meal as m2 on m1.meal_code < m2.meal_code
+                   cross join compare_pairwise(m1.*, m2.*) as cp(score)
+
+    )
+    update meal set pareto_optimal = 'f'
+    from dominated_alternatives AS da
+    where meal.meal_code = (da.dominated).meal_code;
+    ---элемент dominated представляет собой значение составного типа meal
+$$
+    language sql;
+
+call pareto_proc(); ---вызов процедуры
+
+/*сделаем процедуру для возврата результатов изменений*/
+
+create or replace procedure pareto_proc_2(out pareto_optimals text) AS
+    $$
+    call pareto_proc();
+        select string_agg(meal_code,', ' order by meal.meal_code)
+        from meal
+        where pareto_optimal;
+    $$
+language sql;
+
+
+call pareto_proc_2(null)
+/*для выходного параметра процедуры передается значение
+как и в случае с функциями, имен столбцов полученной таблицы определяются
+именами выходных параметров, а не псевдонимами столбцов выборки.
+Для удаления процедуры служит команда drop procedure, если имя процедуры уникально,
+  то наименование параметров можно не указывать.
+  */
+
+/*Совместное использование параметров с модификатором out и предложением
+  returns
+  Параметры с модификатором out позволяют функции возвратить более одного значения.
+  При использовании таких параметров можно в ряде случаев обойтись без предложения
+  returns в определении функции
+
+  Когда бывает целесобразно использовать параметры с модификатором out вместе
+  с предложением returns, что это дает?
+  В PostgreSQL есть три способа вернуть значения из функции:
+
+Только RETURNS — классический способ
+Только OUT параметры — альтернативный способ
+OUT + RETURNS вместе — гибридный способ
+
+-- OUT: структурированные данные (record)
+-- RETURNS: скалярное значение (int, text, json и т.д.)
+OUT — основные выходные данные
+RETURNS — статус, метаданные, флаги
+
+Ограничения и нюансы:
+Порядок важен: Сначала объявляются все параметры, включая OUT, затем RETURNS
+Тип RETURNS должен быть совместим с фактически возвращаемым значением
+В SQL-функциях комбинация OUT+RETURNS обычно не нужна
+Итог: когда использовать OUT + RETURNS?
+
+Ситуация              | OUT | RETURNS | Пример
+----------------------|-----|---------|---------------------------------
+Только данные         | ✅  | ❌      | get_stats(OUT a, OUT b)
+Данные + статус       | ✅  | ✅      | update_record(OUT old, RETURNS status)
+Агрегация + детали    | ✅  | ✅      | analyze(OUT details, RETURNS summary)
+Обратная совместимость| ✅  | ✅      | Добавление статуса к существующей функции
+
+Золотое правило:
+Используйте OUT + RETURNS, когда нужно вернуть
+и структурированные данные, и дополнительную информацию
+разного типа и назначения.
+*/
+
+/*
+Значение параметра функции в качестве идентификатора в ее коде - это возможно?
+
+Ответ - да:
+CREATE OR REPLACE FUNCTION get_column_value(
+    table_name text,
+    column_name text,
+    id_value integer
+)
+RETURNS text AS
+$$
+DECLARE
+    result text;
+BEGIN
+    -- Используем параметры как идентификаторы
+    EXECUTE format('SELECT %I FROM %I WHERE id = $1', column_name, table_name)
+    INTO result
+    USING id_value;
+
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Использование
+SELECT get_column_value('meal', 'meal_code', 1);
+
+
+-- НЕ РАБОТАЕТ! ОШИБКА!
+SELECT $1 FROM $2 WHERE id = $3;  -- нельзя
+Нужно использовать:
+format() с %I (идентификатор) или %L (литерал)
+quote_ident() и quote_literal()
+Динамический SQL через EXECUTE
+
+Итог:
+Да, использовать параметры как идентификаторы можно, но:
+Только через EXECUTE в PL/pgSQL
+Всегда экранировать через format() с %I или quote_ident()
+Значения передавать через USING, а не конкатенацию
+Проверять входные данные на корректность
+
+*/
+CREATE OR REPLACE FUNCTION count_seats_dynamic(
+    a_code char(3),
+    fare_cond text,
+    table_name text DEFAULT 'seats',           -- параметры по умолчанию идут ПОСЛЕ
+    aircraft_code_col text DEFAULT 'aircraft_code',    -- обязательных параметров!
+    fare_cond_col text DEFAULT 'fare_conditions'
+)
+    RETURNS bigint AS
+/*
+Переработанная функция с использованием параметров как идентификаторов.
+Позволяет динамически указывать имена таблицы и столбцов.
+
+ПРАВИЛО: Параметры со значениями по умолчанию должны быть ПОСЛЕ
+        обязательных параметров без значений по умолчанию.
+
+Функция format() в PostgreSQL используется для безопасного форматирования SQL-строк
+с подстановкой параметров. Основные плейсхолдеры:
+%s - подстановка значения как строка (текст)
+%I - подстановка идентификатора с экранированием (для имен таблиц, колонок)
+%L - подстановка литерала с экранированием (для значений)
+%% - символ процента
+
+*/
+$$
+DECLARE
+    seat_count bigint;
+BEGIN
+    -- Используем параметры как идентификаторы через format()
+    EXECUTE format(
+            'SELECT COUNT(*) ' ||
+            'FROM %I WHERE %I = $1 AND %I = $2',
+            table_name,
+            aircraft_code_col,
+            fare_cond_col
+            )
+        INTO seat_count
+        USING a_code, fare_cond;
+
+    RETURN seat_count;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT count_seats_dynamic('SU9', 'Business', 'seats');
+
