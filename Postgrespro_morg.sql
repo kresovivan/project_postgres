@@ -7152,3 +7152,73 @@ $$ LANGUAGE plpgsql;
 
 SELECT count_seats_dynamic('SU9', 'Business', 'seats');
 
+
+---Символ одинарной кавычки в теле функции
+CREATE FUNCTION test() RETURNS TEXT AS $$
+BEGIN
+    RETURN 'O''Reilly';  -- Две одинарные кавычки
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION test() RETURNS TEXT AS $func$
+BEGIN
+    RETURN $str$O'Reilly$str$;
+END;
+$func$ LANGUAGE plpgsql;
+
+/*Перегруженные aerywbb и значения параметров по умолчанию
+  функции в СУБД Postgres можно перегружать, то есть создавать одноименные функции
+ с различающимися типами входных параметров (имеющих модификаторы in или out либо
+  объявленные без модификаторов) в таком случае сигнатуры функции будут различными.
+  Сигнатура функции = Имя функции + Типы параметров (аргументов)
+  При вызове PostgreSQL определяет конкретную перегруженную функцию на основании
+  переданных ей аргументов.
+  Аргументы функции — это переменные, переданные в функцию при её вызове,
+  которые функция использует для выполнения операций.
+  Однако с этим могут возникать и сложности, если параметры имеют значение по умолчанию*/
+
+CREATE OR REPLACE FUNCTION test_default(
+    par1 int,
+    par2 int DEFAULT 2) RETURNS text AS
+$$
+SELECT FORMAT('test_default1; par1 = %s, par2 = %s', par1, par2);
+$$
+    LANGUAGE sql;
+
+
+CREATE OR REPLACE FUNCTION test_default(
+    par1 int,
+    par2 int DEFAULT 2,
+    par3 int DEFAULT 3) RETURNS text AS
+$$
+SELECT FORMAT('test_default2; par1 = %s, par2 = %s, par3 = %s', par1, par2, par3);
+$$
+    LANGUAGE sql;
+
+/*Попробуем вызвать первую из них, задавая сначала один аргумент, потом два аргумента*/
+
+select test_default(10);
+/*
+[2025-12-10 16:24:05] [42725] ERROR: function test_default(integer) is not unique
+[2025-12-10 16:24:05] Подсказка: Could not choose a best candidate function. You might need to add explicit type casts.
+[2025-12-10 16:24:05] Позиция: 8*/
+
+select test_default(10,20);
+
+/*[2025-12-10 16:24:54] [42725] ERROR: function test_default(integer, integer) is not unique
+[2025-12-10 16:24:54] Подсказка: Could not choose a best candidate function. You might need to add explicit type casts.
+[2025-12-10 16:24:54] Позиция: 8*/
+
+select test_default(10,20, 30);
+---Вызов успешен test_default2; par1 = 10, par2 = 20, par3 = 30
+
+/*Можно вызвать вторую версию функции и с применением именованных аргументов.
+  Причем, их можно переставить местами и опустить параметр par2, поскольку он имеет
+  значение по умолчанию*/
+
+select test_default(par3 =>30, par1=>10);
+---Вызов успешен test_default2; par1 = 10, par2 = 2, par3 = 30
+
+/*Таким образом, вызвать первую функцию, которая имеет два параметра невозможно.
+  Это объясняется тем, чтопри задании одного из двух аргументов под этот вызов
+  подходят обе наши функции, поэтому Postgresql не может ds,hfnm*/
