@@ -7531,3 +7531,85 @@ VARIADIC параметр идет последним потому что:
 ошибок и неоднозначностей.
   */
 
+
+/*Псевдовнимы таблиц и столбцов:
+  есть некоторая свобода
+
+  Функциям в предложении from могут назначаться псевдонимы.
+  В таких случаях, как правило, задают псевдонимы и столбцам
+  В качестве иллюстрации воcпользуемся запросом для формирования номеров
+  кресел в салонах самолета
+  В первом варианте используются и псевдонимы таблицы и псевдонимы столбца*/
+
+---указываем псевдонимы строк
+select
+    row,
+    letter,
+    row  || letter as seat_no
+from generate_series(1,3) as rows(row), ---rows → имя таблицы (псевдоним)
+                                        ---(row) → имя столбца в этой "таблице"
+     unnest(array['A','B','C','D','F']) as letters(letter)
+order by row, letter
+
+
+----указываем псевдонимы таблиц
+select
+    rows,
+    letters,
+    row  || letter as seat_no
+from generate_series(1,3) as rows(row), ---rows → имя таблицы (псевдоним)
+     ---(row) → имя столбца в этой "таблице"
+     unnest(array['A','B','C','D','F']) as letters(letter)
+order by row, letter
+
+
+select
+    row,
+    letter,
+    row  || letter as seat_no
+from generate_series(1,3) as row, ---rows → имя таблицы (псевдоним)
+     ---(row) → имя столбца в этой "таблице"
+     unnest(array['A','B','C','D','F']) as letter
+order by row, letter
+
+
+-- Посмотрим на реальные типы
+select
+    pg_typeof(row) as type_of_row,
+    pg_typeof(rows) as type_of_rows,
+    pg_typeof(letter) as type_of_letter,
+    pg_typeof(letters) as type_of_letters
+from generate_series(1,3) as rows(row),
+     unnest(array['A','B','C','D','F']) as letters(letter)
+limit 1;
+
+
+select
+    pg_typeof(row) as type_of_row,
+    pg_typeof(letter) as type_of_letters
+from generate_series(1,3) as row,
+     unnest(array['A','B','C','D','F']) as letter
+limit 1;
+
+-- Развернуть все столбцы таблицы "rows"
+---select (rows).*
+-- А поскольку в "rows" только один столбец "row":
+-- Что эквивалентно просто `row`
+---select (rows).row
+/*
+Результаты получим одинаковые (хотя имена столбцов могут различаться)
+Попытайтесь объяснить почему все три варианта работают одинаково,
+причем правильно.
+Найдите обоснование в документации.
+Начать можно с описания команды Select, приведенного в документации
+
+FROM table_reference [ AS ] alias [ ( column_alias [, ...] ) ]
+Если указан только псевдоним таблицы без списка столбцов,
+имена столбцов берутся из исходной таблицы.
+*/
+
+/*Когда в предложении from несколько табличных функций
+
+  в предложении from у нас была одна конструкция lateral,
+  а что если таких конструкций будет две
+*/
