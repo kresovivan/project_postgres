@@ -5179,7 +5179,9 @@ RETURN (SELECT count(*)
           AND s.fare_conditions = fare_cond);
 
 EXPLAIN ANALYZE ---запрос стал выполняться быстрее
-SELECT count_seats_sql('SU9', NULL)
+SELECT count_seats_sql('SU9', NULL);
+
+SELECT count_seats_sql('SU9',   'Business') ;
 
 /*Существует альтернативный варинат предложения strict
 Эти две строки делают одно и то же:
@@ -5187,9 +5189,9 @@ STRICT
 RETURNS NULL ON NULL INPUT - это синоним для STRICT. Оба означают одно и то же!
  */
 
-           ALTER FUNCTION count_seats_sql
-RETURNS NULL ON NULL INPUT
 
+
+ALTER FUNCTION count_seats_sql RETURNS NULL ON NULL INPUT
 
 SELECT unnest(ARRAY [
     'oid', 'proname', 'pronamespace', 'proowner', 'prolang',
@@ -5665,7 +5667,7 @@ where r.departure_city = d_city
 $$ LANGUAGE SQL;
 
 Select *
-FROM list_routes_3(d_city => 'Москва', a_city => 'Новосибирск')
+FROM list_routes_3(d_city => 'Москва', a_city => 'Новосибирск');
 
 /*Если потребуется заменить заголовки столбцов можно задать их псевдонимы (не определения!!!)
  * в промышленном коде заголовки столбцов должны быть указаны на английском языке*/
@@ -7226,3 +7228,306 @@ select test_default(par3 =>30, par1=>10);
 
 ---показать путь
 show search_path
+
+
+/*Удалим данные функции и создадим их на разных схемах базы данных*/
+
+drop function  test_default(int, int);
+drop function  test_default(int, int, int);
+
+/*Одну функцию создадим на схеме booking а другую в схеме public*/
+
+CREATE OR REPLACE FUNCTION public.test_default(
+    par1 int,
+    par2 int DEFAULT 2) RETURNS text AS
+$$
+SELECT FORMAT('test_default1; par1 = %s, par2 = %s', par1, par2);
+$$
+    LANGUAGE sql;
+
+
+CREATE OR REPLACE FUNCTION bookings.test_default(
+    par1 int,
+    par2 int DEFAULT 2,
+    par3 int DEFAULT 3) RETURNS text AS
+$$
+SELECT FORMAT('test_default2; par1 = %s, par2 = %s, par3 = %s', par1, par2, par3);
+$$
+    LANGUAGE sql;
+
+select test_default(10);
+select test_default(10,20);
+select test_default(10,20, 30);
+
+/*Измените путь поиска*/
+
+set search_path = public, bookings;
+
+
+select test_default(10);
+select test_default(10,20);
+select test_default(10,20, 30);
+
+/*Если перегруженные функции находятся в разных схемах, то всегда
+  можно указать при вызове функции схемы*/
+
+select bookings.test_default(10);
+
+/*Cброс PATH до исходного состояния*/
+reset SEARCH_PATH;
+show SEARCH_PATH;
+
+/*Аргументом функции может быть и значение null
+
+При выполнении запросов функция может получить значение null в качестве аргумента
+Такие ситуации должны корректно обрабатываться и не приводить к сбоям.
+Данный вопрос рассмотрен в подразделе 5.1.6 Значения null в качестве аргументов функции
+
+Зачем вообще нужны STRICT функции?
+Оптимизация производительности:
+Избегают дорогостоящих вычислений, когда результат заведомо известен (NULL)!!!
+Особенно важно для тяжелых вычислений или запросов к большим таблицам
+
+Семантическая корректность:
+Если хотя бы один аргумент операции не определен (NULL), результат всей операции не определен
+Это соответствует математической логике и принципам SQL
+Защита от ошибок:
+Если NULL в аргументе указывает на ошибку в данных или логике, лучше сразу это обнаружить
+*/
+CREATE FUNCTION count_seats_sql(a_code char, fare_cond text)
+    RETURNS bigint
+    LANGUAGE sql
+    STRICT
+----STRICT в функции PostgreSQL означает, что функция будет
+----возвращать NULL немедленно, если любой из её аргументов равен NULL.
+RETURN (SELECT count(*)
+        FROM seats s
+        WHERE s.aircraft_code = a_code
+          AND s.fare_conditions = fare_cond);
+
+-- Вариант 1: RETURNS NULL ON NULL INPUT (полный синоним STRICT)
+CREATE OR REPLACE FUNCTION count_seats_sql(a_code char, fare_cond text)
+    RETURNS bigint
+    LANGUAGE sql
+    RETURNS NULL ON NULL INPUT  -- Более понятная альтернатива STRICT
+RETURN (
+    SELECT count(*)
+    FROM seats s
+    WHERE s.aircraft_code = a_code
+      AND s.fare_conditions = fare_cond
+);
+
+
+EXPLAIN ANALYZE
+SELECT count_seats_sql('SU9', NULL);
+
+/*Взаимосвязи объектов в базе данных
+  Как вы думаете можно ли удалить таблицу, которая используется в функции
+  на языке SQL, а столбец таблицы?
+  Можно ли создать функцию, в которой используется еще не созданная таблица или столбец,
+  которого нет в существующей таблице?
+  Как повлияет на результаты эксперимента способ оформления тела функции
+  в виде символьной строки или в виде стандарта SQL?*/
+
+create table test_depend_t (a int, b int);
+insert into test_depend_t values(1,2);
+INSERT INTO test_depend_t (a, b)
+SELECT
+    i,                    -- a = 1, 2, 3, ..., 100000
+    i + 1                 -- b = 2, 3, 4, ..., 100001
+FROM generate_series(1, 100000) AS i;
+---truncate table test_depend_t
+---drop table test_depend_t cascade
+/*[2025-12-11 20:02:01] [2BP01] ERROR: cannot drop table test_depend_t because other objects depend on it
+[2025-12-11 20:02:01] Подробности: function test_depend1() depends on table test_depend_t
+[2025-12-11 20:02:01] function test_depend_3() depends on table test_depend_t
+[2025-12-11 20:02:01] Подсказка: Use DROP ... CASCADE to drop the dependent objects too.
+  */
+
+create or replace function test_depend()
+returns int as
+    $$
+    select count(*)
+    from test_depend_t;
+    $$
+LANGUAGE sql;
+
+
+CREATE OR REPLACE FUNCTION test_depend1()
+    RETURNS bigint
+    LANGUAGE sql
+BEGIN ATOMIC
+SELECT COUNT(*)
+FROM test_depend_t;
+END;
+
+
+explain analyze
+select *
+from  test_depend()
+
+explain analyze
+select *
+from  test_depend1();
+
+alter table test_depend_t drop column b;
+
+alter table test_depend_t add column c int;
+
+alter table test_depend_t add column b int;
+
+create or replace function test_depend_2()
+    returns int as
+$$
+select b
+from test_depend_t
+    limit 1;
+$$
+    LANGUAGE sql;
+/*Если нет таблицы test_depend_t функция не создается
+  relation "test_depend_t" does not exist
+[2025-12-11 20:04:58] Позиция: 84*/
+
+
+CREATE OR REPLACE FUNCTION test_depend_3()
+    RETURNS bigint
+    LANGUAGE sql
+BEGIN ATOMIC
+SELECT b
+FROM test_depend_t
+limit 1;
+END;
+/*если нет таблицы test_depend_t, то функция не создается
+  [2025-12-11 20:04:09] [42P01] ERROR: relation "test_depend_t" does not exist
+[2025-12-11 20:04:09] Позиция: 112*/
+
+explain analyze
+select *
+from  test_depend_2();
+
+
+explain analyze
+select *
+from  test_depend_3();
+
+/*Функцию невозможно создать, если в таблице нет столбца, который
+  участвует в функции [2025-12-11 19:57:59] [42703] ERROR: column "b" does not exist
+[2025-12-11 19:57:59] Позиция: 104*/
+
+
+
+/*Могут ли параметры inout и in идти вперемежку?
+  Эта функция выбирает все маршруты, проложенные из одного города
+  в другой.
+  Что, если отказаться от двух параметров d_city и a_city, заменив
+  модификатор out на inout у параметров dep_city и arr_city?
+  Так мы сократим число параметров в функции
+
+SETOF означает "множество записей" (табличная функция)
+record - тип записи, структура которой определяется
+OUT параметрами*/
+
+drop function if exists list_routes_3;
+
+CREATE OR REPLACE FUNCTION list_routes_3(
+    ---d_city text DEFAULT 'Москва',
+    ---a_city text DEFAULT 'Санкт_петербург',
+    OUT f_no char,
+    ---OUT dep_city text,
+    ---OUT arr_city text,
+    INOUT dep_city text DEFAULT 'Москва',
+    INOUT arr_city text DEFAULT 'Санкт_петербург',
+    OUT model text
+)
+    RETURNS SETOF record AS
+$$
+SELECT r.flight_no, r.departure_city, r.arrival_city, a.model
+FROM routes                r
+         JOIN aircrafts AS a ON a.aircraft_code = r.aircraft_code
+WHERE r.departure_city = dep_city
+  AND r.arrival_city   = arr_city;
+$$ LANGUAGE sql;
+
+/*
+f_no  |dep_city|arr_city   |model
+PG0222|Москва  |Новосибирск|Боинг 777-300
+PG0277|Москва  |Новосибирск|Боинг 777-300
+
+именованные аргументы
+*/
+Select *
+FROM list_routes_3(dep_city => 'Москва', arr_city => 'Новосибирск')
+union
+Select *
+FROM list_routes_3(arr_city => 'Новосибирск',dep_city => 'Москва');
+
+/*
+f_no  |dep_city   |arr_city   |model
+PG0222|Москва     |Новосибирск|Боинг 777-300
+PG0223|Новосибирск|Москва     |Боинг 777-300
+PG0277|Москва     |Новосибирск|Боинг 777-300
+PG0278|Новосибирск|Москва     |Боинг 777-300
+
+позиционные аргументы
+*/
+Select *
+FROM list_routes_3('Москва', 'Новосибирск')
+union
+Select *
+FROM list_routes_3('Новосибирск', 'Москва');
+
+---нет маршрутов
+Select *
+FROM list_routes_3();
+
+
+/*Функция по стандарту SQL, без символьной строки*/
+CREATE OR REPLACE FUNCTION list_routes_30(
+    p_dep_city text DEFAULT 'Москва',
+    p_arr_city text DEFAULT 'Санкт_петербург'
+)
+    RETURNS TABLE(
+                     flight_no char(6),
+                     departure_city text,
+                     arrival_city text,
+                     model text
+                 )
+    LANGUAGE SQL
+BEGIN ATOMIC
+/*Ключевое слово ATOMIC означает, что блок выполняется как единая атомарная операция:
+Либо все операторы выполняются успешно
+Либо ни один не выполняется (при ошибке происходит откат)*/
+SELECT
+    r.flight_no,
+    r.departure_city,
+    r.arrival_city,
+    a.model
+FROM routes r
+         JOIN aircrafts a ON a.aircraft_code = r.aircraft_code
+WHERE r.departure_city = p_dep_city
+  AND r.arrival_city = p_arr_city;
+END;
+
+select *
+from list_routes_30('Новосибирск', 'Москва');
+
+/*Параметр variadic идет последним, почему ?
+
+  PostgreSQL парсит аргументы функции слева направо
+  Парсер:
+Берет первый аргумент → сопоставляет с первым параметром
+Берет второй аргумент → сопоставляет со вторым параметром
+...
+ДОХОДИТ ДО КОНЦА списка параметров
+Если последний параметр VARIADIC → все оставшиеся аргументы туда
+
+VARIADIC параметр идет последним потому что:
+Однозначность парсинга - парсер точно знает, когда начинаются variadic аргументы
+Семантическая ясность - "все оставшиеся аргументы" логично быть в конце
+Совместимость - с массивами и другими языками программирования
+Практичность - упрощает вызов функции
+Исторические прецеденты - так делается в большинстве языков
+Это дизайн-решение, которое делает API функций чище и предотвращает множество
+ошибок и неоднозначностей.
+  */
+
