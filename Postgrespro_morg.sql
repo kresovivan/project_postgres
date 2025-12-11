@@ -7612,4 +7612,79 @@ FROM table_reference [ AS ] alias [ ( column_alias [, ...] ) ]
 Когда в предложении from несколько табличных функций
 в предложении from у нас была одна конструкция lateral,
 а что если таких конструкций будет две
+
+
+Интегральный показатель - это комплексная, обобщенная количественная характеристика,
+которая объединяет несколько отдельных показателей (параметров, факторов) в одну общую оценку.
+Простыми словами:
+Это "сводная оценка", которая показывает общую картину, объединяя множество деталей в одно число.
+
+На принятие решения руководством авиакомпании о сохранении тех или иных маршрутов влияет в том числе
+их востребованность у пассажиров.
+Она зависит от разных факторов: от исторически сложившихся связей между городами, от стоимости авиабилетов,
+от наличия других транспортных возможностей, от численности населения городов, и т.д.
+Интегральным показателем востребованности будем считать степень заполнения самолетов, выполнябщих рейсы по конкретным
+маршрутам. Мы будем прнимать во внимание лишь рейсы, имеющие статус Departed или Arrived.
+
+Начнем разработку с функции вычисления интересующего нас показателя конкретной пары городов за
+указанный период, причем для рейсов как "туда" так и "обратно".
+
+
 */
+
+create or replace function  get_routes_occupation(
+dep_city  text,
+arr_city  text,
+from_date date,
+till_date date)
+returns table (
+    dep_city text,
+    arr_city text,
+    total_passengers numeric, --число перевезенных пассажиров
+    total_seats numeric,      --общее число мест в самолетах
+    occupancy_rate numeric    --доля занятых мест
+              ) AS
+    $$
+    with seats_counts AS
+    (select aircraft_code,
+    count(*) as seats_cnt
+    from seats
+    group by aircraft_code
+    ),
+    per_flight_results AS
+    (select
+    r.departure_city,
+    r.arrival_city,
+    f.flight_id,
+    f.aircraft_code,
+    count(*) as passengers_cnt
+    from routes as r
+    join flights as f on f.flight_no = r.flight_no
+    join ticket_flights AS tf on tf.flight_id = f.flight_id
+    where (
+    (r.departure_city = dep_city AND r.arrival_city = arr_city)   ---туда
+    or (r.departure_city = arr_city AND r.arrival_city = dep_city) ---обратно
+    )
+    and f.scheduled_departure between from_date and till_date
+    and f.status in ('Departed','Arrived')
+    group by r.departure_city, r.arrival_city, f.flight_id, f.aircraft_code)
+
+    select
+    pfr.departure_city,
+    pfr.arrival_city,
+    sum(pfr.passengers_cnt) as total_passengers,
+    sum(sc.seats_cnt) as total_seats,
+    round(sum(pfr.passengers_cnt) / sum(sc.seats_cnt),2) as occupancy_rate
+    from per_flight_results as pfr
+    join seats_counts as sc on sc.aircraft_code = pfr.aircraft_code
+    group by pfr.departure_city, pfr.arrival_city;
+
+$$ LANGUAGE sql;
+
+select
+dep_city,
+arr_city,
+total_passengers as pass,
+total_seats as seats,
+occupancy_rate as rate
+from get_routes_occupation('Москва', 'Краснодар','2017-08-01','2017-08-15')
