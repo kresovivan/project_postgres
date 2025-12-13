@@ -7733,7 +7733,10 @@ lateral - ключевое слово!
 3. CROSS JOIN LATERAL (для каждой строки)
 4. SELECT (проекция колонок)
 
-  */
+В выполненном запросе брался первый аргумент функции из текущей строки таблицы аэропорты, а второй
+  аргумент оставляся неизменным.
+
+*/
 
 
 
@@ -7748,3 +7751,136 @@ lateral - ключевое слово!
   cross join lateral get_routes_occupation(ai.city, 'Москва','2017-08-01','2017-08-15') as gro
   where ai.coordinates[0] > 150; --- 0 географическая долгота, 1 географическая широта в тие данных points
 
+/*Давайте усложним задачу: нужно определить степень заполнения самолетов на всех направлениях,
+  проложенных из каждого города, находящегося, например в часовом поясе asia/vladivostok
+  Очевидно придется, каким-то образом определять список всех городов, с которыми имеет авиасообщение конкретный
+  город, а затем подставить полученные названия городов поочередено в качестве второго аргумента
+  функции get_routes_occupation, которая будет вызываться для каждого города из выбранного часового
+  пояса*
+
+  Функция, формирующая список городов, в которые можно улететь из указанного города, будет
+  несложной.
+
+ */
+
+CREATE OR REPLACE FUNCTION list_connected_cities(
+    city               text,
+    OUT connected_city text
+)
+    RETURNS setof text AS
+$$
+SELECT DISTINCT arrival_city
+FROM routes
+WHERE departure_city = city;
+$$ LANGUAGE sql;
+
+
+/*Проверяем функцию в работе*/
+SELECT city, connected_city
+FROM airports AS ai
+         CROSS JOIN LATERAL list_connected_cities(ai.city) AS connected_city
+WHERE timezone = 'Asia/Vladivostok'
+ORDER BY city, connected_city;
+
+/*Теперь имея функцию list_connected_cities можно решить поставленную выше задачу
+  В предложении from поставим вызов функции list_connected_cities левее вызова
+  функции get_routes_occupation, чтобы вторая функция могла ссылаться на результаты
+  работы первой функции
+*/
+
+EXPLAIN ANALYZE
+SELECT gro.dep_city,
+       gro.arr_city,
+       gro.total_passengers,
+       gro.total_seats,
+       gro.occupancy_rate
+FROM airports AS a
+         CROSS JOIN LATERAL list_connected_cities(a.city) AS lcc
+         CROSS JOIN LATERAL get_routes_occupation(a.city, lcc.connected_city, '2017-08-01', '2017-08-15') AS gro
+WHERE a.timezone = 'Asia/Vladivostok'
+ORDER BY gro.dep_city, gro.arr_city;
+
+/*В выборке повторяются города Владивосток и Хабаровск, поскольку оба эти города
+  находятся в часовом поясе 'Asia/Vladivostok'
+
+План:
+Sort  (cost=297268.36..300268.36 rows=3000000 width=160) (actual time=5478.963..5478.965 rows=22 loops=1)
+  Sort Key: gro.dep_city, gro.arr_city
+  Sort Method: quicksort  Memory: 26kB
+  ->  Nested Loop  (cost=0.40..30034.03 rows=3000000 width=160) (actual time=122.668..5478.922 rows=22 loops=1)
+        ->  Nested Loop  (cost=0.20..33.83 rows=3000 width=81) (actual time=26.187..78.115 rows=11 loops=1)
+              ->  Seq Scan on airports_data ml  (cost=0.00..3.62 rows=3 width=49) (actual time=0.017..0.032 rows=3 loops=1)
+                    Filter: (timezone = 'Asia/Vladivostok'::text)
+                    Rows Removed by Filter: 101
+              ->  Function Scan on list_connected_cities lcc  (cost=0.20..5.20 rows=1000 width=32) (actual time=26.021..26.023 rows=4 loops=3)
+        ->  Function Scan on get_routes_occupation gro  (cost=0.20..5.20 rows=1000 width=160) (actual time=490.974..490.975 rows=2 loops=11)
+Planning Time: 0.117 ms
+Execution Time: 5479.085 ms
+
+
+  Прежде чем перейти к обсуждению плана, напомним, что объект Аэропорты (airports) на самом деле
+  является представлением, за которым скрывается таблица airports на самом деле является представлением
+  за которым скрывается таблица airports_data
+
+В этом плане мы видим двойной вложенный цикл. Работа начинается с отбора трех строк из таблицы
+airports_data, для каждой из которых вызывается функция list_connected_cities.
+Она порождает в среднем по четыре строки при каждом вызове (показатели rows=4 loops=3), а общее
+число порожденных строк равно 11, как свидетельствует показатель actual rows = 11 во внутреннем
+узле Nested Loop.
+
+Рассуждая аналогично, можно заключить, что во внешнем вложенном цикле для каждой из одиннадцати строк,
+порожденных во внутреннем цикле, вызывается функция get_routes_occupation, выдающая по две строки за
+  один вызов (actual rows=2 loops=11). В результате число сформированных строк становится равным 22
+
+*/
+
+
+/*Табличные функции в списке Select
+  Иногда можно, но лучше в предложении FROM */
+
+EXPLAIN ANALYZE
+select get_routes_occupation(a.city, list_connected_cities(a.city),
+       unnest(array['2017-07-16','2017-08-01']::date[]),
+       unnest(array['2017-07-31','2017-08-15']::date[])
+       )
+from airports a
+where timezone = 'Asia/Vladivostok'
+order by city;
+
+/*Стабильные функции могут зависеть от настроек сервера
+*/
+
+begin;
+set TIMEZONE = 'Asia/Vladivostok';
+
+select current_timestamp;
+
+set TIMEZONE = 'Europe/Moscow';
+
+select current_timestamp;
+
+rollback;
+
+select current_timestamp;
+
+
+/*Функция random является изменчивой volatile функцией. В тексте главы был показан результат
+  ее работы при многократном вызове.
+  Но ведь возможны случаи когда, когда для каждой строки формируемой в запросе, требуется случайное
+  значение - но одно и тоже
+  Каким образом получить такой результат
+    val1                 val2
+0.6223617015248359 |0.6223617015248359
+0.6223617015248359 |0.6223617015248359
+0.6223617015248359 |0.6223617015248359
+0.6223617015248359 |0.6223617015248359
+0.6223617015248359 |0.6223617015248359
+*/
+
+SELECT
+    (SELECT random()
+     FROM (SELECT setseed(0.456)) as s) as val1,
+    (SELECT random()
+     FROM (SELECT setseed(0.456)) as s) as val2,
+    id
+FROM generate_series(1, 5) as id;
