@@ -7876,7 +7876,6 @@ select current_timestamp;
 0.6223617015248359 |0.6223617015248359
 0.6223617015248359 |0.6223617015248359
 */
-
 SELECT
     (SELECT random()
      FROM (SELECT setseed(0.456)) as s) as val1,
@@ -7884,3 +7883,132 @@ SELECT
      FROM (SELECT setseed(0.456)) as s) as val2,
     id
 FROM generate_series(1, 5) as id;
+
+/*Можно сделать таким способом через  CROSS JOIN LATERAL
+Nested Loop - используется вложенный цикл для соединения
+rows=5 - ожидается 5 строк на выходе
+width=16 - каждая строка занимает 16 байт (2 значения double precision по 8 байт)
+loops=1 - весь запрос выполняется один раз
+
+->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.002..0.002 rows=1 loops=1)
+Это ключевой момент!
+Result - это выполнение подзапроса (SELECT random() as r)
+rows=1 - подзапрос возвращает 1 строку (одно значение random())
+loops=1 - подзапрос выполнен ВСЕГО ОДИН РАЗ
+actual time=0.002..0.002 - время выполнения ~0.002 мс
+
+  >  Function Scan on generate_series (cost=0.00..0.03 rows=5 width=0) (actual time=0.005..0.005 rows=5 loops=1)
+Function Scan on generate_series - выполнение функции generate_series(1, 5)
+rows=5 - генерируется 5 строк
+width=0 - сами числа не включаются в выход (они не используются в SELECT)
+
+Шаг 1: Внутренний цикл (подзапрос)
+sql
+-- Выполняется ОДИН РАЗ в начале:
+(SELECT random() as r)  --> возвращает, например, 0.47902012761444346
+Шаг 2: Внешний цикл (generate_series)
+sql
+-- Для каждой из 5 строк generate_series
+FROM generate_series(1, 5)  -- 1, 2, 3, 4, 5
+Шаг 3: Соединение (Nested Loop)
+text
+Результат:
+Строка 1: 0.47902012761444346 (из подзапроса) + 1 (из generate_series, но не используется)
+Строка 2: 0.47902012761444346 (то же самое значение!) + 2
+Строка 3: 0.47902012761444346 (то же самое значение!) + 3
+Строка 4: 0.47902012761444346 (то же самое значение!) + 4
+Строка 5: 0.47902012761444346 (то же самое значение!) + 5
+
+*/
+
+EXPLAIN ANALYZE
+SELECT
+    fr.r as "rand1",
+    fr.r  as "rand2"
+FROM generate_series(1, 5)
+         CROSS JOIN LATERAL (SELECT random() as r) fr;
+
+/*Функция random неожиданные результаты
+  При неосторожном обращении с функцией random можно получить неожиданные
+  результаты, давайте проведем несколько экспериментов*/
+
+select
+    g,
+    random(),
+    random()
+from generate_series(1,3) as g
+
+/*Теперь добавим сортировку по второму столбцу
+*/
+
+select
+    g,
+    random(),
+    random()
+from generate_series(1,3) as g
+order by 2
+
+/*Если вместо order by 2 написать order by random() картина будет аналогичная:*/
+
+select g, random(), random()
+from generate_series(1,3) as g
+order by random()
+
+/*Но если сортировать по двум столбцам, то при order by 2,3 все значения
+  будут разные, а order by random(), random() даст по два одинаковых значения в каждой строке!!!
+  */
+
+explain analyze VERBOSE
+select g, random(), random()
+from generate_series(1,3) as g
+order by 2,3
+
+explain analyze VERBOSE
+select g, random(), random()
+from generate_series(1,3) as g
+order by random(),random()
+
+/*
+Sort  (cost=0.03..0.03 rows=3 width=20) (actual time=0.015..0.016 rows=3 loops=1)
+  Output: g, (random()), (random())
+  Sort Key: (random()), (random())
+  Sort Method: quicksort  Memory: 25kB
+  ->  Function Scan on pg_catalog.generate_series g  (cost=0.00..0.02 rows=3 width=20) (actual time=0.007..0.007 rows=3 loops=1)
+        Output: g, random(), random()
+        Function Call: generate_series(1, 3)
+Query Identifier: 2559064185615782429
+Planning Time: 0.040 ms
+Execution Time: 0.037 ms
+*/
+
+
+
+/*Result  (cost=0.03..0.05 rows=3 width=20) (actual time=0.022..0.022 rows=3 loops=1)
+  Output: g, (random()), (random())
+  ->  Sort  (cost=0.03..0.03 rows=3 width=12) (actual time=0.021..0.021 rows=3 loops=1)
+        Output: g, (random())
+        Sort Key: (random())
+        Sort Method: quicksort  Memory: 25kB
+        ->  Function Scan on pg_catalog.generate_series g  (cost=0.00..0.02 rows=3 width=12) (actual time=0.011..0.012 rows=3 loops=1)
+              Output: g, random()
+              Function Call: generate_series(1, 3)
+
+
+
+Подробный анализ:
+Запрос 1:
+Function Scan: Генерирует 3 строки, сразу вычисляет ДВА random() для каждой
+width=20: g(4 байта?) + random()(8) + random()(8) = 20
+Sort: Сортирует результат по двум random() как ключам
+Запрос 2:
+Function Scan: Генерирует 3 строки, вычисляет ОДИН random()
+width=12: g(4) + random()(8) = 12
+Sort: Сортирует по одному random()
+Result: Добавляет второй random() (возможно, вычисляет его здесь)
+width становится 20
+*/
+
+
+/*Поиск корней квадратного уравнения
+
+*/
