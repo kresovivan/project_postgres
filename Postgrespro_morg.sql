@@ -8118,3 +8118,472 @@ select square_equation_1(0,-6,2,4);
 
 select *
 from square_equation_1(3,-6,4,3);
+
+SELECT square_equation_1(3, -6, 2)
+FROM generate_series(1, 10);
+
+SELECT square_equation(3, -6, 2)
+FROM generate_series(1, 10);
+
+/*Создайте таблицу coeffs, содержащую значения коэффициентов уравнений столбцы a,b,c.
+  Введите в нее несколько строк. Напишите запрос, в котором функция решает все уравнения,
+  определяемые коэффициентами из каждой строки таблицы, но также и в виде отдельных столбцов.
+
+  */
+
+-- Создаем таблицу
+CREATE TABLE coeffs (
+                        id SERIAL PRIMARY KEY,
+                        a DOUBLE PRECISION NOT NULL CHECK (a != 0),
+                        b DOUBLE PRECISION NOT NULL,
+                        c DOUBLE PRECISION NOT NULL,
+                        equation_name TEXT,
+                        discriminant DOUBLE PRECISION GENERATED ALWAYS AS (b * b - 4 * a * c) STORED,
+                        CHECK (discriminant >= 0), -- Гарантируем неотрицательный дискриминант
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Заполняем только корректными данными
+INSERT INTO coeffs (a, b, c, equation_name) VALUES
+-- Два действительных корня (D > 0)
+(1, -3, 2, 'x² - 3x + 2 = 0 (корни: 2, 1)'),
+(1, 0, -4, 'x² - 4 = 0 (корни: 2, -2)'),
+(2, 5, -3, '2x² + 5x - 3 = 0 (корни: 0.5, -3)'),
+(1, -5, 6, 'x² - 5x + 6 = 0 (корни: 3, 2)'),
+(1, 1, -6, 'x² + x - 6 = 0 (корни: 2, -3)'),
+(2, -7, 3, '2x² - 7x + 3 = 0 (корни: 3, 0.5)'),
+(1, -8, 12, 'x² - 8x + 12 = 0 (корни: 6, 2)'),
+
+-- Один действительный корень (D = 0)
+(1, 4, 4, 'x² + 4x + 4 = 0 (один корень: -2)'),
+(1, -6, 9, 'x² - 6x + 9 = 0 (один корень: 3)'),
+(4, 4, 1, '4x² + 4x + 1 = 0 (один корень: -0.5)'),
+(9, -12, 4, '9x² - 12x + 4 = 0 (один корень: 2/3)'),
+
+-- Дробные коэффициенты
+(1.5, -2.7, 1.2, '1.5x² - 2.7x + 1.2 = 0'),
+(0.5, 1.5, -2, '0.5x² + 1.5x - 2 = 0'),
+(2.25, -3.75, 1.25, '2.25x² - 3.75x + 1.25 = 0'),
+
+-- Разные комбинации знаков
+(1, 3, 2, 'x² + 3x + 2 = 0 (корни: -1, -2)'),
+(1, -2, -3, 'x² - 2x - 3 = 0 (корни: 3, -1)'),
+(1, 2, -3, 'x² + 2x - 3 = 0 (корни: 1, -3)'),
+(1, -4, -5, 'x² - 4x - 5 = 0 (корни: 5, -1)'),
+
+-- Коэффициенты с нулевым b
+(2, 0, -8, '2x² - 8 = 0 (корни: 2, -2)'),
+(3, 0, -27, '3x² - 27 = 0 (корни: 3, -3)'),
+
+-- Коэффициенты с нулевым c
+(1, 3, 0, 'x² + 3x = 0 (корни: 0, -3)'),
+(2, -5, 0, '2x² - 5x = 0 (корни: 2.5, 0)'),
+
+-- Более сложные случаи
+(1, -2.5, 1.5, 'x² - 2.5x + 1.5 = 0'),
+(0.25, -1, 1, '0.25x² - x + 1 = 0 (один корень: 2)');
+
+SELECT *
+FROM coeffs;
+
+/*OUT x1 numeric,
+OUT x2 numeric
+
+Что происходит:
+Функция вызывается ДВАЖДЫ для каждой строки
+Первый вызов: получаем x1
+Второй вызов: получаем x2
+ */
+
+EXPLAIN ANALYZE
+SELECT x1(square_equation(a, b, c)), x2(square_equation(a, b, c))
+FROM coeffs;
+
+/*Функция вызывается ОДИН РАЗ для каждой строки
+* разворачивает все поля результата*/
+
+EXPLAIN ANALYZE VERBOSE
+SELECT (square_equation(a, b, c)).*
+FROM coeffs;
+
+EXPLAIN ANALYZE VERBOSE
+SELECT x1, x2
+FROM coeffs
+         CROSS JOIN LATERAL square_equation(a, b, c);
+
+EXPLAIN ANALYZE VERBOSE
+SELECT s.x1, s.x2
+FROM coeffs,
+     square_equation(a, b, c) AS s( x1, x2 );
+
+/*Расчет заработной платы пилотов в зависимости от оклада, районного
+  коэффициента, и различных персональных надбавок, а также
+  с учетом налогов, вызовите вашу функцию в запросе возвращающей более
+  одной строки, чтобы функция проводила вычисления на основе различных исходных
+  значений, получаемых из базы данных*/
+
+
+pilots (master table)
+       │
+    ├───┬─── personal_allowances (1:N)
+    │   └─── pilot_id → pilots.pilot_id
+    │
+    ├───┬─── salary_calculations (1:N)
+    │   └─── pilot_id → pilots.pilot_id
+    │
+    ├───┼─── base_salaries (N:1 via rank + license_type)
+    │   │    pilots.rank → base_salaries.rank
+    │   │    pilots.license_type → base_salaries.license_type
+    │   │
+    │   └─── experience_categories (N:1 via experience)
+    │        (current_date - pilots.hire_date) BETWEEN
+    │        experience_categories.min_years AND max_years
+    │
+    └───┼─── tax_rates (indirect via salary)
+         │    salary_calculations.gross_salary BETWEEN
+         │    tax_rates.min_income AND max_income
+-- Таблица пилотов
+CREATE TABLE pilots (
+                        pilot_id SERIAL PRIMARY KEY,
+                        first_name VARCHAR(50) NOT NULL,
+                        last_name VARCHAR(50) NOT NULL,
+                        birth_date DATE NOT NULL,
+                        hire_date DATE NOT NULL,
+                        license_type VARCHAR(20) CHECK (license_type IN ('ATPL', 'CPL', 'MPL')),
+                        rank VARCHAR(20) CHECK (rank IN ('Капитан', 'Первый офицер', 'Второй офицер')),
+                        base_city VARCHAR(50) NOT NULL,
+                        region_coefficient NUMERIC(4,2) DEFAULT 1.0,
+                        has_northern_allowance BOOLEAN DEFAULT FALSE,
+                        northern_coefficient NUMERIC(4,2) DEFAULT 1.0
+);
+
+-- Комментарии для таблицы pilots
+COMMENT ON TABLE pilots IS 'Основная таблица сотрудников - пилотов авиакомпании. Содержит персональные данные, квалификацию и региональные коэффициенты.';
+
+-- Комментарии для полей таблицы pilots
+COMMENT ON COLUMN pilots.pilot_id IS 'Уникальный идентификатор пилота. Автоматически генерируемый последовательный номер.';
+COMMENT ON COLUMN pilots.first_name IS 'Имя пилота. Обязательное поле, максимальная длина 50 символов.';
+COMMENT ON COLUMN pilots.last_name IS 'Фамилия пилота. Обязательное поле, максимальная длина 50 символов.';
+COMMENT ON COLUMN pilots.birth_date IS 'Дата рождения пилота. Используется для расчета возраста и пенсионных отчислений.';
+COMMENT ON COLUMN pilots.hire_date IS 'Дата приема на работу. Используется для расчета стажа работы в компании.';
+COMMENT ON COLUMN pilots.license_type IS 'Тип летной лицензии: ATPL (Airline Transport), CPL (Commercial), MPL (Multi-crew). Определяет квалификацию пилота.';
+COMMENT ON COLUMN pilots.rank IS 'Должность пилота: Капитан (командир ВС), Первый офицер (второй пилот), Второй офицер (третий пилот).';
+COMMENT ON COLUMN pilots.base_city IS 'Базовый город работы пилота. Влияет на региональный коэффициент и логистику.';
+COMMENT ON COLUMN pilots.region_coefficient IS 'Региональный коэффициент к зарплате. Например: 1.2 для Москвы, 1.7 для Крайнего Севера.';
+COMMENT ON COLUMN pilots.has_northern_allowance IS 'Флаг наличия права на северную надбавку. TRUE - имеет право, FALSE - не имеет.';
+COMMENT ON COLUMN pilots.northern_coefficient IS 'Коэффициент северной надбавки. Диапазон от 1.0 до 2.0 в зависимости от региона.';
+
+-- Таблица стажа и категорий
+CREATE TABLE experience_categories (
+                                       category_id SERIAL PRIMARY KEY,
+                                       min_years INTEGER NOT NULL,
+                                       max_years INTEGER,
+                                       category_name VARCHAR(50) NOT NULL,
+                                       experience_bonus_percent NUMERIC(5,2) NOT NULL
+);
+
+-- Комментарии для таблицы experience_categories
+COMMENT ON TABLE experience_categories IS 'Категории стажа работы с соответствующими процентами надбавок. Используется для автоматического расчета премии за выслугу лет.';
+
+-- Комментарии для полей таблицы experience_categories
+COMMENT ON COLUMN experience_categories.category_id IS 'Уникальный идентификатор категории стажа. Автоматически генерируемый последовательный номер.';
+COMMENT ON COLUMN experience_categories.min_years IS 'Минимальный стаж в годах для попадания в категорию (включительно).';
+COMMENT ON COLUMN experience_categories.max_years IS 'Максимальный стаж в годах для категории (исключительно). NULL означает "и выше".';
+COMMENT ON COLUMN experience_categories.category_name IS 'Название категории стажа. Например: "Начинающий", "Опытный", "Эксперт".';
+COMMENT ON COLUMN experience_categories.experience_bonus_percent IS 'Процент надбавки к окладу за стаж работы. Например: 5.00 = 5% надбавки.';
+
+-- Таблица окладов по должностям
+CREATE TABLE base_salaries (
+                               salary_id SERIAL PRIMARY KEY,
+                               rank VARCHAR(20) UNIQUE NOT NULL,
+                               license_type VARCHAR(20) NOT NULL,
+                               base_salary NUMERIC(10,2) NOT NULL
+);
+
+-- Комментарии для таблицы base_salaries
+COMMENT ON TABLE base_salaries IS 'Базовые оклады по должностям и типам лицензий. Тарифная сетка компании.';
+
+-- Комментарии для полей таблицы base_salaries
+COMMENT ON COLUMN base_salaries.salary_id IS 'Уникальный идентификатор записи об окладе. Автоматически генерируемый последовательный номер.';
+COMMENT ON COLUMN base_salaries.rank IS 'Должность пилота. Должен соответствовать значениям из таблицы pilots.rank. Уникальное значение.';
+COMMENT ON COLUMN base_salaries.license_type IS 'Тип лицензии. Должен соответствовать значениям из таблицы pilots.license_type.';
+COMMENT ON COLUMN base_salaries.base_salary IS 'Базовый месячный оклад в рублях до вычета налогов и коэффициентов.';
+
+-- Таблица персональных надбавок
+CREATE TABLE personal_allowances (
+                                     allowance_id SERIAL PRIMARY KEY,
+                                     pilot_id INTEGER REFERENCES pilots(pilot_id),
+                                     allowance_type VARCHAR(50) CHECK (allowance_type IN ('За знание языков', 'За ночные рейсы',
+                                                                                          'За международные рейсы', 'За сложные условия',
+                                                                                          'За выслугу лет', 'Другое')),
+                                     amount NUMERIC(10,2) NOT NULL,
+                                     valid_from DATE NOT NULL,
+                                     valid_to DATE,
+                                     is_permanent BOOLEAN DEFAULT FALSE
+);
+
+-- Комментарии для таблицы personal_allowances
+COMMENT ON TABLE personal_allowances IS 'Дополнительные выплаты пилотам сверх базового оклада. Могут быть постоянными или временными.';
+
+-- Комментарии для полей таблицы personal_allowances
+COMMENT ON COLUMN personal_allowances.allowance_id IS 'Уникальный идентификатор надбавки. Автоматически генерируемый последовательный номер.';
+COMMENT ON COLUMN personal_allowances.pilot_id IS 'Ссылка на пилота. Внешний ключ к таблице pilots.pilot_id.';
+COMMENT ON COLUMN personal_allowances.allowance_type IS 'Тип надбавки: за языки, ночные рейсы, международные рейсы, сложные условия, выслугу лет или другие.';
+COMMENT ON COLUMN personal_allowances.amount IS 'Сумма надбавки в рублях. Ежемесячная выплата.';
+COMMENT ON COLUMN personal_allowances.valid_from IS 'Дата начала действия надбавки. С этой даты надбавка включается в расчет зарплаты.';
+COMMENT ON COLUMN personal_allowances.valid_to IS 'Дата окончания действия надбавки. NULL означает бессрочное действие.';
+COMMENT ON COLUMN personal_allowances.is_permanent IS 'Флаг постоянной надбавки. TRUE - надбавка без срока действия, FALSE - временная надбавка.';
+
+-- Таблица налоговых ставок
+CREATE TABLE tax_rates (
+                           tax_id SERIAL PRIMARY KEY,
+                           rate_name VARCHAR(50) NOT NULL,
+                           min_income NUMERIC(10,2),
+                           max_income NUMERIC(10,2),
+                           tax_percent NUMERIC(5,2) NOT NULL,
+                           effective_date DATE NOT NULL
+);
+
+-- Комментарии для таблицы tax_rates
+COMMENT ON TABLE tax_rates IS 'Актуальные ставки НДФЛ (налога на доходы физических лиц). Поддерживает прогрессивную шкалу налогообложения.';
+
+-- Комментарии для полей таблицы tax_rates
+COMMENT ON COLUMN tax_rates.tax_id IS 'Уникальный идентификатор налоговой ставки. Автоматически генерируемый последовательный номер.';
+COMMENT ON COLUMN tax_rates.rate_name IS 'Название налоговой ставки. Например: "Основная ставка НДФЛ", "Повышенная ставка для высоких доходов".';
+COMMENT ON COLUMN tax_rates.min_income IS 'Минимальный годовой доход для применения ставки (включительно). NULL означает "от 0".';
+COMMENT ON COLUMN tax_rates.max_income IS 'Максимальный годовой доход для применения ставки (включительно). NULL означает "и выше".';
+COMMENT ON COLUMN tax_rates.tax_percent IS 'Процент налога. Например: 13.00 = 13% от налогооблагаемой базы.';
+COMMENT ON COLUMN tax_rates.effective_date IS 'Дата вступления ставки в силу. Позволяет хранить историю изменений налогового законодательства.';
+
+-- Таблица расчетов зарплаты (история)
+CREATE TABLE salary_calculations (
+                                     calculation_id SERIAL PRIMARY KEY,
+                                     pilot_id INTEGER REFERENCES pilots(pilot_id),
+                                     calculation_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                                     period_start DATE NOT NULL,
+                                     period_end DATE NOT NULL,
+                                     base_salary NUMERIC(10,2),
+                                     region_coefficient NUMERIC(4,2),
+                                     northern_coefficient NUMERIC(4,2),
+                                     experience_bonus_percent NUMERIC(5,2),
+                                     total_allowances NUMERIC(10,2),
+                                     gross_salary NUMERIC(10,2),
+                                     tax_amount NUMERIC(10,2),
+                                     tax_percent NUMERIC(5,2),
+                                     net_salary NUMERIC(10,2),
+                                     calculation_details JSONB
+);
+
+-- Комментарии для таблицы salary_calculations
+COMMENT ON TABLE salary_calculations IS 'Журнал расчетов заработной платы за различные периоды. Позволяет отслеживать историю выплат и проводить аудит.';
+
+-- Комментарии для полей таблицы salary_calculations
+COMMENT ON COLUMN salary_calculations.calculation_id IS 'Уникальный идентификатор расчета зарплаты. Автоматически генерируемый последовательный номер.';
+COMMENT ON COLUMN salary_calculations.pilot_id IS 'Ссылка на пилота. Внешний ключ к таблице pilots.pilot_id.';
+COMMENT ON COLUMN salary_calculations.calculation_date IS 'Дата проведения расчета зарплаты. По умолчанию - текущая дата.';
+COMMENT ON COLUMN salary_calculations.period_start IS 'Начало расчетного периода. Обычно первое число месяца.';
+COMMENT ON COLUMN salary_calculations.period_end IS 'Конец расчетного периода. Обычно последнее число месяца.';
+COMMENT ON COLUMN salary_calculations.base_salary IS 'Базовый оклад пилота на момент расчета. Фиксируется для истории.';
+COMMENT ON COLUMN salary_calculations.region_coefficient IS 'Региональный коэффициент на момент расчета. Фиксируется для истории.';
+COMMENT ON COLUMN salary_calculations.northern_coefficient IS 'Северный коэффициент на момент расчета. Фиксируется для истории.';
+COMMENT ON COLUMN salary_calculations.experience_bonus_percent IS 'Процент надбавки за стаж на момент расчета. Фиксируется для истории.';
+COMMENT ON COLUMN salary_calculations.total_allowances IS 'Сумма всех персональных надбавок за расчетный период.';
+COMMENT ON COLUMN salary_calculations.gross_salary IS 'Начисленная зарплата до вычета налогов (грязная зарплата).';
+COMMENT ON COLUMN salary_calculations.tax_amount IS 'Сумма удержанного налога на доходы физических лиц (НДФЛ).';
+COMMENT ON COLUMN salary_calculations.tax_percent IS 'Примененная налоговая ставка в процентах.';
+COMMENT ON COLUMN salary_calculations.net_salary IS 'Зарплата к выплате после вычета налогов (чистая зарплата).';
+COMMENT ON COLUMN salary_calculations.calculation_details IS 'Детальная информация о расчете в формате JSON. Содержит состав надбавок, применяемые коэффициенты и другие параметры.';
+
+
+-- 1. Вставляем категории стажа (experience_categories)
+INSERT INTO experience_categories (min_years, max_years, category_name, experience_bonus_percent)
+VALUES (0, 2, 'Начинающий', 5.00),
+       (2, 5, 'Опытный специалист', 10.00),
+       (5, 10, 'Старший специалист', 15.00),
+       (10, 20, 'Ведущий специалист', 20.00),
+       (20, NULL, 'Эксперт', 25.00);
+
+-- 2. Вставляем базовые оклады (base_salaries)
+--truncate base_salaries
+INSERT INTO base_salaries (rank, license_type, base_salary)
+VALUES ('Капитан', 'ATPL', 350000.00),
+       ('Капитан', 'CPL', 320000.00),
+       ('Первый офицер', 'ATPL', 280000.00),
+       ('Первый офицер', 'CPL', 250000.00),
+       ('Второй офицер', 'MPL', 220000.00),
+       ('Второй офицер', 'CPL', 200000.00);
+
+-- 3. Вставляем налоговые ставки (tax_rates)
+INSERT INTO tax_rates (rate_name, min_income, max_income, tax_percent, effective_date)
+VALUES ('Основная ставка НДФЛ', 0.00, 5000000.00, 13.00, '2024-01-01'),
+       ('Повышенная ставка НДФЛ', 5000000.01, NULL, 15.00, '2024-01-01');
+
+-- 4. Вставляем 20 пилотов (pilots)
+INSERT INTO pilots (first_name, last_name, birth_date, hire_date, license_type, rank, base_city, region_coefficient,
+                    has_northern_allowance, northern_coefficient)
+VALUES
+-- Старшие капитаны с большим опытом
+('Александр', 'Иванов', '1978-03-15', '2000-06-10', 'ATPL', 'Капитан', 'Москва', 1.20, FALSE, 1.0),
+('Дмитрий', 'Петров', '1980-11-22', '2002-09-15', 'ATPL', 'Капитан', 'Новосибирск', 1.30, TRUE, 1.5),
+('Михаил', 'Сидоров', '1982-05-30', '2005-03-20', 'ATPL', 'Капитан', 'Екатеринбург', 1.25, FALSE, 1.0),
+('Сергей', 'Кузнецов', '1985-08-14', '2008-07-05', 'ATPL', 'Капитан', 'Хабаровск', 1.40, TRUE, 1.7),
+
+-- Капитаны со средним опытом
+('Андрей', 'Попов', '1987-02-18', '2010-11-12', 'CPL', 'Капитан', 'Краснодар', 1.15, FALSE, 1.0),
+('Алексей', 'Лебедев', '1988-12-25', '2012-04-18', 'ATPL', 'Капитан', 'Владивосток', 1.35, TRUE, 1.6),
+('Павел', 'Соколов', '1990-07-03', '2014-02-28', 'ATPL', 'Капитан', 'Казань', 1.10, FALSE, 1.0),
+
+-- Первые офицеры с опытом
+('Иван', 'Козлов', '1991-09-17', '2015-08-22', 'ATPL', 'Первый офицер', 'Нижний Новгород', 1.18, FALSE, 1.0),
+('Роман', 'Новиков', '1992-06-11', '2016-01-15', 'ATPL', 'Первый офицер', 'Мурманск', 1.50, TRUE, 2.0),
+('Евгений', 'Морозов', '1993-02-28', '2017-05-30', 'CPL', 'Первый офицер', 'Омск', 1.22, FALSE, 1.0),
+
+-- Первые офицеры (молодые)
+('Виктор', 'Волков', '1994-10-05', '2018-03-14', 'CPL', 'Первый офицер', 'Ростов-на-Дону', 1.16, FALSE, 1.0),
+('Григорий', 'Алексеев', '1995-01-19', '2019-07-08', 'CPL', 'Первый офицер', 'Красноярск', 1.32, TRUE, 1.4),
+
+-- Вторые офицеры
+('Артем', 'Семенов', '1996-08-12', '2020-10-01', 'MPL', 'Второй офицер', 'Уфа', 1.12, FALSE, 1.0),
+('Константин', 'Егоров', '1997-03-27', '2021-12-05', 'MPL', 'Второй офицер', 'Иркутск', 1.28, TRUE, 1.3),
+('Станислав', 'Павлов', '1993-05-30', '2022-04-20', 'CPL', 'Второй офицер', 'Волгоград', 1.14, FALSE, 1.0),
+
+-- Разные города и условия
+('Вадим', 'Степанов', '1989-11-08', '2013-08-15', 'ATPL', 'Капитан', 'Якутск', 1.45, TRUE, 1.8),
+('Олег', 'Николаев', '1990-06-14', '2015-01-10', 'CPL', 'Первый офицер', 'Калининград', 1.20, FALSE, 1.0),
+('Максим', 'Орлов', '1984-04-09', '2009-11-22', 'ATPL', 'Капитан', 'Магадан', 1.48, TRUE, 1.9),
+('Юрий', 'Андреев', '1995-12-01', '2021-05-18', 'MPL', 'Второй офицер', 'Самара', 1.13, FALSE, 1.0),
+('Владислав', 'Макаров', '1992-07-24', '2018-02-28', 'CPL', 'Первый офицер', 'Тюмень', 1.26, FALSE, 1.0);
+
+-- 5. Вставляем персональные надбавки (personal_allowances)
+-- Надбавки распределены между разными пилотами
+INSERT INTO personal_allowances (pilot_id, allowance_type, amount, valid_from, valid_to, is_permanent)
+VALUES
+-- Постоянные надбавки
+(1, 'За знание языков', 20000.00, '2020-01-01', NULL, TRUE),
+(2, 'За северные условия', 35000.00, '2015-01-01', NULL, TRUE),
+(3, 'За международные рейсы', 25000.00, '2018-06-01', NULL, TRUE),
+(4, 'За сложные условия', 30000.00, '2019-03-15', NULL, TRUE),
+(5, 'За выслугу лет', 15000.00, '2020-01-01', NULL, TRUE),
+(6, 'За знание языков', 18000.00, '2021-02-01', NULL, TRUE),
+
+-- Временные надбавки (на определенный период)
+(7, 'За ночные рейсы', 12000.00, '2024-03-01', '2024-12-31', FALSE),
+(8, 'За международные рейсы', 22000.00, '2024-04-01', '2024-10-31', FALSE),
+(9, 'За северные условия', 40000.00, '2023-01-01', '2025-12-31', FALSE),
+(10, 'За сложные условия', 20000.00, '2024-05-01', '2024-11-30', FALSE),
+(11, 'За знание языков', 15000.00, '2024-01-01', '2024-12-31', FALSE),
+
+-- Дополнительные надбавки
+(12, 'За ночные рейсы', 14000.00, '2024-06-01', '2024-12-31', FALSE),
+(13, 'За международные рейсы', 18000.00, '2024-02-01', '2024-08-31', FALSE),
+(14, 'За северные условия', 32000.00, '2022-07-01', '2024-12-31', FALSE),
+(15, 'За выслугу лет', 10000.00, '2024-01-01', NULL, TRUE),
+(16, 'За сложные условия', 28000.00, '2023-11-01', '2025-06-30', FALSE),
+(17, 'За знание языков', 17000.00, '2024-03-15', '2024-09-30', FALSE),
+(18, 'За северные условия', 45000.00, '2020-01-01', NULL, TRUE),
+(19, 'За ночные рейсы', 11000.00, '2024-04-01', '2024-12-31', FALSE),
+(20, 'За международные рейсы', 19000.00, '2024-01-01', '2024-12-31', FALSE),
+
+-- Некоторые пилоты имеют несколько надбавок
+(1, 'За международные рейсы', 18000.00, '2023-01-01', '2024-12-31', FALSE),
+(2, 'За сложные условия', 22000.00, '2024-01-01', NULL, TRUE),
+(3, 'За знание языков', 16000.00, '2022-08-01', NULL, TRUE),
+(5, 'За ночные рейсы', 13000.00, '2024-03-01', '2024-09-30', FALSE),
+(8, 'За северные условия', 28000.00, '2024-01-01', '2025-01-01', FALSE),
+(12, 'За международные рейсы', 21000.00, '2024-05-01', '2024-11-30', FALSE);
+
+-- 6. Вставляем историю расчетов зарплаты (salary_calculations)
+-- За последние 3 месяца для всех пилотов
+INSERT INTO salary_calculations (pilot_id, calculation_date, period_start, period_end,
+                                 base_salary, region_coefficient, northern_coefficient,
+                                 experience_bonus_percent, total_allowances,
+                                 gross_salary, tax_amount, tax_percent, net_salary, calculation_details)
+SELECT p.pilot_id,
+       CASE
+           WHEN m.month_offset = 0 THEN CURRENT_DATE - INTERVAL '5 days'
+           WHEN m.month_offset = 1 THEN CURRENT_DATE - INTERVAL '35 days'
+           WHEN m.month_offset = 2 THEN CURRENT_DATE - INTERVAL '65 days'
+           END                                                                                AS calculation_date,
+       DATE_TRUNC('month', CURRENT_DATE - (m.month_offset || ' months')::INTERVAL)            AS period_start,
+       (DATE_TRUNC('month', CURRENT_DATE - (m.month_offset || ' months')::INTERVAL) + INTERVAL '1 month' -
+        INTERVAL '1 day')::DATE                                                               AS period_end,
+       bs.base_salary,
+       p.region_coefficient,
+       p.northern_coefficient,
+       ec.experience_bonus_percent,
+       COALESCE(pa.total_allowances, 0)                                                       AS total_allowances,
+       -- Расчет гросс-зарплаты
+       ROUND((bs.base_salary * p.region_coefficient * p.northern_coefficient *
+              (1 + ec.experience_bonus_percent / 100) + COALESCE(pa.total_allowances, 0)), 2) AS gross_salary,
+       -- Расчет налога
+       ROUND((bs.base_salary * p.region_coefficient * p.northern_coefficient *
+              (1 + ec.experience_bonus_percent / 100) + COALESCE(pa.total_allowances, 0)) *
+             CASE
+                 WHEN (bs.base_salary * p.region_coefficient * p.northern_coefficient *
+                       (1 + ec.experience_bonus_percent / 100) + COALESCE(pa.total_allowances, 0)) > 416666.67
+                     THEN 0.15 -- Годовой эквивалент > 5 млн
+                 ELSE 0.13
+                 END, 2)                                                                      AS tax_amount,
+       CASE
+           WHEN (bs.base_salary * p.region_coefficient * p.northern_coefficient *
+                 (1 + ec.experience_bonus_percent / 100) + COALESCE(pa.total_allowances, 0)) > 416666.67
+               THEN 15.00
+           ELSE 13.00
+           END                                                                                AS tax_percent,
+       -- Расчет чистой зарплаты
+       ROUND((bs.base_salary * p.region_coefficient * p.northern_coefficient *
+              (1 + ec.experience_bonus_percent / 100) + COALESCE(pa.total_allowances, 0)) *
+             (1 - CASE
+                      WHEN (bs.base_salary * p.region_coefficient * p.northern_coefficient *
+                            (1 + ec.experience_bonus_percent / 100) + COALESCE(pa.total_allowances, 0)) > 416666.67
+                          THEN 0.15
+                      ELSE 0.13
+                 END), 2)                                                                     AS net_salary,
+       -- Детали расчета в JSON
+       JSONB_BUILD_OBJECT(
+               'experience_years',
+               ROUND(EXTRACT(YEAR FROM AGE(CURRENT_DATE - (m.month_offset || ' months')::INTERVAL, p.hire_date)) +
+                     EXTRACT(MONTH FROM AGE(CURRENT_DATE - (m.month_offset || ' months')::INTERVAL, p.hire_date)) /
+                     12.0, 2),
+               'category_name', ec.category_name,
+               'allowances_details', COALESCE(pa.allowances_json, '[]'::jsonb)
+       )                                                                                      AS calculation_details
+FROM pilots p
+         JOIN base_salaries bs ON p.rank = bs.rank AND p.license_type = bs.license_type
+         JOIN experience_categories ec ON
+    EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) >= ec.min_years
+        AND (ec.max_years IS NULL OR EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) < ec.max_years)
+         LEFT JOIN (SELECT pilot_id,
+                           SUM(amount)  AS total_allowances,
+                           JSONB_AGG(JSONB_BUILD_OBJECT(
+                                   'type', allowance_type,
+                                   'amount', amount,
+                                   'valid_from', valid_from,
+                                   'valid_to', valid_to
+                                     )) AS allowances_json
+                    FROM personal_allowances
+                    WHERE valid_from <= CURRENT_DATE
+                      AND (valid_to IS NULL OR valid_to >= CURRENT_DATE - INTERVAL '3 months')
+                    GROUP BY pilot_id) pa ON p.pilot_id = pa.pilot_id
+         CROSS JOIN (VALUES (0), (1), (2)) AS m( month_offset ) -- 3 последних месяца
+WHERE p.pilot_id <= 20 -- Все 20 пилотов
+ORDER BY p.pilot_id, m.month_offset DESC;
+
+-- 1. Проверяем количество записей
+SELECT 'pilots' AS table_name, COUNT(*) AS count
+FROM pilots
+UNION ALL
+SELECT 'experience_categories', COUNT(*)
+FROM experience_categories
+UNION ALL
+SELECT 'base_salaries', COUNT(*)
+FROM base_salaries
+UNION ALL
+SELECT 'tax_rates', COUNT(*)
+FROM tax_rates
+UNION ALL
+SELECT 'personal_allowances', COUNT(*)
+FROM personal_allowances
+UNION ALL
+SELECT 'salary_calculations', COUNT(*)
+FROM salary_calculations;
