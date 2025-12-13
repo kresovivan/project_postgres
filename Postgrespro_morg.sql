@@ -8010,5 +8010,111 @@ width становится 20
 
 
 /*Поиск корней квадратного уравнения
-
+На языке SQL можно написать функцию, вычисляющую, например, действительные корни квадратного
+уравнения.
+В конструкции with сначала вычисляется дискриминант, а затем - корни уравнения. В
+  главном запросе значения корней округляются с требуемой точностью. Обратите внимание,
+  что подзапрос в вызове функций sqrt заключается в скобки.
 */
+----drop function square_equation;
+
+CREATE OR REPLACE FUNCTION square_equation(
+    a        double precision,
+    b        double precision,
+    c        double PRECISION,
+    accuracy integer DEFAULT 2,
+    OUT x1   numeric,
+    OUT x2   numeric
+) AS
+$$
+WITH discriminant AS
+             (SELECT b * b - 4 * a * c AS d),
+     roots AS
+         (SELECT (-b + SQRT((SELECT d FROM discriminant))) / (2 * a) AS x_one,
+                 (-b - SQRT((SELECT d FROM discriminant))) / (2 * a) AS x_two)
+
+SELECT ROUND(x_one::NUMERIC, accuracy) AS x_one,
+       ROUND(x_two::NUMERIC, accuracy) AS x_two
+FROM roots;
+$$ LANGUAGE sql;
+
+
+select square_equation(3,-6,2);
+
+/*Зададим точность округления до 4 цифр функция в select - выводится как составной тип*/
+select square_equation(3,-6,2,4);
+
+/*Значения выводятся как отдельные столбцы если указываем функцию во from*/
+select *
+from square_equation(3,-6,2,4);
+
+
+select *
+from square_equation(3,-6,2,4);
+
+/*[2025-12-13 23:36:55] [2201F] ERROR: cannot take square root of a negative number
+[2025-12-13 23:36:55] Где: SQL function "square_equation" statement 1*/
+select *
+from square_equation(3,-6,4,4);
+
+/*[2025-12-13 23:37:45] [22012] ERROR: division by zero
+[2025-12-13 23:37:45] Где: SQL function "square_equation" statement 1 */
+select *
+from square_equation(0,-6,2,4);
+
+/*При создании этой функции мы не указали категорию изменчивости функции, поэтому
+  по умолчанию принимается volatile а можно ли назначить
+  категорию изменчивости stable или immutable? И почему?*/
+
+---drop function square_equation_1
+
+CREATE OR REPLACE FUNCTION square_equation_1(
+    a        double precision,
+    b        double precision,
+    c        double precision,
+    accuracy integer DEFAULT 2,
+    OUT x1   numeric,
+    OUT x2   numeric
+) RETURNS record
+    IMMUTABLE
+    STRICT
+AS $$
+DECLARE
+    d double precision;
+    d_rounded numeric;  -- Для округленного значения дискриминанта
+BEGIN
+    -- Проверка: accuracy должен быть >= 0
+    IF accuracy < 0 THEN
+        RAISE EXCEPTION 'Точность (accuracy) должна быть >= 0';
+    END IF;
+
+    -- Проверка a = 0
+    IF a = 0 THEN
+        RAISE EXCEPTION 'Коэффициент "a" не может быть равен нулю в квадратном уравнении';
+    END IF;
+
+    -- Вычисляем дискриминант
+    d := b * b - 4 * a * c;
+
+    -- Округляем дискриминант для сообщения об ошибке
+    d_rounded := ROUND(d::numeric, accuracy);
+
+    -- Проверка отрицательного дискриминанта
+    IF d < 0 THEN
+        RAISE EXCEPTION 'Дискриминант отрицательный (%): уравнение не имеет действительных корней',
+            d_rounded;
+    END IF;
+
+    -- Вычисляем корни
+    x1 := ROUND(((-b + SQRT(d)) / (2 * a))::NUMERIC, accuracy);
+    x2 := ROUND(((-b - SQRT(d)) / (2 * a))::NUMERIC, accuracy);
+
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+
+select square_equation_1(0,-6,2,4);
+
+select *
+from square_equation_1(3,-6,4,3);
