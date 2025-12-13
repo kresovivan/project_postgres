@@ -8587,3 +8587,69 @@ FROM personal_allowances
 UNION ALL
 SELECT 'salary_calculations', COUNT(*)
 FROM salary_calculations;
+
+SELECT *
+FROM pilots;
+
+select *
+FROM experience_categories;
+
+SELECT  *
+FROM base_salaries;
+
+SELECT *
+FROM tax_rates;
+
+SELECT *
+FROM personal_allowances;
+
+/*
+UPDATE personal_allowances
+SET valid_to = '9999-12-31'::DATE
+WHERE valid_to IS NULL;
+*/
+
+/*
+SELECT *
+FROM salary_calculations;
+*/
+
+
+/*Создать функцию по расчету заработной платы пилотов в зависимости от оклада, районного
+  коэффициента, и различных персональных надбавок, а также
+  с учетом налогов, вызовите вашу функцию в запросе возвращающей более
+  одной строки, чтобы функция проводила вычисления на основе различных исходных
+  значений, получаемых из базы данных*/
+
+
+SELECT EXTRACT(YEAR FROM AGE(CURRENT_DATE, hire_date)) as experience_interval,
+        AGE(CURRENT_DATE, hire_date) as age_mons_days_hours_mins_secs
+FROM pilots;
+
+SELECT *
+FROM pilots;
+
+select *
+FROM experience_categories;
+
+
+/*Вычисляем пилотов и надбавки и бонусы, которые им положены*/
+with pilots_cte as (SELECT
+    p.pilot_id,
+    p.first_name || ' ' || p.last_name as pilot_name, -- Рассчитываем стаж в годах
+    EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) as experience_years,  -- Определяем категорию
+    ec.category_name,
+    ec.experience_bonus_percent,
+    p.region_coefficient,
+    p.northern_coefficient
+FROM pilots p
+JOIN experience_categories ec ON
+    -- Проверяем, что стаж попадает в диапазон
+    EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) >= ec.min_years
+AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) < ec.max_years
+ORDER BY p.pilot_id)
+
+
+select *
+from pilots_cte
+;
