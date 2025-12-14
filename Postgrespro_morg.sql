@@ -9055,4 +9055,143 @@ FROM tickets
 GROUP BY book_ref
 HAVING COUNT(book_ref) > 4;
 
-/*Подстановка в запрос кода скалярной функции*/
+/*Подстановка в запрос кода скалярной функции
+  Возможна подстановка в запрос кода табличных функций и скалярных функций.
+  Это такие функции которые можно использовать в выражениях или предикатах,
+  то есть там, где требуется значение или условие
+
+Скалярная функция (Scalar Function)
+Возвращает одно значение (скаляр) для каждой строки результата.
+Тип возвращаемого значения может быть любым:
+integer, text, date, boolean и т.д.
+Табличная функция (Table-Valued Function):
+Возвращает набор строк (таблицу) с определенной структурой колонок.
+Может возвращать 0, 1 или множество строк.
+
+  Возьмем в качестве примера функцию, выбирающую фамилию пассажира из его полного имени
+*/
+
+create or replace function get_lastname(fullname text)
+returns text as
+    $$
+    select substr(fullname, strpos(fullname,' ')+1);
+    ---Шаг 2: strpos(fullname, ' ') + 1 Добавляет 1, чтобы начать с символа после пробела
+    ---5 + 1 = 6 (начинаем с 6-го символа)
+    $$ LANGUAGE sql IMMUTABLE;
+
+
+
+CREATE OR REPLACE FUNCTION get_lastname_1(fullname text)
+    RETURNS text AS
+$$
+SELECT
+    CASE
+        WHEN fullname ~ '.* .*'  -- проверка, что есть минимум два слова
+            THEN regexp_replace(fullname, '^.* ', '')  -- удаляем все до последнего пробела
+        ELSE ''
+        END;
+$$ LANGUAGE sql IMMUTABLE;
+
+
+/*Обратите внимание, что код скалярной функции оказался подставленном
+  в текст запроса. Чтобы такая подстановка стала возможной, требуется
+  выполнить ряд условий, описанных в документе inlining of sql functions*
+  В частности функция должна быть написана на языке SQL, она должна
+  возвращать один столбец, тело функции должно состоять из единственной команды
+  select выражение
+  В этой команде не допускаются другие предложения, такие как from where group by
+  и т.д. Возвращаемое значение функции не должно быть определено как
+  returns record, returns setof или returns table.
+  А какой выигрыш в скорости выполнения запроса мы получили при подстановке в него
+  кода функции? Для ответа на вопрос нужно каким-то образом запретить подстановку
+  кода.
+
+  У функций есть еще одна характеристика, которую мы не рассматривали, поскольку она
+  выходит за рамки данной книги. Эта характеристика связана с привиллегиями доступа к объектам
+  базы данных и по умолчанию имеет значение security invoker: функция будет исполняться
+  с привиллегиями пользователя, который ее вызвал. Такое значение не препятствует
+  встраиванию кода функции в запрос. Однако если его изменить на security definer(тот
+  пользователь который создал данную функцию), встраивание станет невозмоожным.
+
+ */
+explain(analyze, costs off)
+select count(*)
+from tickets
+where get_lastname(passenger_name) = 'NOVIKOV';
+
+/*C регулярным выражением
+  Выражение (expression) в SQL - это комбинация одного или
+  нескольких значений, операторов и функций,
+  которая вычисляется и возвращает значение.
+"Одно выражение" = один вычисляемый результат, который может состоять из:
+Одного значения
+Одной функции (с параметрами)
+Комбинации значений и операторов
+Условного оператора CASE
+Но в итоге это должно вычисляться в ОДНО значение для каждой строки
+
+Выражение - это синтаксическая конструкция языка программирования или запросов, которая:
+Вычисляется (evaluated)
+Возвращает значение (returns a value)
+Не изменяет состояние системы (не имеет побочных эффектов)
+Математическая аналогия:
+2 + 3 ← выражение (результат: 5)
+x * y ← выражение (если x=4, y=5, результат: 20)
+sin(π/2) ← выражение (результат: 1)
+
+В SQL:
+1. Простые (литералы и идентификаторы):
+42                    -- числовой литерал
+'Иван'               -- строковый литерал
+TRUE                 -- булевый литерал
+passenger_name       -- идентификатор столбца
+
+2.составные комбинации:
+price * quantity                     -- арифметическое
+name || ' ' || surname              -- строковое
+age >= 18 AND status = 'active'     -- логическое
+COUNT(*)                            -- агрегатное
+COALESCE(value, 0)                  -- функциональное
+
+3.Условные:
+CASE WHEN score > 90 THEN 'A' ELSE 'B' END
+*/
+explain(analyze, costs off)
+select count(*)
+from tickets
+where get_lastname_1(passenger_name) = 'NOVIKOV';
+
+
+alter function get_lastname security definer;
+
+
+/*Aggregate (actual time=753.810..753.810 rows=1 loops=1)
+  ->  Seq Scan on tickets (actual time=0.458..753.270 rows=2278 loops=1)
+        Filter: (get_lastname(passenger_name) = 'NOVIKOV'::text)
+        Rows Removed by Filter: 364455
+Planning Time: 0.205 ms
+Execution Time: 753.893 ms
+
+Подстановка кода не выполнилась и времени для ее выполнения запроса
+  потребовалось значительно больше
+*/
+explain(analyze, costs off)
+select count(*)
+from tickets
+where get_lastname(passenger_name) = 'NOVIKOV';
+
+/*Возвращаем обратно значение security INVOKER*/
+
+ALTER FUNCTION get_lastname SECURITY INVOKER;
+
+/*Aggregate (actual time=79.142..79.142 rows=1 loops=1)
+  ->  Seq Scan on tickets (actual time=0.071..78.968 rows=2278 loops=1)
+        Filter: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+        Rows Removed by Filter: 364455
+Planning Time: 0.310 ms
+Execution Time: 79.191 ms
+*/
+explain(analyze, costs off)
+select count(*)
+from tickets
+where get_lastname(passenger_name) = 'NOVIKOV';
