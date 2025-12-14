@@ -9195,3 +9195,305 @@ explain(analyze, costs off)
 select count(*)
 from tickets
 where get_lastname(passenger_name) = 'NOVIKOV';
+
+/*А если мы создадим индекс по passenger_name, будет ли он использоваться
+  при выполнении запроса? Ведь в коде функции этот столбец используется
+  только в качестве параметра функций substr и strpos*/
+
+CREATE INDEX ON tickets ( passenger_name );
+
+
+ANALYZE tickets;
+
+/*Как посмотреть размеры индексов, размеры таблиц!!!*/
+SELECT nspname || '.' || relname                                               AS "table",
+       PG_SIZE_PRETTY(PG_TOTAL_RELATION_SIZE(c.oid))                           AS "total_size",
+       PG_SIZE_PRETTY(PG_RELATION_SIZE(c.oid))                                 AS "data_size",
+       PG_SIZE_PRETTY(PG_TOTAL_RELATION_SIZE(c.oid) - PG_RELATION_SIZE(c.oid)) AS "index_size",
+       reltuples::bigint                                                       AS "rows"
+FROM pg_class c
+         LEFT JOIN pg_namespace n ON (n.oid = c.relnamespace)
+WHERE nspname NOT IN ( 'pg_catalog', 'information_schema' )
+  AND c.relkind = 'r'
+ORDER BY PG_TOTAL_RELATION_SIZE(c.oid) DESC;
+
+/*Проверяем после того как сделан индекс
+  Aggregate (actual time=65.329..65.330 rows=1 loops=1)
+  ->  Index Only Scan using tickets_passenger_name_idx on tickets (actual time=0.136..65.235 rows=2278 loops=1)
+        Filter: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+        Rows Removed by Filter: 364455
+        Heap Fetches: 17
+Planning Time: 0.736 ms
+Execution Time: 65.375 ms
+  */
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+/*Все индексы в PostgreSQL являются вторичными, что значит, что каждый индекс хранится
+  вне области основных данных таблицы (которая в терминологии PostgreSQL называется кучей
+  таблицы). Это значит, что при обычном сканировании индекса для извлечения каждой строки
+  необходимо прочитать данные и из индекса, и из кучи. Более того, тогда как элементы индекса,
+  соответствующие заданному условию WHERE, обычно находятся в индексе рядом, строки таблицы
+  могут располагаться в куче произвольным образом. Таким образом, обращение к куче при поиске
+  по индексу влечёт множество операций произвольного чтения кучи, которые могут обойтись
+  недёшево, особенно на традиционных вращающихся носителях. (Как описано в Разделе 11.5,
+  сканирование по битовой карте пытается снизить стоимость этих операций, упорядочивая
+  доступ к куче, но не более того.
+
+
+  Чтобы решить эту проблему с производительностью, PostgreSQL поддерживает сканирование
+  только индекса, при котором результат запроса может быть получен из самого индекса,
+  без обращения к куче. Основная идея такого сканирования в том, чтобы выдавать значения
+  непосредственно из элемента индекса, и не обращаться к соответствующей записи в куче.
+  Для применения этого метода есть два фундаментальных ограничения:
+
+Тип индекса должен поддерживать сканирование только индекса. Индексы-B-деревья
+  поддерживают его всегда. Индексы GiST и SP-GiST могут поддерживать его с одними
+  классами операторов и не поддерживать с другими. Другие индексы такое сканирование
+  не поддерживают. Суть нижележащего требования в том, что индекс должен физически
+  хранить или каким-то образом восстанавливать исходное значение данных для каждого
+  элемента индекса. В качестве контрпримера, индексы GIN неспособны поддерживать
+  сканирование только индекса, так как в элементах индекса обычно хранится только
+  часть исходного значения данных.
+
+Запрос должен обращаться только к столбцам, сохранённым в индексе. Например, если
+в таблице построен индекс по столбцам x и y, и в ней есть также столбец z, такие
+запросы будут использовать сканирование только индекса:
+
+SELECT x, y FROM tab WHERE x = 'key';
+SELECT x FROM tab WHERE x = 'key' AND y < 42;
+
+А эти запросы не будут:
+SELECT x, z FROM tab WHERE x = 'key';
+SELECT x FROM tab WHERE x = 'key' AND z < 42;
+
+https://postgrespro.ru/docs/postgresql/current/indexes-index-only-scans
+*/
+
+CREATE INDEX idx_tickets_lastname ON tickets
+    USING btree ( SUBSTR(passenger_name, STRPOS(passenger_name, ' ') + 1) );
+
+ANALYZE tickets;
+
+/*Aggregate (actual time=2.375..2.376 rows=1 loops=1)
+  ->  Bitmap Heap Scan on tickets (actual time=0.621..2.283 rows=2278 loops=1)
+        Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+        Heap Blocks: exact=1897
+        ->  Bitmap Index Scan on idx_tickets_lastname (actual time=0.424..0.424 rows=2278 loops=1)
+              Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.388 ms
+Execution Time: 2.414 ms
+*/
+
+ANALYZE tickets;
+VACUUM FULL tickets;
+---REINDEX TABLE tickets;
+-- Перестроить конкретный индекс
+REINDEX INDEX idx_tickets_lastname;
+-- Перестроить все индексы таблицы
+REINDEX TABLE tickets;
+-- Перестроить все индексы в схеме
+REINDEX SCHEMA public;
+-- Перестроить все индексы в БД (требует прав суперпользователя)
+REINDEX DATABASE demo_one;
+
+---Где хранится config postgresql.conf
+SHOW config_file;
+
+
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+/*Создайте перегруженную функцию, имеющие два параметра и другое возвращаемое значение*/
+
+CREATE OR REPLACE FUNCTION get_lastname( fullname text, lastname text )
+    RETURNS bool AS
+$$
+SELECT SUBSTR(fullname, STRPOS(fullname, ' ') + 1) = lastname;
+$$ LANGUAGE sql IMMUTABLE;
+
+/*
+Aggregate (actual time=1.797..1.798 rows=1 loops=1)
+  ->  Bitmap Heap Scan on tickets (actual time=0.343..1.731 rows=2278 loops=1)
+        Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+        Heap Blocks: exact=1897
+        ->  Bitmap Index Scan on idx_tickets_lastname (actual time=0.176..0.177 rows=2278 loops=1)
+              Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.118 ms
+Execution Time: 1.826 ms
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE get_lastname(passenger_name, 'NOVIKOV');
+
+
+/*Пользовательские функции в индексных выражениях
+
+Индекс можно создать не только по столбцу нижележащей таблицы, но и по функции или
+скалярному выражению с одним или несколькими столбцами таблицы. Это позволяет
+быстро находить данные в таблице по результатам вычислений.
+
+Например, для сравнений без учёта регистра символов часто используется функция lower:
+SELECT * FROM test1 WHERE lower(col1) = 'value';
+Этот запрос сможет использовать индекс, определённый для результата функции lower(col1) так:
+
+CREATE INDEX test1_lower_col1_idx ON test1 (lower(col1));
+Если мы объявим этот индекс уникальным (UNIQUE), он не даст добавить строки,
+в которых значения col1 различаются только регистром, как и те, в которых значения
+col1 действительно одинаковые.
+Таким образом, индексы по выражениям можно использовать
+ещё и для обеспечения ограничений, которые нельзя записать
+как простые ограничения уникальности.
+
+https://postgrespro.ru/docs/postgresql/current/indexes-expressional
+
+*/
+
+CREATE INDEX ON tickets ( get_lastname(passenger_name) );
+CREATE INDEX IF NOT EXISTS ticket_passenger_name_idx ON tickets ( passenger_name );
+ANALYZE tickets;
+---VACUUM FULL tickets;
+
+
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+
+/*Если искомой фамилии нет, то подходящий индекс позволяет вовсе избежать обращений
+  к таблице (в плане теперь нет строки с меткой Heap Blocks)
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE get_lastname(passenger_name) = 'KRESOV';
+
+/*В дополнении к двум предыдущим индексам создадим еще один индекс
+  по выражению, которое фигурирует в коде функции get_lastname*/
+
+CREATE INDEX ON tickets(SUBSTR(passenger_name, STRPOS(passenger_name, ' ') + 1));
+ANALYZE tickets;
+
+/*Провести эксперименты с разными условиями в выражении Select
+  с функцией get_lastname*/
+
+
+/*Aggregate (actual time=1.893..1.894 rows=1 loops=1)
+  ->  Bitmap Heap Scan on tickets (actual time=0.381..1.825 rows=2278 loops=1)
+        Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+        Heap Blocks: exact=1897
+        ->  Bitmap Index Scan on tickets_substr_idx (actual time=0.211..0.211 rows=2278 loops=1)
+              Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.139 ms
+Execution Time: 1.921 ms
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+
+/*Aggregate (actual time=1.720..1.720 rows=1 loops=1)
+  ->  Bitmap Heap Scan on tickets (actual time=0.315..1.658 rows=2278 loops=1)
+        Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+        Heap Blocks: exact=1897
+        ->  Bitmap Index Scan on tickets_substr_idx (actual time=0.167..0.167 rows=2278 loops=1)
+              Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.116 ms
+Execution Time: 1.743 ms
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT COUNT(*)
+FROM tickets
+WHERE SUBSTR(passenger_name, STRPOS(passenger_name, ' ') + 1) = 'NOVIKOV';
+
+
+/*Bitmap Heap Scan on tickets (actual time=0.314..1.690 rows=2278 loops=1)
+  Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+  Heap Blocks: exact=1897
+  ->  Bitmap Index Scan on tickets_substr_idx (actual time=0.168..0.168 rows=2278 loops=1)
+        Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.133 ms
+Execution Time: 1.747 ms
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT passenger_name
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+/*Bitmap Heap Scan on tickets (actual time=0.796..3.246 rows=2278 loops=1)
+  Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+  Heap Blocks: exact=1897
+  ->  Bitmap Index Scan on tickets_substr_idx (actual time=0.408..0.408 rows=2278 loops=1)
+        Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.246 ms
+Execution Time: 3.357 ms
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT get_lastname(passenger_name)
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+/*Bitmap Heap Scan on tickets (actual time=0.330..1.714 rows=2278 loops=1)
+  Recheck Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+  Heap Blocks: exact=1897
+  ->  Bitmap Index Scan on tickets_substr_idx (actual time=0.173..0.173 rows=2278 loops=1)
+        Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'NOVIKOV'::text)
+Planning Time: 0.124 ms
+Execution Time: 1.775 ms
+*/
+EXPLAIN(ANALYZE, COSTS OFF)
+SELECT ticket_no
+FROM tickets
+WHERE get_lastname(passenger_name) = 'NOVIKOV';
+
+
+/*Иллюстрация использования системного каталога pg_depend
+  Функции и зависимости между объектами базы данных*/
+
+select
+    oid,
+    proname,
+    proargtypes,
+    proargtypes::regtype[],
+    oid::regprocedure
+from pg_proc
+where proname = 'get_lastname'
+
+/*Создадим индекс на таблице Билеты tickets по дной из этих функций*/
+
+create index tickets_func_idx on tickets(get_lastname(passenger_name));
+
+/*Зная имя индекса, выберем из системного каталога pg_depend все строки, описывающие
+  зависимости этого индекса от других объектов базы данных
+
+  В столбце attname выьорки показано имя столбца таблицы tickets, от которого
+  зависит наш индекс. Обратите внимание, что хотя индекс был создан
+  на основе функции, здесь указывается столбец, который передавался ей в качестве
+  аргумента в команде создания индекса. Номер этого столбца хранится в столбце
+  refobjsubid а для вывода его имени мы воспользовались подзапросом к системному
+  каталогу pg_attribute. Он представлен в разделе документации 51.7.
+  */
+
+select
+pd.classid::regclass as classname,
+pd.objid::regclass as objname,
+pd.refclassid::regclass as refclassname,
+pd.refobjid::regclass as refobjname,
+(select pa.attname
+from pg_attribute pa
+where pa.attrelid = pd.refobjid
+and pa.attnum = pd.refobjsubid),
+case pd.deptype
+when 'n' then 'normal'
+when 'a' then 'auto'
+else 'other'
+end as deptype
+from pg_depend pd
+where pd.objid::regclass::text = 'tickets_func_idx'
