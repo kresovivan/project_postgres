@@ -9478,14 +9478,14 @@ create index tickets_func_idx on tickets(get_lastname(passenger_name));
   на основе функции, здесь указывается столбец, который передавался ей в качестве
   аргумента в команде создания индекса. Номер этого столбца хранится в столбце
   refobjsubid а для вывода его имени мы воспользовались подзапросом к системному
-  каталогу pg_attribute. Он представлен в разделе документации 51.7.
-  */
+  каталогу pg_attribute. Он представлен в разделе документации 51.7., 51.26
+  https://postgrespro.ru/docs/postgresql/17/catalogs */
 
 select
 pd.classid::regclass as classname,
 pd.objid::regclass as objname,
 pd.refclassid::regclass as refclassname,
-pd.refobjid::regclass as refobjname,
+pd.refobjid::regproc as refobjname,
 (select pa.attname
 from pg_attribute pa
 where pa.attrelid = pd.refobjid
@@ -9497,3 +9497,27 @@ else 'other'
 end as deptype
 from pg_depend pd
 where pd.objid::regclass::text = 'tickets_func_idx'
+and refclassid::regclass::text = 'pg_proc';
+
+/*Функция выводит описание объекта базы данных*/
+SELECT
+    n.nspname as schema,
+    c.relname as name,
+    CASE c.relkind
+        WHEN 'r' THEN 'table'
+        WHEN 'i' THEN 'index'
+        WHEN 'S' THEN 'sequence'
+        WHEN 'v' THEN 'view'
+        WHEN 'm' THEN 'materialized view'
+        WHEN 'c' THEN 'composite type'
+        WHEN 't' THEN 'TOAST table'
+        WHEN 'f' THEN 'foreign table'
+        WHEN 'p' THEN 'partitioned table'
+        WHEN 'I' THEN 'partitioned index'
+        END as type,
+        obj_description(c.oid) as description
+FROM pg_class c
+         LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relname = 'tickets_func_idx';
+
+/*Подстановка кода функций в запрос: детальные эксприменты*/
