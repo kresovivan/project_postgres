@@ -9520,4 +9520,4 @@ FROM pg_class c
          LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relname = 'tickets_func_idx';
 
-/*Подстановка кода функций в запрос: детальные эксприменты*/
+/*Подстановка кода функций в запрос: детальные эксперименты*/
