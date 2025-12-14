@@ -6174,7 +6174,7 @@ $$ LANGUAGE SQL VOLATILE;
 /*вторая функция собирает данные о количестве зарегистрированных
  * пассажиров, общем числе мест багажа и его общем весе
  */
-DROP FUNCTION BOARDING_INFO
+DROP FUNCTION BOARDING_INFO;
 
 CREATE OR REPLACE FUNCTION BOARDING_INFO(
     INOUT FLIGHT_ID INTEGER,
@@ -8632,6 +8632,9 @@ FROM pilots;
 select *
 FROM experience_categories;
 
+SELECT  *
+FROM base_salaries;
+
 
 /*Вычисляем пилотов и надбавки и бонусы, которые им положены*/
 with pilots_cte as (SELECT
@@ -8639,17 +8642,417 @@ with pilots_cte as (SELECT
     p.first_name || ' ' || p.last_name as pilot_name, -- Рассчитываем стаж в годах
     EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) as experience_years,  -- Определяем категорию
     ec.category_name,
-    ec.experience_bonus_percent,
+    coalesce(ec.experience_bonus_percent, 0) as experience_bonus_percent,
     p.region_coefficient,
-    p.northern_coefficient
+    p.northern_coefficient,
+    bs.base_salary,
+    (bs.base_salary *  p.region_coefficient *
+    p.northern_coefficient * (COALESCE(ec.experience_bonus_percent,  0.00001)/100+1) ) * 12 as for_year,
+    tr.tax_percent
 FROM pilots p
-JOIN experience_categories ec ON
+left JOIN personal_allowances pa ON p.pilot_id = pa.pilot_id
+left JOIN experience_categories ec ON
     -- Проверяем, что стаж попадает в диапазон
     EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) >= ec.min_years
 AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) < ec.max_years
+left join base_salaries bs on bs.license_type = p.license_type
+and bs.rank = p.rank
+left join tax_rates tr on  -- может быть несколько надбавок
+    (bs.base_salary *  p.region_coefficient *
+               p.northern_coefficient * (COALESCE(ec.experience_bonus_percent,  0)/100+1) )  * 12
+    between tr.min_income and tr.max_income
+group by
+    p.pilot_id,
+    pilot_name,
+    experience_years,
+    ec.category_name,
+    ec.experience_bonus_percent,
+    p.region_coefficient,
+    p.northern_coefficient,
+    bs.base_salary,
+    for_year,
+    tr.tax_percent
 ORDER BY p.pilot_id)
+
+select
+    pilot_id,
+    pilot_name,
+    experience_years,
+    category_name,
+    experience_bonus_percent,
+    region_coefficient,
+    northern_coefficient,
+    base_salary,
+    for_year,
+    tax_percent
+from pilots_cte;
+
+
+
+
+/*Функция*/
+
+CREATE OR REPLACE FUNCTION get_pilot_salary_calc(
+    INOUT p_pilot_id INTEGER DEFAULT NULL,  -- INOUT параметр
+    OUT pilot_name TEXT,
+    OUT experience_years NUMERIC,
+    OUT category_name TEXT,
+    OUT experience_bonus_percent NUMERIC,
+    OUT region_coefficient NUMERIC,
+    OUT northern_coefficient NUMERIC,
+    OUT base_salary NUMERIC,
+    OUT for_year NUMERIC,
+    OUT tax_percent NUMERIC
+)
+    RETURNS SETOF record AS
+$$
+SELECT
+    p.pilot_id,                    -- INTEGER (соответствует OUT pilot_id INTEGER)
+    p.first_name || ' ' || p.last_name as pilot_name,  -- TEXT
+    EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) as experience_years,  -- NUMERIC
+    ec.category_name,              -- TEXT
+    COALESCE(ec.experience_bonus_percent, 0) as experience_bonus_percent,  -- NUMERIC
+    p.region_coefficient,          -- NUMERIC
+    p.northern_coefficient,        -- NUMERIC
+    bs.base_salary,                -- NUMERIC
+    (bs.base_salary * p.region_coefficient *
+     p.northern_coefficient * (COALESCE(ec.experience_bonus_percent, 0.00001)/100+1)) * 12 as for_year,  -- NUMERIC
+    tr.tax_percent                 -- NUMERIC
+FROM pilots p
+         LEFT JOIN personal_allowances pa ON p.pilot_id = pa.pilot_id
+         LEFT JOIN experience_categories ec ON
+    EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) >= ec.min_years
+        AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.hire_date)) < ec.max_years
+         LEFT JOIN base_salaries bs ON bs.license_type = p.license_type
+    AND bs.rank = p.rank
+         LEFT JOIN tax_rates tr ON
+    (bs.base_salary * p.region_coefficient *
+     p.northern_coefficient * (COALESCE(ec.experience_bonus_percent, 0)/100+1)) * 12
+        BETWEEN tr.min_income AND tr.max_income
+WHERE p_pilot_id IS NULL OR p.pilot_id = p_pilot_id
+GROUP BY
+    p.pilot_id,
+    p.first_name,
+    p.last_name,
+    p.hire_date,
+    ec.category_name,
+    ec.experience_bonus_percent,
+    p.region_coefficient,
+    p.northern_coefficient,
+    bs.base_salary,
+    tr.tax_percent
+ORDER BY p.pilot_id;
+$$
+    LANGUAGE SQL;
+
+/*Внешний цикл: таблица pilots (20 строк)
+Внутренний цикл: функция get_pilot_salary_calc вызывается для каждой строки внешнего цикла
+Всего выполнено 20 вызовов функции (loops=20)*/
+explain analyze
+select *
+from pilots ps
+cross join lateral get_pilot_salary_calc(ps.pilot_id);
+
+/*Параметр конфигурации сервера можно изменить на время выполнения
+  функции*/
+
+  alter function get_rand_num set timezone = 'Europe/Moscow';
+
+/*Видит ли изменчивая функция изменения, произведенные конкурентной
+  транзакцией?
+
+ Функция boarding_info должна иметь категорию volatile
+*/
+
+alter function boarding_info volatile;
+
+/*Нужно привести БД в исходное состояние, чтобы избежать дублирования данных*/
+
+delete from boarding_passes
+where flight_id = 13841;
+
+---begin isolation level read committed;
+---begin isolation level repeatable read;
+
+begin isolation level serializable;
+WITH make_boarding AS
+         (INSERT INTO boarding_passes ( ticket_no, flight_id, boarding_no, seat_no )
+             VALUES ('0005433846800', 13841, 1, '1A')
+             RETURNING *)
+select bi.*
+FROM pg_sleep(40),
+    make_boarding AS mb
+         CROSS JOIN LATERAL boarding(mb.flight_id, mb.boarding_no, 15.0, 12.5) AS b
+         CROSS JOIN LATERAL boarding_info(mb.flight_id) AS bi;
+
+end;
+/*
+Простой вывод:
+SERIALIZABLE уровень изоляции работает как очень строгий учитель:
+"Если я не могу гарантировать, что результат выполнения ваших транзакций
+параллельно будет таким же, как если бы вы выполнялись строго одна за другой..."
+"...то я отменю одну из транзакций и скажу: 'Начни заново!'"
+"Это лучше, чем получить неправильные или несогласованные данные"
+
+*/
+
+
+/*На ктором терминале
+  begin isolation level read committed;
+
+WITH make_boarding AS
+         (INSERT INTO boarding_passes ( ticket_no, flight_id, boarding_no, seat_no )
+             VALUES ('0005432003745', 13841, 2, '6A')
+             RETURNING *)
+select bi.*
+from make_boarding as mb,
+    boarding(mb.flight_id, mb.boarding_no, 15.0, 12.5) as b,
+    boarding_info(mb.flight_id) as bi
+
+end;*/
+
+select * from boarding_passes  where flight_id = 13841;
+delete from boarding_passes
+where flight_id = 13841;
+
+SELECT query, state, wait_event_type, wait_event
+FROM pg_stat_activity
+WHERE query LIKE '%boarding_passes%' OR query LIKE '%pg_sleep%';
+
+/*А если вызвать изменчивую функцию из стабильной или постоянной?
+  Требуется, чтобы стабильные и постоянные функции не содержали
+  SQL-команд, кроме Select, для предотвращения модификации данных.
+  Но из таких функцией могут быть вызваны изменчивые функции, способные
+  модифицировать БД.
+  В документации сказано, что если реализовать такую схему, то можно увидеть,
+  что стабильные и постоянные функции не замечают изменений в базе данных,
+  произведенных изменчивой функцией, поскольку такие изменения не проявляются
+  в снимке данных*/
+
+/*Не только багаж, но и питание
+  C целью дальнейшего повышения качества обслуживания пассажиров наша авиакомпания
+  решила опрашивать их перед полетом насчет предпочитаемого питания
+
+  Необходимо создать таблицу и модифицировать функции,
+  выполняющие регистрацию билета*/
+
+-- Создание новой таблицы с именем "flight_meals" (бортовое питание)
+CREATE TABLE flight_meals
+(
+    -- Определение первого столбца: идентификатор рейса
+    flight_id   integer,
+
+    -- Определение второго столбца: номер посадочного талона
+    boarding_no integer,
+
+    -- Определение третьего столбца: основное блюдо
+    -- Тип данных: текстовая строка
+    -- Ограничение NOT NULL: поле обязательно для заполнения
+    main_course text NOT NULL
+
+        -- Проверочное ограничение (CHECK constraint):
+        -- Разрешены только три значения из списка: 'мясо', 'курица', 'рыба'
+        -- Это обеспечивает валидацию данных на уровне БД
+        CHECK (main_course IN ( 'мясо', 'курица', 'рыба' ) ),
+
+    -- Определение первичного ключа таблицы:
+    -- Составной ключ из двух столбцов (flight_id + boarding_no)
+    -- Гарантирует уникальность каждой комбинации рейса и номера посадки
+    PRIMARY KEY ( flight_id, boarding_no ),
+
+    -- Определение внешнего ключа (ссылочная целостность):
+    -- Столбцы flight_id и boarding_no ссылаются на другую таблицу
+    FOREIGN KEY ( flight_id, boarding_no )
+
+        -- Указание таблицы-родителя и столбцов для связи:
+        -- Ссылка на таблицу boarding_passes (посадочные талоны)
+        -- и её столбцы flight_id и boarding_no
+        REFERENCES boarding_passes ( flight_id, boarding_no )
+
+        -- Правило каскадного удаления:
+        -- При удалении записи в таблице boarding_passes
+        -- автоматически удаляются все связанные записи в этой таблице
+        ON DELETE CASCADE
+);
+
+INSERT INTO flight_meals (flight_id, boarding_no, main_course)
+SELECT
+    bp.flight_id,
+    bp.boarding_no,
+    CASE FLOOR(RANDOM() * 3)
+        WHEN 0 THEN 'мясо'
+        WHEN 1 THEN 'курица'
+        WHEN 2 THEN 'рыба'
+        END as main_course
+FROM (
+         VALUES
+             (30625,1),(30625,2),(30625,3),(30625,4),(30625,5),(30625,6),(30625,7),(30625,8),(30625,9),(30625,10),
+             (30625,11),(30625,12),(30625,13),(30625,14),(30625,15),(30625,16),(30625,17),(30625,18),(30625,19),(30625,20),
+             (30625,21),(30625,22),(30625,23),(30625,24),(30625,25),(30625,26),(30625,27),(30625,28),(30625,29),(30625,30),
+             (30625,31),(30625,32),(30625,33),(30625,34),(30625,35),(30625,36),(30625,37),(30625,38),(30625,39),(30625,40),
+             (30625,41),(30625,42),(30625,43),(30625,44),(30625,45),(30625,46),(30625,47),(30625,48),(30625,49),(30625,50),
+             (30625,51),(30625,52),(30625,53),(30625,54),(30625,55),(30625,56),(30625,57),(30625,58),(30625,59),(30625,60),
+             (30625,61),(30625,62),(30625,63),(30625,64),(30625,65),(30625,66),(30625,67),(30625,68),(30625,69),(30625,70),
+             (30625,71),(30625,72),(30625,73),(30625,74),(30625,75),(30625,76),(30625,77),(30625,78),(30625,79),(30625,80),
+             (30625,81),(30625,82),(30625,83),(30625,84),(30625,85),(30625,86),(30625,87),(30625,88),(30625,89),(30625,90),
+             (30625,91),(30625,92),
+             (24836,1),(24836,2),(24836,3),(24836,4),(24836,5),(24836,6),(24836,7),(24836,8),(24836,9),(24836,10),
+             (24836,11),(24836,12),(24836,13),(24836,14),(24836,15),(24836,16),(24836,17),(24836,18),(24836,19),(24836,20),
+             (24836,21),(24836,22),(24836,23),(24836,24),(24836,25),(24836,26),(24836,27),(24836,28),(24836,29),(24836,30),
+             (24836,31),(24836,32),(24836,33),(24836,34),(24836,35),(24836,36),(24836,37),(24836,38),(24836,39),(24836,40),
+             (24836,41),
+             (2055,1),(2055,2),(2055,3),(2055,4),(2055,5),(2055,6),(2055,7),(2055,8),(2055,9),(2055,10),
+             (2055,11),(2055,12),(2055,13),(2055,14),(2055,15),(2055,16),(2055,17),(2055,18),(2055,19),(2055,20),
+             (2055,21),(2055,22),(2055,23),(2055,24),(2055,25),(2055,26),(2055,27),(2055,28),(2055,29),(2055,30),
+             (2055,31),(2055,32),(2055,33),(2055,34),
+             (2575,1),(2575,2),(2575,3),(2575,4),
+             (28205,1),(28205,2),
+             (19732,1),(19732,2),(19732,3),(19732,4),
+             (19092,1),(19092,2),
+             (6786,1),(6786,2),(6786,3),(6786,4),(6786,5),(6786,6),(6786,7),(6786,8),(6786,9),(6786,10),
+             (6786,11),(6786,12),
+             (25029,1),(25029,2),(25029,3),(25029,4),
+             (823,1),(823,2),(823,3),(823,4),(823,5),(823,6),(823,7),(823,8),(823,9),
+             (16157,1),(16157,2),(16157,3),
+             (4021,1),(4021,2),(4021,3),(4021,4),
+             (3660,1),(3660,2),(3660,3),(3660,4),(3660,5),(3660,6),(3660,7),(3660,8),(3660,9),(3660,10),
+             (3660,11),(3660,12),(3660,13),(3660,14),(3660,15),(3660,16),(3660,17),(3660,18),(3660,19),(3660,20),
+             (3660,21),(3660,22),(3660,23),(3660,24),(3660,25),(3660,26),(3660,27),(3660,28),(3660,29),(3660,30),
+             (3660,31),(3660,32),
+             (16272,1),(16272,2),
+             (3993,1),(3993,2),(3993,3),(3993,4),(3993,5),(3993,6),(3993,7),(3993,8),(3993,9),(3993,10),
+             (3993,11),(3993,12),(3993,13),(3993,14),(3993,15),(3993,16),(3993,17),(3993,18),(3993,19),
+             (22080,1),(22080,2),(22080,3),
+             (728,1),(728,2),(728,3),(728,4),
+             (15900,1),(15900,2),(15900,3),(15900,4),(15900,5),
+             (17677,1),(17677,2),(17677,3),
+             (7862,1),(7862,2),(7862,3),(7862,4),(7862,5),(7862,6),(7862,7),(7862,8),(7862,9),(7862,10),
+             (7862,11),
+             (33092,1),(33092,2),(33092,3),(33092,4),(33092,5),
+             (7477,1),(7477,2),(7477,3),(7477,4),(7477,5),(7477,6),(7477,7),(7477,8),(7477,9),(7477,10),
+             (7477,11),
+             (29573,1),(29573,2),(29573,3),(29573,4),(29573,5),(29573,6),(29573,7),
+             (6547,1),(6547,2),(6547,3),(6547,4),(6547,5),(6547,6),(6547,7),(6547,8),(6547,9),(6547,10),
+             (6547,11),(6547,12),(6547,13),(6547,14),(6547,15),(6547,16),(6547,17),(6547,18),(6547,19),(6547,20),
+             (6547,21),(6547,22),(6547,23),(6547,24),(6547,25),(6547,26),(6547,27),(6547,28),(6547,29),(6547,30),
+             (6547,31),(6547,32),(6547,33),(6547,34),(6547,35),(6547,36),(6547,37),(6547,38),(6547,39),(6547,40),
+             (6547,41),(6547,42),(6547,43),(6547,44),(6547,45),(6547,46),(6547,47),(6547,48),(6547,49),(6547,50),
+             (1654,1),(1654,2),(1654,3),(1654,4),(1654,5),(1654,6),(1654,7),(1654,8),(1654,9),(1654,10),
+             (1654,11),(1654,12),(1654,13),(1654,14),(1654,15),(1654,16),(1654,17),(1654,18),(1654,19),(1654,20),
+             (1654,21),(1654,22),(1654,23),(1654,24),(1654,25),(1654,26),(1654,27),(1654,28),(1654,29),(1654,30),
+             (1654,31),(1654,32),(1654,33),(1654,34),(1654,35),(1654,36),(1654,37),(1654,38),(1654,39),(1654,40),
+             (1654,41),(1654,42),(1654,43),(1654,44),(1654,45),(1654,46),(1654,47),
+             (21707,1),(21707,2),(21707,3),(21707,4),(21707,5),(21707,6),(21707,7),(21707,8),(21707,9),(21707,10),
+             (21707,11),(21707,12),(21707,13),(21707,14),(21707,15),(21707,16),(21707,17),(21707,18),(21707,19),(21707,20),
+             (21707,21),(21707,22),(21707,23),(21707,24),(21707,25),(21707,26),(21707,27),(21707,28),(21707,29),(21707,30),
+             (21707,31),(21707,32),(21707,33),(21707,34),(21707,35),(21707,36),(21707,37),(21707,38),(21707,39),(21707,40),
+             (21707,41)
+     ) AS bp(flight_id, boarding_no);
+
+
+
+
+DROP FUNCTION BOARDING_INFO_1;
+
+CREATE OR REPLACE FUNCTION boarding_info_1(
+    INOUT flight_id          INTEGER,
+    OUT total_passengers     BIGINT,
+    OUT total_luggage_pieces BIGINT,
+    OUT total_luggage_weight NUMERIC,
+    OUT meat_count           BIGINT,
+    OUT chicken_count        BIGINT,
+    OUT fish_count           BIGINT
+)
+    RETURNS RECORD AS
+$$
+WITH boarding_pass_info AS
+         (SELECT COUNT(*) AS total_passengers
+          FROM boarding_passes
+          WHERE flight_id = boarding_info_1.flight_id),
+
+     luggage_info AS
+         (SELECT COUNT(*)    AS total_luggage_pieces,
+                 SUM(weight) AS total_luggage_weight
+          FROM luggage
+          WHERE flight_id = boarding_info_1.flight_id),
+
+     meal_counts AS
+         (SELECT
+              COUNT(CASE WHEN fm.main_course = 'мясо' THEN 1 END) as meat_count,
+              COUNT(CASE WHEN fm.main_course = 'курица' THEN 1 END) as chicken_count,
+              COUNT(CASE WHEN fm.main_course = 'рыба' THEN 1 END) as fish_count
+          FROM flight_meals fm
+          WHERE fm.flight_id = boarding_info_1.flight_id)
+
+SELECT boarding_info_1.flight_id,
+       COALESCE(bpi.total_passengers, 0) as total_passengers,
+       COALESCE(li.total_luggage_pieces, 0) as total_luggage_pieces,
+       COALESCE(li.total_luggage_weight, 0) as total_luggage_weight,
+       COALESCE(mc.meat_count, 0) as meat_count,
+       COALESCE(mc.chicken_count, 0) as chicken_count,
+       COALESCE(mc.fish_count, 0) as fish_count
+FROM boarding_pass_info AS bpi
+         CROSS JOIN luggage_info AS li
+         CROSS JOIN meal_counts AS mc;
+$$ LANGUAGE sql STABLE;
 
 
 select *
-from pilots_cte
-;
+from boarding_info_1(2055);
+
+/*Подведение итогов по операции бронирования
+  В одной операции бронирования может быть оформлено несколько билетов, причем
+  на разных пассажиров, а в каждом билете может присутствовать несколько перелетов
+  Было бы удобно иметь функцию, которая собирает всю информацию об операции бронирования
+  примерно таким образом*/
+
+drop function get_booking_info;
+
+CREATE OR REPLACE FUNCTION get_booking_info(
+    INOUT in_book_ref  char(6),
+    OUT ticket_no  char(13),
+    OUT flight char(6),
+    OUT da char(3),
+    OUT aa char(3),
+    OUT scheduled_departure  timestamp with time zone,
+    OUT amount  numeric(10,2)
+)
+    RETURNS SETOF RECORD AS ---множество записей setof
+$$
+select tc.passenger_name as passenger_name,
+       tc.ticket_no as ticket_no,
+       fl.flight_no as flight,
+       fl.departure_airport as da,
+       fl.arrival_airport   as aa,
+       fl.scheduled_departure as scheduled_departure,
+       bs.total_amount as amount
+from bookings bs
+left join  tickets tc on tc.book_ref = bs.book_ref
+left join boarding_passes bp on bp.ticket_no = tc.ticket_no
+left  join flights  fl on bp.flight_id = fl.flight_id
+where bs.book_ref =  in_book_ref
+$$ LANGUAGE sql;
+
+SELECT *
+FROM get_booking_info('46850C');
+
+SELECT tc.passenger_name      AS passenger_name,
+       tc.ticket_no           AS ticket_no,
+       fl.flight_no           AS flight,
+       fl.departure_airport   AS da,
+       fl.arrival_airport     AS aa,
+       fl.scheduled_departure AS scheduled_departure,
+       bs.total_amount        AS amount
+FROM bookings bs
+         LEFT JOIN tickets tc ON tc.book_ref = bs.book_ref
+         LEFT JOIN boarding_passes bp ON bp.ticket_no = tc.ticket_no
+         LEFT JOIN flights fl ON bp.flight_id = fl.flight_id
+WHERE bs.book_ref = '46850C';
+
+SELECT book_ref,
+       COUNT(book_ref)
+FROM tickets
+GROUP BY book_ref
+HAVING COUNT(book_ref) > 4;
+
+/*Подстановка в запрос кода скалярной функции*/
