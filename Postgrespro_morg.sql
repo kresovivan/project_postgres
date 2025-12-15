@@ -9543,3 +9543,12 @@ FROM flights AS f
 WHERE status IN ( 'Departed', 'Arrived' )
 GROUP BY scheduled_departure::date, flight_no;
 $$ LANGUAGE sql STABLE;
+
+
+EXPLAIN ANALYZE
+SELECT sched_dep, f_no, pass_num
+FROM count_passengers_2()
+WHERE f_no IN ( 'PG0149', 'PG0148' )
+  AND sched_dep > '2017-08-05'::date
+  AND sched_dep < '2017-08-10'::date
+ORDER BY sched_dep, f_no
