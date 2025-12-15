@@ -9608,7 +9608,240 @@ ORDER BY sched_dep, f_no;
   на соответствие этим границам. Чем более жесткими будут границы, тем меньшее число альтернатив
   будет им удовлетворять!!!
   Стремятся отобрать единственную альтернативу.
-  2.
+  2.Субоптимизация. Выделяется один из критериев в качестве главного, а по всем остальным назначают
+  нижние(верхние) границы. Оптимальной считается альтернатива, имеющая максимальное (для негативного
+  критерия - минимальное) значение выделенного критерия среди всех альтернатив, удовлетворяющих
+  назначенным границам.
+  Фактически задача многокритериальной оптимизации превращается в задачу скалярной оптимизации
+  на суженном допустимом множестве.
+  3.Лексикографическая оптимизация. Критерии упорядочиваются по их относительной важности.
+  На первом шаге отбираются альтернативы, имеющую максимальную оценку по важнейшему критерию.
+  Если такая альтернатива всего одна, то ее и считают оптимальной, если же их несколько,
+  то из них отбираются те, которые имеют максимальную оценку по следующему важности критерию.
+  Оставшаяся альтернатива будет оптимальной. При этом подходе слишком преувеличивается роль
+  первого по важности критерия: если по нему отбирается всего одна альтернатива, то остальные
+  критерии вообще не учитываются.
 
+  Конечно, окончательное решение при использовании этих методов имеет субъективный характер,
+  так как относительную важность критериев и значения границ задает лицо, принимающее решение.
+
+Метод границ - самый демократичный, но требует точного знания "приемлемых" значений
+Субоптимизация - практичный, когда есть явный KPI
+Лексикографический - самый субъективный, может игнорировать важные аспекты
 
   */
+
+CREATE TABLE projects_pareto (
+                          project_id SERIAL PRIMARY KEY,
+                          project_name VARCHAR(100),
+                          cost NUMERIC(15,2),          -- негативный критерий (меньше = лучше)
+                          profit NUMERIC(15,2),        -- позитивный критерий (больше = лучше)
+                          risk_level INTEGER,          -- негативный критерий (1-10, меньше = лучше)
+                          duration_days INTEGER,       -- негативный критерий
+                          quality_score INTEGER,       -- позитивный критерий (1-100)
+                          success_probability DECIMAL(3,2) -- позитивный критерий (0-1)
+);
+
+INSERT INTO projects_pareto (project_name, cost, profit, risk_level, duration_days, quality_score, success_probability)
+VALUES ('Project Alpha', 100000, 50000, 8, 180, 85, 0.7),
+       ('Project Beta', 150000, 75000, 6, 150, 90, 0.8),
+       ('Project Gamma', 80000, 40000, 9, 200, 80, 0.6),
+       ('Project Delta', 120000, 60000, 7, 120, 88, 0.75),
+       ('Project Epsilon', 90000, 35000, 5, 100, 92, 0.9),
+-- Случай 1: Одинаковая прибыль, разный риск
+       ('Project Alpha', 100000, 50000, 8, 180, 85, 0.7),  -- Высокий риск
+       ('Project Beta', 150000, 50000, 6, 150, 90, 0.8),   -- Средний риск
+       ('Project Gamma', 120000, 50000, 4, 120, 88, 0.75), -- Низкий риск
+
+-- Случай 2: Разная прибыль, одинаковый риск
+       ('Project Delta', 80000, 40000, 7, 200, 80, 0.6),   -- Низкая прибыль
+       ('Project Epsilon', 90000, 75000, 7, 100, 92, 0.9), -- Высокая прибыль
+       ('Project Zeta', 110000, 60000, 7, 150, 85, 0.8),   -- Средняя прибыль
+
+-- Случай 3: Уникальная максимальная прибыль
+       ('Project Eta', 130000, 80000, 9, 220, 75, 0.5),    -- Максимальная прибыль, но высокий риск
+
+-- Случай 4: Более сбалансированные варианты
+       ('Project Theta', 95000, 55000, 5, 110, 89, 0.85),
+       ('Project Iota', 105000, 52000, 6, 130, 87, 0.78),
+
+-- Случай 5: Одинаковые по первым двум критериям
+       ('Project Kappa', 115000, 58000, 5, 140, 91, 0.82),
+       ('Project Lambda', 115000, 58000, 5, 135, 88, 0.84);
+
+
+-- Удалим дубликаты имён для чистоты
+DELETE FROM projects_pareto
+WHERE project_id IN (
+    SELECT project_id
+    FROM (
+             SELECT project_id,
+                    ROW_NUMBER() OVER (PARTITION BY project_name, cost, profit, risk_level
+                        ORDER BY project_id) as rn
+             FROM projects_pareto
+         ) t
+    WHERE rn > 1
+);
+
+---1. Метод нижних/верхних границ
+/*
+Особенности:
+Все критерии равноправны
+Жесткость определяется значениями границ
+Может отсечь все альтернативы, если границы слишком строгие
+Пример субъективности: руководитель решает, что cost <= 120000
+*/
+
+-- Задаем границы для каждого критерия
+WITH pareto_set AS (
+    -- Сначала находим Парето-оптимальные проекты
+    SELECT p1.*
+    FROM projects_pareto p1
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM projects_pareto p2
+        WHERE p2.cost <= p1.cost
+          AND p2.profit >= p1.profit
+          AND p2.risk_level <= p1.risk_level
+          AND (p2.cost < p1.cost OR p2.profit > p1.profit OR p2.risk_level < p1.risk_level)
+    )
+)
+SELECT *
+FROM pareto_set
+WHERE cost <= 120000            -- Верхняя граница для негативного критерия (стоимость)
+  AND profit >= 40000           -- Нижняя граница для позитивного критерия (прибыль)
+  AND risk_level <= 7           -- Верхняя граница для негативного критерия (риск)
+  AND duration_days <= 150      -- Верхняя граница для негативного критерия
+  AND quality_score >= 85       -- Нижняя граница для позитивного критерия
+  AND success_probability >= 0.7; -- Нижняя граница для позитивного критерия
+
+----2. Субоптимизация (главный критерий)
+
+-- Главный критерий: максимизировать profit
+-- Вспомогательные критерии: ограничения
+WITH filtered_projects AS (
+    SELECT *
+    FROM projects_pareto
+    WHERE cost <= 100000          -- Ограничение 1: стоимость не более 100к
+      AND risk_level <= 20         -- Ограничение 2: риск не более 7
+
+)
+SELECT *
+FROM filtered_projects
+WHERE profit = (SELECT MAX(profit) FROM filtered_projects);
+
+
+---3. Лексикографическая оптимизация
+-- Шаг 1: Максимизируем самый важный критерий (profit)
+WITH step1 AS (
+    SELECT *
+    FROM projects_pareto
+    WHERE profit = (SELECT MAX(profit) FROM projects_pareto)
+),
+-- Шаг 2: Среди оставшихся максимизируем следующий критерий (success_probability)
+     step2 AS (
+         SELECT *
+         FROM step1
+         WHERE success_probability = (
+             SELECT MAX(success_probability)
+             FROM step1
+         )
+     ),
+-- Шаг 3: Среди оставшихся минимизируем cost
+     step3 AS (
+         SELECT *
+         FROM step2
+         WHERE cost = (
+             SELECT MIN(cost)
+             FROM step2
+         )
+     )
+-- Шаг 4: Если осталось несколько, минимизируем risk_level
+SELECT *
+FROM step3
+WHERE risk_level = (
+    SELECT MIN(risk_level)
+    FROM step3
+);
+
+
+-- Самый элегантный вариант, соответствующий теоретическому описанию
+WITH ranked AS (SELECT *,
+                       -- Приоритет 1: profit (максимизировать)
+                       DENSE_RANK() OVER (ORDER BY profit DESC) AS r1,
+                       -- Приоритет 2: risk (минимизировать) - считается только если r1=1
+                       DENSE_RANK() OVER (PARTITION BY
+                           CASE WHEN profit = (SELECT MAX(profit) FROM projects_pareto) THEN 1 ELSE 0 END
+                           ORDER BY risk_level ASC)             AS r2,
+                       -- Приоритет 3: cost (минимизировать) - считается только если r1=1 и r2=1
+                       DENSE_RANK() OVER (PARTITION BY
+                           CASE
+                               WHEN profit = (SELECT MAX(profit) FROM projects_pareto)
+                                   AND risk_level = (SELECT MIN(risk_level)
+                                                     FROM projects_pareto
+                                                     WHERE profit = (SELECT MAX(profit) FROM projects_pareto))
+                                   THEN 1
+                               ELSE 0 END
+                           ORDER BY cost ASC)                   AS r3
+                FROM projects_pareto)
+SELECT project_id,
+       project_name,
+       cost,
+       profit,
+       risk_level,
+       duration_days,
+       quality_score,
+       success_probability,
+       CASE
+           WHEN r1 = 1 AND (SELECT COUNT(*) FROM ranked WHERE r1 = 1) = 1 THEN 1
+           WHEN r1 = 1 AND r2 = 1 AND (SELECT COUNT(*) FROM ranked WHERE r1 = 1 AND r2 = 1) = 1 THEN 2
+           WHEN r1 = 1 AND r2 = 1 AND r3 = 1 THEN 3
+           ELSE 0
+           END AS steps_used
+FROM ranked
+WHERE r1 = 1
+  AND (r2 = 1 OR (SELECT COUNT(*) FROM ranked WHERE r1 = 1) = 1)
+  AND (r3 = 1 OR (SELECT COUNT(*) FROM ranked WHERE r1 = 1 AND r2 = 1) = 1)
+ORDER BY project_id;
+
+
+/*Результат попарного сравнения альтернатив в другой форме*/
+
+select m1.meal_code               as alt1,
+       m2.meal_code               as al2,
+       m1.price                   as price1,
+       m2.price                   as price2,
+       m1.calories                as calories1,
+       m2.calories                as calories2,
+       m1.variety                 as variety1,
+       m2.variety                 as variety2,
+       compare_pairwise_2(m1, m2) as score
+from meal as m1,
+     meal as m2
+where m1.meal_code = 'D'
+order by m2.meal_code, score;
+
+
+-- Проверка, какая альтернатива лучше
+SELECT
+    m1.meal_code               as alt1,
+    m2.meal_code               as al2,
+    m1.price                   as price1,
+    m2.price                   as price2,
+    m1.calories                as calories1,
+    m2.calories                as calories2,
+    m1.variety                 as variety1,
+    m2.variety                 as variety2,
+    compare_pairwise_2(m1, m2) as comparison_result,
+    CASE compare_pairwise_2(m1, m2)
+        WHEN 0 THEN 'Равны'
+        WHEN 1 THEN 'meal1 лучше'
+        WHEN 2 THEN 'meal2 лучше'
+        WHEN 3 THEN 'Нет доминирования (Парето)'
+        ELSE 'Ошибка'
+        END as interpretation
+FROM meal m1, meal m2
+WHERE m1.meal_code <> m2.meal_code;
+
+
+/*Составные значения в качестве аргументов функций*/
