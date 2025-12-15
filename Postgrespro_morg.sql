@@ -9551,4 +9551,64 @@ FROM count_passengers_2()
 WHERE f_no IN ( 'PG0149', 'PG0148' )
   AND sched_dep > '2017-08-05'::date
   AND sched_dep < '2017-08-10'::date
-ORDER BY sched_dep, f_no
+ORDER BY sched_dep, f_no;
+
+
+EXPLAIN ANALYZE
+SELECT sched_dep, f_no, pass_num
+FROM count_passengers_2() as cp
+WHERE EXISTS (
+SELECT 1
+WHERE ROW(cp.f_no, cp.sched_dep) IN (
+                                      ROW('PG0149', '2017-08-07'),
+                                      ROW('PG0148', '2017-08-08')
+)
+)
+ORDER BY sched_dep, f_no;
+
+EXPLAIN ANALYZE
+SELECT sched_dep, f_no, pass_num
+FROM count_passengers_2() as cp
+WHERE EXISTS (
+    SELECT 1
+    WHERE ROW(cp.f_no) IN (
+                                          ROW('PG0149'),
+                                          ROW('PG0148')
+        )
+)
+  AND sched_dep > '2017-08-05'::date
+  AND sched_dep < '2017-08-10'::date
+ORDER BY sched_dep, f_no;
+
+
+EXPLAIN ANALYZE
+SELECT sched_dep, f_no, pass_num
+FROM count_passengers_2() as cp
+WHERE cp.f_no = ANY(ARRAY['PG0149', 'PG0148'])
+  AND cp.sched_dep = ANY(
+    ARRAY(
+            SELECT generate_series(
+                           '2017-08-06'::date,
+                           '2017-08-09'::date,
+                           '1 day'::interval
+                   )
+    )
+    )
+ORDER BY sched_dep, f_no;
+
+
+/*Как отобрать из Парето - оптимального множества единственную альтернативу?
+
+  Из теории принятия решений известно, что формирование множества Парето,
+  рассмотрение в тексте главы, является лишь первым этапом выбора из множества альтернатив.
+  Для определения единственной оптимальной альтернативы из оставшихся используются
+  различные способы:
+  1.Указание нижних(верхних) границ критериев. Для позитивных критериев задаются нижние границы,
+  а для негативных - верхние. Все Парето-оптимальные альтернативы подвергаются проверке
+  на соответствие этим границам. Чем более жесткими будут границы, тем меньшее число альтернатив
+  будет им удовлетворять!!!
+  Стремятся отобрать единственную альтернативу.
+  2.
+
+
+  */
