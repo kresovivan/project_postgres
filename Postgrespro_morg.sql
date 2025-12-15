@@ -9520,4 +9520,26 @@ FROM pg_class c
          LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relname = 'tickets_func_idx';
 
-/*Подстановка кода функций в запрос: детальные эксперименты*/
+/*Подстановка кода функций в запрос: детальные эксперименты
+  Создадим расширенную версию функции count_passengers, подсчитывающую
+  пассажиров, перевезенных по каждому маршруту за весь период
+  времени, представленный в базе данных.
+
+SETOF - "множество", "набор" (много строк)
+RECORD - "запись" (одна строка с неопределенными колонками)
+SETOF RECORD - "набор строк произвольной структуры"*/
+
+CREATE OR REPLACE FUNCTION count_passengers_2(
+    OUT sched_dep date,
+    OUT f_no      char,
+    OUT pass_num  bigint
+) RETURNS setof record AS
+$$
+SELECT scheduled_departure::date,
+       flight_no,
+       COUNT(*)
+FROM flights AS f
+         JOIN boarding_passes AS bp ON bp.flight_id = f.flight_id
+WHERE status IN ( 'Departed', 'Arrived' )
+GROUP BY scheduled_departure::date, flight_no;
+$$ LANGUAGE sql STABLE;
