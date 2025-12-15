@@ -9979,3 +9979,18 @@ FROM tickets;
   Давайте напишем две функции, которые будут извлекать эти элементы данных из единого значения
   Эти функции будут автоматически вызываться как при создании вычисляемых столбцов, так и при добавлении и обновлении
   табличных строк.*/
+
+  create or replace function get_first_name(pass_name text)
+  returns text AS
+      $$
+      select left(pass_name, strpos(pass_name, ' ')-1);
+      $$
+  language sql immutable;
+
+create or replace function get_last_name(pass_name text)
+    returns text AS
+$$
+select left(pass_name, strpos(pass_name, ' ')+1);
+$$
+    language sql immutable;
+
