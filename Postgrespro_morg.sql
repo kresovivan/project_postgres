@@ -10019,6 +10019,20 @@ STORED — вычисленное значение физически сохра
 */
 
 
+/*При добавлении столбцов в таблицу должны быть вычислены их новые значения*/
 select ticket_no, passenger_name, tickets_2.passenger_fname,tickets_2.passenger_lname
 from tickets_2
 limit 3;
+
+/*Добавим новое значение в таблицу, важно помнить, что явно задавать значения для
+  вычисляемых столбцов нельзя, их вычислят соответствующие функции*/
+
+insert into tickets_2 VALUES
+('1234567890123', '123ABC', '1234 123456', 'ANTON GOROSHKIN',
+ '{"phone":"+79673006050"}');
+
+
+
+select ticket_no, passenger_name, tickets_2.passenger_fname,tickets_2.passenger_lname
+from tickets_2
+where tickets_2.passenger_lname = 'GOROSHKIN';
