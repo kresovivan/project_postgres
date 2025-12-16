@@ -10042,11 +10042,24 @@ where tickets_2.passenger_lname = 'GOROSHKIN';
 
 
 
-/*Seq Scan on tickets_2  (cost=0.00..9479.14 rows=1 width=119) (actual time=64.611..64.611 rows=0 loops=1)
-  Filter: ((passenger_fname = 'Иван'::text) OR (passenger_lname = 'Иванов'::text))
-  Rows Removed by Filter: 366734
-Planning Time: 0.093 ms
-Execution Time: 64.634 ms
+CREATE INDEX idx_func_fname ON tickets_2(get_first_name(passenger_name));
+CREATE INDEX idx_func_lname ON tickets_2(get_last_name(passenger_name));
+
+-- С вычисляемым столбцом: обычный индекс
+CREATE INDEX idx_fname ON tickets_2(passenger_fname);
+-- Второй индекс для фамилии
+CREATE INDEX idx_lname ON tickets_2(passenger_lname);
+ANALYZE tickets_2;
+
+/*Bitmap Heap Scan on tickets_2  (cost=2.55..4.76 rows=2 width=119) (actual time=0.031..0.031 rows=0 loops=1)
+  Recheck Cond: ((passenger_fname = 'Иван'::text) OR (passenger_lname = 'Иванов'::text))
+  ->  BitmapOr  (cost=2.55..2.55 rows=2 width=0) (actual time=0.027..0.027 rows=0 loops=1)
+        ->  Bitmap Index Scan on idx_fname  (cost=0.00..1.27 rows=1 width=0) (actual time=0.022..0.022 rows=0 loops=1)
+              Index Cond: (passenger_fname = 'Иван'::text)
+        ->  Bitmap Index Scan on idx_lname  (cost=0.00..1.28 rows=2 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+              Index Cond: (passenger_lname = 'Иванов'::text)
+Planning Time: 0.127 ms
+Execution Time: 0.053 ms
 */
 EXPLAIN ANALYZE
 SELECT * FROM tickets_2
@@ -10062,8 +10075,11 @@ WHERE passenger_fname = 'Иван'
               Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'Иванов'::text)
 Planning Time: 0.169 ms
 Execution Time: 0.057 ms
+
 */
 EXPLAIN ANALYZE
 SELECT * FROM tickets
 WHERE get_first_name(passenger_name) = 'Иван'
    OR get_last_name(passenger_name) = 'Иванов';
+
+//
