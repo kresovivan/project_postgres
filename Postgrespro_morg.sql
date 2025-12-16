@@ -10282,4 +10282,4 @@ $$ LANGUAGE sql;
  from
      flights as f,
      occupancy_rate(flight_id) as o
- where f.flight_id in (1,1162)
+ where f.flight_id in (1,1162);
