@@ -9987,10 +9987,11 @@ FROM tickets;
       $$
   language sql immutable;
 
+---drop  function get_last_name cascade;
 create or replace function get_last_name(pass_name text)
     returns text AS
 $$
-select left(pass_name, strpos(pass_name, ' ')+1);
+select substr(pass_name, strpos(pass_name, ' ')+1);
 $$
     language sql immutable;
 
@@ -9999,6 +10000,25 @@ $$
   функций и ссылки на столбцы это же таблицы, но и на другие таблицы ссылаться нельзя
 
   В вычисляемый столбец нельзя записать значение явным образом (задав его  в виде константы),
-  а при чтении этого столбца выводится результат вычилсения выражения, которое и включено в предложение
+  а при чтении этого столбца выводится результат вычисления выражения, которое и включено в предложение
   GENERATED ALWAYS. Ключевое слово STORED означает, что значение столбца будет вычисляться при записи
   и сохраняться на диске.*/
+
+ALTER TABLE tickets_2
+    ADD COLUMN passenger_fname text GENERATED ALWAYS AS
+        (get_first_name(passenger_name) ) STORED;
+
+ALTER TABLE tickets_2
+    ADD COLUMN passenger_lname text GENERATED ALWAYS AS
+        (get_last_name(passenger_name) ) STORED;
+/*GENERATED ALWAYS — столбец всегда вычисляется автоматически
+get_first_name(passenger_name) — значение вычисляется функцией get_first_name,
+которая принимает значение из столбца passenger_name
+STORED — вычисленное значение физически сохраняется в таблице
+(альтернатива — VIRTUAL, но в PostgreSQL только STORED)
+*/
+
+
+select ticket_no, passenger_name, tickets_2.passenger_fname,tickets_2.passenger_lname
+from tickets_2
+limit 3;
