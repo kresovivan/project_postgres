@@ -10178,4 +10178,50 @@ SELECT array_sort_3d('{
     {{9,7,8},{12,11,10}}
 }'::integer[][][]);
 
-/*Формирование русского или английского алфавита*/
+/*Формирование русского или английского алфавита
+  иногда, например, при обработке фамилий или имен пассажиров, может
+  оказаться полезной функция, формирующая алфавит в виде массива или столбца таблицы
+  Функцию напишем в стиле стандарта sql*/
+
+CREATE OR REPLACE FUNCTION make_abc_english( )
+    RETURNS setof text
+    LANGUAGE sql
+BEGIN
+    atomic
+    SELECT CHR(ASCII('A') + delta)
+    FROM GENERATE_SERIES(0, ASCII('Z') - ASCII('A')) AS delta;
+END;
+
+/*Функция генерации заглавных букв русского алфавита*/
+CREATE OR REPLACE FUNCTION make_abc_russian()
+    RETURNS SETOF text
+    LANGUAGE sql
+BEGIN ATOMIC
+SELECT CHR(ASCII('А') + delta)
+FROM GENERATE_SERIES(0, ASCII('Я') - ASCII('А')) AS delta;
+END;
+
+
+
+EXPLAIN ANALYZE
+select *
+from make_abc_english();
+
+EXPLAIN ANALYZE
+select make_abc_english();
+
+
+EXPLAIN ANALYZE
+select *
+from make_abc_russian();
+
+
+SELECT
+    symbol,
+    ASCII(symbol) as code,
+    ASCII(symbol) - ASCII('А') as delta_from_A
+FROM (VALUES
+          ('А'), ('Б'), ('В'), ('Г'), ('Д'),
+          ('Е'), ('Ё'),  -- Внимание: Ё имеет код 1025, а не 1026!
+          ('Ж'), ('З'), ('Я')
+     ) t(symbol);
