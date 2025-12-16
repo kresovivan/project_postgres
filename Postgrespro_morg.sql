@@ -10092,3 +10092,23 @@ WHERE get_first_name(passenger_name) = 'Иван'
   Начнем с сортировки одномерного массива
   */
 
+CREATE OR REPLACE FUNCTION array_sort( arr integer[] )
+    RETURNS integer[] AS
+$$
+SELECT array_agg(elem ORDER BY elem) AS sorted_array
+FROM unnest(arr) AS elem;
+$$ LANGUAGE sql IMMUTABLE;
+
+EXPLAIN ANALYZE
+SELECT array_sort(ARRAY[3, 1, 4, 1, 5, 9]);
+
+EXPLAIN ANALYZE
+SELECT array_sort(ARRAY[8,3,1,4,2,9,5]);
+
+/*Для сортировки двухмерного массива можно воспользоваться функцией, представленной в разделе
+  документация 9.26 функции возвращающие множества: generate_subscripts
+  Она формирует в виде таблицы список действительных индексов в указанном измерении массива.
+  В предложении from подзапроса sort_subarrays получим все комбинации обоих индексов, а затем
+  с их помощью сформируем одномерные массивы и отсортируем каждый из них.
+  Для получения окончательного результат соберем в двухмерный массив отсортированные одномерные
+  массивы.*/
