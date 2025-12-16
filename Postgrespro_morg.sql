@@ -10111,4 +10111,71 @@ SELECT array_sort(ARRAY[8,3,1,4,2,9,5]);
   В предложении from подзапроса sort_subarrays получим все комбинации обоих индексов, а затем
   с их помощью сформируем одномерные массивы и отсортируем каждый из них.
   Для получения окончательного результат соберем в двухмерный массив отсортированные одномерные
-  массивы.*/
+  массивы.
+
+generate_subscripts(arr, 1) AS i — индексы строк (1, 2, 3...)
+generate_subscripts(arr, 2) AS j — индексы столбцов (1, 2, 3...)
+GROUP BY i — группируем по строкам
+array_agg(arr[i][j] ORDER BY arr[i][j]) — для каждой строки собираем значения столбцов, отсортированные по возрастанию
+Собираем отсортированные строки обратно в двумерный массив
+ORDER BY subarray — сортируем сами строки между собой
+  */
+
+CREATE OR REPLACE FUNCTION array_sort_2d( arr integer[][] )
+    RETURNS integer[][] AS
+$$
+WITH sort_subarrays AS
+         (SELECT
+              array_agg(arr[i][j] ORDER BY arr[i][j]) AS subarray
+          FROM generate_subscripts(arr, 1) AS i,
+               generate_subscripts(arr, 2) AS j
+          GROUP BY i
+          )
+SELECT array_agg(subarray ORDER BY subarray)
+FROM sort_subarrays;
+$$ LANGUAGE sql IMMUTABLE;
+
+
+SELECT *
+FROM array_sort_2d(ARRAY [
+    [12,3],[4,9],
+    [11,7],[17,3],
+    [8,14],[22,4]
+    ]
+     );
+
+
+SELECT array_sort_2d('{{12,3},{4,9},{11,7}}');
+
+
+/*Сортировка трехмерных массивов*/
+
+
+CREATE OR REPLACE FUNCTION array_sort_3d( arr integer[][][] )
+    RETURNS integer[][][] AS
+$$
+WITH sort_sublayers AS
+         (SELECT i,
+                 j,
+                 ARRAY_AGG(arr[i][j][k] ORDER BY arr[i][j][k]) AS sublayer
+          FROM GENERATE_SUBSCRIPTS(arr, 1) AS i,
+               GENERATE_SUBSCRIPTS(arr, 2) AS j,
+               GENERATE_SUBSCRIPTS(arr, 3) AS k
+          GROUP BY i, j),
+     sort_layers AS
+         (SELECT i,
+                 ARRAY_AGG(sublayer ORDER BY j) AS sorted_layer
+          FROM sort_sublayers
+          GROUP BY i)
+SELECT ARRAY_AGG(sorted_layer ORDER BY i)
+FROM sort_layers;
+$$ LANGUAGE sql IMMUTABLE;
+
+
+/*Вызов функции*/
+SELECT array_sort_3d('{
+    {{3,1,2},{6,5,4}},
+    {{9,7,8},{12,11,10}}
+}'::integer[][][]);
+
+/*Формирование русского или английского алфавита*/
