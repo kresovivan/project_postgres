@@ -10225,3 +10225,61 @@ FROM (VALUES
           ('Е'), ('Ё'),  -- Внимание: Ё имеет код 1025, а не 1026!
           ('Ж'), ('З'), ('Я')
      ) t(symbol);
+
+/*Функция для определения степени заполнения самолетов
+  Важным экономическим показателем является степень заполнения самолетов, выполняющих
+  рейсы. Напишите функцию, вычисляющую этот показатель для заданного рейса с учетом
+  класса обслуживания
+* Результат может быть примерно таким:
+ */
+
+CREATE OR REPLACE FUNCTION occupancy_rate(p_flight_id INTEGER)
+    RETURNS TABLE(class TEXT, total INT, booked INT, rate TEXT) AS
+$$
+SELECT
+    COALESCE(fare_conditions, 'Total') as class,
+    total_seats,
+    booked_seats,
+    CASE
+        WHEN total_seats > 0
+            THEN ROUND(booked_seats::NUMERIC / total_seats * 100, 1)::TEXT || '%'
+        ELSE '0%'
+        END as rate
+FROM (
+         SELECT
+             s.fare_conditions,
+             COUNT(*) as total_seats,
+             COUNT(bp.seat_no) as booked_seats
+         FROM flights f
+                  JOIN seats s ON f.aircraft_code = s.aircraft_code
+                  LEFT JOIN boarding_passes bp ON f.flight_id = bp.flight_id AND s.seat_no = bp.seat_no
+         WHERE f.flight_id = p_flight_id
+         GROUP BY GROUPING SETS ((s.fare_conditions), ())
+     ) t
+
+/*LEFT JOIN boarding_passes bp
+    ON f.flight_id = bp.flight_id
+    AND s.seat_no = bp.seat_no
+Результат: Все места из таблицы seats + соответствующие boarding_passes (если есть)
+
+Версия 2: Условие s.seat_no = bp.seat_no в WHERE (неправильно)
+sql
+LEFT JOIN boarding_passes bp ON f.flight_id = bp.flight_id
+WHERE s.seat_no = bp.seat_no
+Результат: Только места, для которых ЕСТЬ boarding_passes (превращает LEFT JOIN в INNER JOIN)*/
+
+ORDER BY
+    CASE COALESCE(fare_conditions, 'Total')
+        WHEN 'Business' THEN 1
+        WHEN 'Comfort' THEN 2
+        WHEN 'Economy' THEN 3
+        ELSE 4
+        END;
+$$ LANGUAGE sql;
+
+
+ select *
+ from
+     flights as f,
+     occupancy_rate(flight_id) as o
+ where f.flight_id in (1,1162)
