@@ -10032,7 +10032,38 @@ insert into tickets_2 VALUES
  '{"phone":"+79673006050"}');
 
 
-
 select ticket_no, passenger_name, tickets_2.passenger_fname,tickets_2.passenger_lname
 from tickets_2
 where tickets_2.passenger_lname = 'GOROSHKIN';
+
+/*Предложенные функции - очень простые, и тем неменее создание вычисляемых столбцов на их основе дает
+  выигрышь по времени при выборках с участием имени и фамилии пассажира.
+  Проверить это можно с помощью запросов*/
+
+
+
+/*Seq Scan on tickets_2  (cost=0.00..9479.14 rows=1 width=119) (actual time=64.611..64.611 rows=0 loops=1)
+  Filter: ((passenger_fname = 'Иван'::text) OR (passenger_lname = 'Иванов'::text))
+  Rows Removed by Filter: 366734
+Planning Time: 0.093 ms
+Execution Time: 64.634 ms
+*/
+EXPLAIN ANALYZE
+SELECT * FROM tickets_2
+WHERE passenger_fname = 'Иван'
+   OR passenger_lname = 'Иванов';
+
+/*Bitmap Heap Scan on tickets  (cost=10.43..1708.53 rows=1834 width=104) (actual time=0.035..0.036 rows=0 loops=1)
+"  Recheck Cond: ((""left""(passenger_name, (strpos(passenger_name, ' '::text) - 1)) = 'Иван'::text) OR (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'Иванов'::text))"
+  ->  BitmapOr  (cost=10.43..10.43 rows=1834 width=0) (actual time=0.031..0.031 rows=0 loops=1)
+        ->  Bitmap Index Scan on idx_func  (cost=0.00..8.79 rows=1834 width=0) (actual time=0.024..0.024 rows=0 loops=1)
+"              Index Cond: (""left""(passenger_name, (strpos(passenger_name, ' '::text) - 1)) = 'Иван'::text)"
+        ->  Bitmap Index Scan on tickets_func_idx  (cost=0.00..1.27 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=1)
+              Index Cond: (substr(passenger_name, (strpos(passenger_name, ' '::text) + 1)) = 'Иванов'::text)
+Planning Time: 0.169 ms
+Execution Time: 0.057 ms
+*/
+EXPLAIN ANALYZE
+SELECT * FROM tickets
+WHERE get_first_name(passenger_name) = 'Иван'
+   OR get_last_name(passenger_name) = 'Иванов';
