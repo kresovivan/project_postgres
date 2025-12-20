@@ -92,7 +92,65 @@ WHERE (deptno = 10 OR comm IS NOT NULL OR sal <= 2000)
 SELECT ename, deptno, sal
 FROM emp;
 
-/*Задание столбцам значимых имен*/
+/*Задание столбцам значимых имен - псевдонимов,
+  качественные псевдонимы улучшают понимание запроса и его результатов пользователями*/
 
 SELECT sal AS salary, comm AS comission
 FROM emp;
+
+/*Обращение по столбцу where по его псевдониму
+  Из результирующего множества, столбцам которого присвоены псевдонимы, требуется исключить
+  некоторые строки с помощью предиката where
+[2025-12-21 01:23:58] [42703] ERROR: column "salary" does not exist
+[2025-12-21 01:23:58] Подсказка: Perhaps you meant to reference the column "emp.sal".
+[2025-12-21 01:23:58] Позиция: 60
+*/
+
+SELECT sal as salary, comm as comission
+from emp
+where salary < 5000;
+
+/*Эту ошибку можно устранить с помощью вложенного запроса
+  приведенное рещение необходимо в тех случаях, когда в
+  предикате where нужно обращаться к любому из следующих
+  элементов:
+  -агрегатные функции,
+  -скалярные подзапросы,
+  -оконные функции,
+  -псевдонимы*/
+
+/*Seq Scan on emp  (cost=0.00..13.30 rows=183 width=28) (actual time=0.016..0.020 rows=13 loops=1)
+  Filter: (sal < '5000'::numeric)
+  Rows Removed by Filter: 1
+Planning Time: 0.076 ms
+Execution Time: 0.035 ms
+*/
+EXPLAIN ANALYZE
+select *
+from (SELECT sal as salary, comm as comission
+      from emp) x
+where salary < 5000;
+
+
+/*Seq Scan on emp  (cost=0.00..13.30 rows=183 width=28) (actual time=0.013..0.015 rows=13 loops=1)
+  Filter: (sal < '5000'::numeric)
+  Rows Removed by Filter: 1
+Planning Time: 0.055 ms
+Execution Time: 0.027 ms
+*/
+EXPLAIN ANALYZE
+SELECT sal as salary, comm as comission
+from emp
+where sal < 5000;
+
+/*Конкатенация значений столбцов*/
+
+select ename || ' works a ' || job as msg
+from emp
+WHERE deptno = 10;
+
+select concat(ename,' works a ', job) as msg
+from emp
+WHERE deptno = 10;
+
+/*Использование условной логики в операторе Select*/
