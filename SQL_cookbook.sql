@@ -174,7 +174,47 @@ FROM emp FETCH FIRST 5 ROWS ONLY;
 SELECT *
 FROM emp limit 5;
 
-/*Извлечение произвольных записей*/
+/*Извлечение произвольных записей
+  количество строк ограничивается поле исполнения функции в операторе order by*/
 SELECT ename, job
 from emp
 order by random() limit 5;
+
+/*Поиск значений null
+сущность null не бывает равной или не равной како-либо другой сущности, даже
+самой себе*/
+
+SELECT *
+FROM emp
+WHERE comm IS NULL;
+
+/*преобразования значений null в реальные значения
+ в качестве аргументов функции coalesce передается одно или несколько значений,
+функция возвращает первое не null значение в этом списке*/
+
+EXPLAIN ANALYZE
+select coalesce(comm,0)
+    from emp;
+
+EXPLAIN ANALYZE
+SELECT CASE
+           WHEN comm IS NOT NULL THEN comm
+           ELSE 0
+           END
+FROM emp;
+
+/*Поиск по шаблону.
+  Требуется извлечь из таблицы строки, соответствующие заданной подстроке
+  или шаблону*/
+
+SELECT ename, job
+FROM emp
+WHERE deptno IN (10, 20);
+
+/*Из этого результирующего множества нужно извлечь только тех служащих, в именах которых
+  есть буква I или чье название должности заканчивается на ER*/
+
+SELECT ename, job
+FROM emp
+WHERE deptno IN (10, 20)
+and (ename LIKE '%I%' or job like '%ER');
