@@ -212,9 +212,47 @@ FROM emp
 WHERE deptno IN (10, 20);
 
 /*Из этого результирующего множества нужно извлечь только тех служащих, в именах которых
-  есть буква I или чье название должности заканчивается на ER*/
+  есть буква I или чье название должности заканчивается на ER
+  символ подчеркнивания _ возвращает любой отдельный символ*/
 
 SELECT ename, job
 FROM emp
 WHERE deptno IN (10, 20)
 and (ename LIKE '%I%' or job like '%ER');
+
+/*Сортировка результатов запросов
+  возвращение результатов запроса в заданном порядке*/
+
+SELECT ename, job, sal
+FROM emp
+WHERE deptno = 10
+ORDER BY sal ASC; -- по возрастанию
+
+SELECT ename, job, sal
+FROM emp
+WHERE deptno = 10
+ORDER BY sal DESC -- по убыванию
+
+---также можно указать номер столбца сортировки
+SELECT ename, job, sal
+FROM emp
+WHERE deptno = 10
+ORDER BY 3 DESC -- по убыванию
+
+/*Сортировка по нескольким столбцам
+  требуется отсортировать строки результирующего набора по столбцу deptno по возрастанию,
+  а затем по столбцу зарплат sal по убыванию
+  Сортировка осуществляется слева направо*/
+
+SELECT ename, job, deptno, sal
+FROM emp
+ORDER BY deptno, sal DESC;
+
+/*сортировка по подстрокам
+  Требуется отсортировать результаты запросы по определенным частям строки
+  Например извлечь из таблицы emp столбцы имен ename и должностей job и упорядочить
+  их по последним двум символам столбца должностей job*/
+
+  select ename, job, substr(job, length(job)-1) as las_two_symbols
+  from emp
+  order by substr(job, length(job)-1);
