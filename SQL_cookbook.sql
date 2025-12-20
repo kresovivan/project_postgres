@@ -167,3 +167,14 @@ SELECT ename,
 FROM emp;
 
 /*Ограничение числа возвращаемых строк*/
+
+SELECT *
+FROM emp FETCH FIRST 5 ROWS ONLY;
+
+SELECT *
+FROM emp limit 5;
+
+/*Извлечение произвольных записей*/
+SELECT ename, job
+from emp
+order by random() limit 5;
