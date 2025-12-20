@@ -153,4 +153,17 @@ select concat(ename,' works a ', job) as msg
 from emp
 WHERE deptno = 10;
 
-/*Использование условной логики в операторе Select*/
+/*Использование условной логики в операторе Select
+  при отсутствии оператора else выражение case возвращает
+  занчение null для любой строки, не удовлетворяющей проверяемому условию*/
+
+SELECT ename,
+       sal,
+       CASE
+           WHEN sal <= 2000 THEN 'UNDERPAID'
+           WHEN sal >= 4000 THEN 'OVERPAID'
+           ELSE 'OK'
+           END AS status
+FROM emp;
+
+/*Ограничение числа возвращаемых строк*/
