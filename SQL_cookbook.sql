@@ -248,10 +248,22 @@ SELECT ename, job, deptno, sal
 FROM emp
 ORDER BY deptno, sal DESC;
 
-/*сортировка по подстрокам
+/*сортировка по подстрокам.
   Требуется отсортировать результаты запросы по определенным частям строки
   Например извлечь из таблицы emp столбцы имен ename и должностей job и упорядочить
-  их по последним двум символам столбца должностей job*/
+  их по последним двум символам столбца должностей job
+  Наглядная таблица:
+job	    length(job)	length-1	Символы (позиции)	            Результат
+MANAGER	    7	      6	       M(1)A(2)N(3)A(4)G(5)E(6)R(7)	        ER
+CLERK	    5	      4	       C(1)L(2)E(3)R(4)K(5)          	    RK
+SALESMAN	8	      7	       S(1)A(2)L(3)E(4)S(5)M(6)A(7)N(8)	    AN
+ANALYST	    7	      6	       A(1)N(2)A(3)L(4)Y(5)S(6)T(7)	        ST
+PRESIDENT	9	      8	       P(1)R(2)E(3)S(4)I(5)D(6)E(7)N(8)T(9)	NT
+
+
+  */
+
+
 
   select ename, job, substr(job, length(job)-1) as las_two_symbols
   from emp
