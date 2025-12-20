@@ -261,6 +261,14 @@ ANALYST	    7	      6	       A(1)N(2)A(3)L(4)Y(5)S(6)T(7)	        ST
 PRESIDENT	9	      8	       P(1)R(2)E(3)S(4)I(5)D(6)E(7)N(8)T(9)	NT
 */
 
+EXPLAIN ANALYZE
 SELECT ename, job, SUBSTR(job, LENGTH(job) - 1) AS las_two_symbols
 FROM emp
 ORDER BY SUBSTR(job, LENGTH(job) - 1);
+
+EXPLAIN ANALYZE
+SELECT ename, job, right(job,2) AS las_two_symbols
+FROM emp
+ORDER BY right(job,2);
+
+/*Сортировка буквенно-цифровых данных*/
