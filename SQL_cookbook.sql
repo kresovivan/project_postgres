@@ -378,13 +378,56 @@ ORDER BY comm NULLS FIRST;
 Аналогия          Оператор IF в программировании       Вызов функции / обращение к переменной
 Зависимость       Данные текущей строки запроса        Результат целого другого запроса
 Типичное место    SELECT, WHERE, ORDER BY, UPDATE SET  WHERE (с IN, >, EXISTS), SELECT, FROM
+*/
+
+SELECT ename, job, sal, comm
+FROM emp
+ORDER BY CASE WHEN job = 'SALESMAN' THEN comm ELSE sal END;
+
+/*Для динамического способа управления сортировкой можно использовать выражение CASE
+
+
+| ename | sal | job | comm | ordered |
+| :--- | :--- | :--- | :--- | :--- |
+| TURNER | 1500.00 | SALESMAN | 0.00 | 0.00 |
+| ALLEN | 1600.00 | SALESMAN | 300.00 | 300.00 |
+| WARD | 1250.00 | SALESMAN | 500.00 | 500.00 |
+| SMITH | 800.00 | CLERK | null | 800.00 |
+| JAMES | 950.00 | CLERK | null | 950.00 |
+| ADAMS | 1100.00 | CLERK | null | 1100.00 |
+| MILLER | 1300.00 | CLERK | null | 1300.00 |
+| MARTIN | 1250.00 | SALESMAN | 1400.00 | 1400.00 |
+| CLARK | 2450.00 | MANAGER | null | 2450.00 |
+| BLAKE | 2850.00 | MANAGER | null | 2850.00 |
+| JONES | 2975.00 | MANAGER | null | 2975.00 |
+| SCOTT | 3000.00 | ANALYST | null | 3000.00 |
+| FORD | 3000.00 | ANALYST   | null | 3000.00 |
+| KING | 5000.00 | PRESIDENT | null | 5000.00 |
 
 */
 
-select ename, sal, job, comm
- from emp
-order by case when job = 'SALESMAN' then comm else sal end;
+select ename, sal,job, comm, case when job = 'SALESMAN' then comm else sal end as ordered
+from emp
+order by ordered
 
+/*Работа с несколькими таблицами
+  Размещение одного набора строк над другим
+  Наличие общего ключа для таблиц не является обязательным, но их столбцы должны иметь
+  одинаковые типы данных. Например, необходимо отобразить номера и имена отдела служащих отдела 10
+  из таблицы emp и названия и номера отделов из таблицы dept.
+*/
+
+SELECT ename AS ename_and_dname, deptno
+FROM emp
+WHERE deptno = 10
+UNION ALL
+
+SELECT '_________', NULL
+FROM t1
+
+UNION ALL
+SELECT dname, deptno
+FROM dept;
 
 
 
