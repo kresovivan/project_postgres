@@ -271,4 +271,77 @@ SELECT ename, job, right(job,2) AS las_two_symbols
 FROM emp
 ORDER BY right(job,2);
 
-/*Сортировка буквенно-цифровых данных*/
+/*Сортировка смешанных буквенно-цифровых данных
+требуется упорядочить буквенно-цифровые данные таблицы либо по цифровым либо по
+по буквенным данным  */
+create view V as
+select ename||' '||deptno as data
+from emp;
+
+select *
+from v;
+
+/*Нужно упорядочить эти столбцы по deptno либо по столбцу ename*/
+
+/*Сортировка by deptno
+Что происходит:
+translate(data, '0123456789','##########') - заменяет все цифры на #
+replace(...,'#','') - удаляет все #, оставляя только текст.
+Внешний replace(data, ..., '') - удаляет этот текст из исходной строки,
+оставляя только цифры.
+Упрощенный эквивалент: regexp_replace(data, '[^0-9]', '', 'g')
+*/
+SELECT data,
+       REPLACE(data, REPLACE(
+               TRANSLATE(data, '0123456789', '##########'), '#', ''), ''
+       ) AS replace_data
+FROM v
+ORDER BY REPLACE(data, REPLACE(
+        TRANSLATE(data, '0123456789', '##########'), '#', ''), ''
+         );
+
+SELECT data, CAST(
+        substring(data from '[0-9]+') AS INTEGER
+             )
+FROM v
+ORDER BY CAST(
+                 substring(data from '[0-9]+') AS INTEGER
+         );
+
+/*Сортировка по ename*/
+SELECT data, REPLACE(TRANSLATE(data, '0123456789', '##########'), '#', '') AS replace_num
+FROM v
+ORDER BY REPLACE(TRANSLATE(data, '0123456789', '##########'), '#', '');
+
+
+SELECT data, substring(data from '^[A-Za-z]+')
+FROM v
+ORDER BY substring(data from '^[A-Za-z]+');
+
+/*Обработка значения null при сортировке
+  значения null можно пометить специальным флагом с помощью выражения case.
+  При этом такой флаг должен иметь два значения: одно из которых (0) обозначает
+  значение null, а другое (1) - значение не null
+
+  Значения не null столбца comm сортируются по возрастанию, все значения null
+  размещаются в конце списка
+  */
+
+select ename, sal, comm
+from (
+    select ename, sal, comm, case when comm is null then 0 else 1 end as is_null
+    from emp) x
+order by is_null desc, comm;
+
+/*Значения не null столбца comm сортируются по убыванию, все значения null размещаются в
+  конце списка*/
+select ename, sal, comm
+from (
+         select ename, sal, comm, case when comm is null then 0 else 1 end as is_null
+         from emp) x
+order by is_null desc, comm desc
+
+     );
+
+
+
