@@ -429,7 +429,228 @@ UNION ALL
 SELECT dname, deptno
 FROM dept;
 
+/*Количество и тип данных элементов в списках операторов select должны быть одинаковыми.
+  Например, следующий запрос возвратит ошибку:
+[2025-12-21 20:06:16] [42804] ERROR: UNION types numeric and character varying cannot be matched
+[2025-12-21 20:06:16] Позиция: 43
+*/
 
+EXPLAIN ANALYZE
+select deptno
+from dept
+union all
+select  ename
+from emp;
+
+/*В union all попадут все дубликаты строк, если необходимо
+  исключить дубликаты строк необходимо использовать union
+  будет выполнена операция distinct, устраняющая дубликаты*/
+
+SELECT deptno
+from emp
+UNION
+select deptno
+from dept;
+
+/*Проблемы:
+Полная сортировка данных - O(N log N) сложность
+Большой расход памяти/диска для временных данных
+Блокирующая операция - нужно обработать все данные прежде чем вернуть первую строку
+DISTINCT и UNION без ALL дорогие операции - O(N log N) или O(N) с большим коэффициентом
+
+Влияние растет нелинейно - на 100К строк могут работать мгновенно, на 10М - минуты
+Основные затраты:
+Сортировка больших объемов данных
+Временное хранение промежуточных результатов
+Множественные проходы по данным
+*/
+
+EXPLAIN ANALYZE
+select distinct deptno
+from (
+select deptno
+from dept
+union all
+select  deptno
+from emp);
+
+EXPLAIN ANALYZE
+select deptno
+from dept
+union
+select  deptno
+from emp;
+
+/*Объединение взаимосвязанных строк
+  Операция внутреннего объединения*/
+
+SELECT e.ename, d.loc,d.deptno,e.deptno
+FROM emp e,
+     dept d
+WHERE e.deptno = d.deptno
+  AND d.deptno = 10;
+
+/*Декартово произведение - все возможные комбинации строк таблиц, указанных в операции
+  from*/
+select e.ename, d.loc
+from emp e, dept d
+where e.deptno = 10;
+
+/*Альтернативное решение операции внутреннего объединения
+  заключается в явном использовании оператора join
+
+Принципиальная разница (для разных типов JOIN):
+Для INNER JOIN - результат одинаковый.
+Для INNER JOIN нет разницы где размещать дополнительные условия соединения.
+-- Вариант 1: условие в ON
+SELECT *
+FROM emp e
+INNER JOIN dept d ON e.deptno = d.deptno AND e.deptno = 10;
+
+-- Вариант 2: условие в WHERE
+SELECT *
+FROM emp e
+INNER JOIN dept d ON e.deptno = d.deptno
+WHERE e.deptno = 10;
+
+Для LEFT/RIGHT OUTER JOIN - результат РАЗНЫЙ:
+-- ВАРИАНТ A: условие в ON
+SELECT e.ename, d.loc, d.deptno
+FROM emp e
+LEFT JOIN dept d ON e.deptno = d.deptno AND e.deptno = 10;
+
+-- Результат: ВСЕ сотрудники из emp
+-- Для сотрудников не из 10-го отдела: loc = NULL, deptno = NULL
+-- Для сотрудников из 10-го отдела: нормальная информация об отделе
+
+-- ВАРИАНТ B: условие в WHERE
+SELECT e.ename, d.loc, d.deptno
+FROM emp e
+LEFT JOIN dept d ON e.deptno = d.deptno
+WHERE e.deptno = 10;  -- ИЛИ d.deptno = 10
+
+-- Результат: ТОЛЬКО сотрудники из 10-го отдела
+-- WHERE преобразует LEFT JOIN в INNER JOIN!
+
+
+                                    Правило для запоминания:
+Размещение условия	Для LEFT JOIN	                           Для INNER JOIN
+В ON	Фильтрует правую таблицу	                           То же самое, что WHERE
+В WHERE	Фильтрует конечный результат (превращает в INNER)	   Фильтрует конечный результат
+
+Для LEFT JOIN:
+ON = "при каких условиях ПРИСОЕДИНЯТЬ правую таблицу"
+WHERE = "какие строки ПОКАЗАТЬ в результате"
+Вот почему ваш второй запрос (WHERE e.deptno = 10) фактически превращает LEFT JOIN в INNER JOIN
+для сотрудников не из 10-го отдела.
+*/
+
+select e.ename, d.loc, d.deptno
+from emp e
+inner join dept d on e.deptno = d.deptno
+where e.deptno = 10;
+
+/*Поиск общих строк с общими данными в двух таблицах
+  требуется найти и объединить строки с одинаковыми данными в двух таблицах
+  Объединение необходимо выполнять по нескольким столбцам*/
+
+create view C AS
+select ename,job,sal
+from emp
+where job = 'CLERK';
+
+select *
+from c;
+
+explain ANALYZE
+select e.empno, e.ename, e.job, e.sal, e.deptno, e.hiredate
+from emp e, c
+where e.ename = c.ename
+and e.job = c.job
+and e.sal = c.sal;
+
+EXPLAIN ANALYZE
+SELECT e.empno, e.ename, e.job, e.sal, e.deptno, e.hiredate
+FROM emp e
+         INNER JOIN c ON e.ename = c.ename
+    AND e.job = c.job
+    AND e.sal = c.sal;
+
+explain ANALYZE
+SELECT e.empno, e.ename, e.job, e.sal, e.deptno, e.hiredate
+FROM emp e
+WHERE (ename, job, sal) IN (SELECT g.ename, g.job, g.sal
+                            FROM emp g
+                            INTERSECT
+                            SELECT ename, job, sal
+                            FROM c);
+
+/*Извлечение из одной таблицы значений, отсутствующих в другой
+требуется в исходной таблице найти значения, которых нет в другой таблице (таблица назначения).
+Оператору except передается первое результирующее множество из которого он удаляет все строи,
+присутствующие во втором результирующем множестве.
+Он не возвращает дубликатов в отличие от not in*/
+
+
+EXPLAIN ANALYZE
+select deptno
+from dept
+EXCEPT
+SELECT deptno
+from emp;
+
+
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE deptno NOT IN (SELECT deptno FROM emp);
+
+/*При использовании оператора not in не нужно упускать из виду значения null*/
+
+create table new_dept(deptno integer);
+insert into new_dept VALUES(10);
+insert into new_dept VALUES(50);
+insert into new_dept VALUES(null);
+
+/*Почему такой запрос не выдал ни одной строки.
+  Операторы in и not in являются по сути операторами OR (ИЛИ) и вследствие особенностей
+  обработки значений null логическими операциями or возвращают разные результаты*/
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE deptno NOT IN (SELECT deptno FROM new_dept);
+
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE deptno IN (SELECT deptno FROM new_dept);
+
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE  (deptno = 10 or deptno = 50 or deptno = null);
+
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE deptno in (10, 50, null);
+
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE deptno not in (10, 50, null);
+
+EXPLAIN ANALYZE
+SELECT deptno
+FROM dept
+WHERE not (deptno = 10 or deptno = 50 or deptno = null);
+
+/*В выражении SQL:
+  - true  или null равно true,
+  - false или null равно null !!!
+  Этой проблемы с not in и значениями null можно избежать, используя связанный подзапрос в
+  сочетании с предикатом not exists подзапрос называется связанным по той причине, что он
+  обращается к строкам из внешнего запроса.*/
 
 
 
