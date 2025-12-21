@@ -649,8 +649,164 @@ WHERE not (deptno = 10 or deptno = 50 or deptno = null);
   - true  или null равно true,
   - false или null равно null !!!
   Этой проблемы с not in и значениями null можно избежать, используя связанный подзапрос в
-  сочетании с предикатом not exists подзапрос называется связанным по той причине, что он
-  обращается к строкам из внешнего запроса.*/
+  сочетании с предикатом not exists подзапрос называется - коррелированным подзапросом по той причине, что он
+  обращается к строкам из внешнего запроса.
+
+ Внешний запрос берет первую строку из dept (например, deptno=10)
+
+Подзапрос проверяет: "Есть ли в emp сотрудники с deptno=10?"
+Если ДА → EXISTS вернет TRUE → NOT EXISTS = FALSE → строка НЕ включается в результат
+Если НЕТ → EXISTS вернет FALSE → NOT EXISTS = TRUE → строка включается в результат
+Переход к следующей строке dept
+  */
+
+EXPLAIN ANALYZE
+SELECT d.deptno
+FROM dept d
+WHERE NOT EXISTS(SELECT 1 FROM emp e WHERE d.deptno = e.deptno); ---корелированный подзапрос
+
+EXPLAIN ANALYZE
+SELECT d.deptno
+FROM dept d
+WHERE NOT EXISTS(SELECT 1 FROM new_dept e WHERE d.deptno = e.deptno);
+
+/*Извлечение строк таблицы, не соответствующих строкам в другой таблице
+это решение выполняет операцию внешнего объединения, из результатов
+  которого отфильтровываются строки с разными значениями общего столбца,
+  такие операции называются антиобъединением anti-join*/
+
+SELECT d.*,
+       e.deptno ---40, OPERATIONS, BOSTON в отделе 40 никто из персонала компании не работает
+FROM dept d
+         LEFT OUTER JOIN emp e
+                         ON (d.deptno = e.deptno)
+WHERE e.deptno IS NULL
+
+/*Добавление в запрос независимых объединений.
+Требуется модифицировать запрос, чтобы он возвращал дополнительную информаацию,
+но в результате попытки выполнить такую модификацию теряются данные из первоначального
+результирующего множества
+*/
+
+SELECT e.ename, d.loc, eb.received
+FROM emp e
+         JOIN dept d ON e.deptno = d.deptno
+         LEFT JOIN emp_bonus eb ON e.empno = eb.empno
+ORDER BY d.loc;
+
+/*Внешнее объединение можно также эмулировать посредством скалярного подзапроса в списке
+  оператора SELECT
+  Скалярные подзапросы должны возвращать только одно (скалярное) значение, возвращение в списке
+  select более чем одной строки вызовет ошибку*/
+SELECT e.ename,
+       d.loc,
+       (SELECT eb.received
+        FROM emp_bonus eb
+        WHERE eb.empno = e.empno) AS received
+FROM emp e,
+     dept d
+WHERE e.deptno = d.deptno
+ORDER BY 2
+
+/*Проверка двух таблиц на идентичность
+  требуется проверить две таблицы или представления на идентичность по количеству
+  и значению строк*/
+
+create view x as
+    SELECT *
+from emp where deptno != 10
+UNION ALL
+select * from emp where ename = 'WARD';
+
+select *
+from x;
+
+/*Нам нужно определить, содержит ли это представление точно такие же данные, как и таблица
+  EMP. Мы намеренно продублировали строку для служащего WARD, чтобы продемонстрироваь, что
+  решение выявит не только разные данные, но также и дубликаты строк*/
+
+(SELECT x.empno,
+        x.ename,
+        x.job,
+        x.mgr,
+        x.hiredate,
+        x.sal,
+        x.comm,
+        x.deptno,
+        COUNT(*) AS cnt
+ FROM x
+ GROUP BY x.empno,
+          x.ename,
+          x.job,
+          x.mgr,
+          x.hiredate,
+          x.sal,
+          x.comm,
+          x.deptno
+EXCEPT
+ SELECT e.empno,
+        e.ename,
+        e.job,
+        e.mgr,
+        e.hiredate,
+        e.sal,
+        e.comm,
+        e.deptno,
+        COUNT(*) AS cnt
+ FROM emp e
+ GROUP BY e.empno,
+          e.ename,
+          e.job,
+          e.mgr,
+          e.hiredate,
+          e.sal,
+          e.comm,
+          e.deptno
+)
+
+UNION ALL
 
 
+(
+    SELECT e.empno,
+           e.ename,
+           e.job,
+           e.mgr,
+           e.hiredate,
+           e.sal,
+           e.comm,
+           e.deptno,
+           COUNT(*) AS cnt
+    FROM emp e
+    GROUP BY e.empno,
+             e.ename,
+             e.job,
+             e.mgr,
+             e.hiredate,
+             e.sal,
+             e.comm,
+             e.deptno
 
+EXCEPT
+
+SELECT x.empno,
+        x.ename,
+        x.job,
+        x.mgr,
+        x.hiredate,
+        x.sal,
+        x.comm,
+        x.deptno,
+        COUNT(*) AS cnt
+ FROM x
+ GROUP BY x.empno,
+          x.ename,
+          x.job,
+          x.mgr,
+          x.hiredate,
+          x.sal,
+          x.comm,
+          x.deptno
+);
+
+/*Выполнение объединений при использовании агрегатных функций*/
