@@ -341,8 +341,31 @@ from (
          from emp) x
 order by is_null desc, comm desc;
 
-/**/
+/*Значения не NULL cтолбца comm сортируются по возрастанию, все значения null распологаются
+  вначале списка*/
 
+
+select ename, sal, comm
+from (
+         select ename, sal, comm, case when comm is null then 0 else 1 end as is_null
+         from emp) x
+order by is_null, comm;
+
+/*Значения не null столбца comm сортируются по возрастанию, все значения null размещаются
+  в конце списка
+*/
+
+SELECT ename, sal, comm
+FROM emp
+ORDER BY comm NULLS LAST;
+
+
+/*Значения не null столбца comm сортируются по возрастанию, все значения null размещаются
+  в начале списка
+*/
+SELECT ename, sal, comm
+FROM emp
+ORDER BY comm NULLS FIRST;
 
 
 
