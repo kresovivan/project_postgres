@@ -408,7 +408,7 @@ ORDER BY CASE WHEN job = 'SALESMAN' THEN comm ELSE sal END;
 
 select ename, sal,job, comm, case when job = 'SALESMAN' then comm else sal end as ordered
 from emp
-order by ordered
+order by ordered;
 
 /*Работа с несколькими таблицами
   Размещение одного набора строк над другим
@@ -680,7 +680,7 @@ SELECT d.*,
 FROM dept d
          LEFT OUTER JOIN emp e
                          ON (d.deptno = e.deptno)
-WHERE e.deptno IS NULL
+WHERE e.deptno IS NULL;
 
 /*Добавление в запрос независимых объединений.
 Требуется модифицировать запрос, чтобы он возвращал дополнительную информаацию,
@@ -706,7 +706,7 @@ SELECT e.ename,
 FROM emp e,
      dept d
 WHERE e.deptno = d.deptno
-ORDER BY 2
+ORDER BY 2;
 
 /*Проверка двух таблиц на идентичность
   требуется проверить две таблицы или представления на идентичность по количеству
@@ -763,10 +763,7 @@ EXCEPT
           e.comm,
           e.deptno
 )
-
 UNION ALL
-
-
 (
     SELECT e.empno,
            e.ename,
@@ -809,4 +806,308 @@ SELECT x.empno,
           x.deptno
 );
 
-/*Выполнение объединений при использовании агрегатных функций*/
+/*Выполнение объединений при использовании агрегатных функций
+  ваш запрос охватывает несколько таблиц, поэтому требуется убедиться,
+  что объединения не нарушат агрегацию
+  Например нужно вычислить суммы зарплат и премий всех служащих отдела 10
+  Но некоторые служащие получили несколько премий, и объединение таблицы
+  emp с таблицей emp_bonus3_9, содержащей данные о премиях сотрудников
+  для этой задачи, вызывает возвращение неправильных значений
+  агрегатной функции sum*/
+
+select *
+from emp_bonus3_9;
+
+/*Рассмотрим запрос, который возвращает данные о зарплате и премиях всех служащих отдела 10.
+  Размер премии определятся по таблице bonus.type Премия типа 1 составляет 10% зарплаты
+  служащего, типа 2 - 20% и типа 3 - 30%*/
+
+SELECT e.empno,
+       e.ename,
+       e.sal,
+       e.deptno,
+       e.sal * CASE
+                   WHEN eb.type = 1 THEN 0.1
+                   WHEN eb.type = 2 THEN 0.2
+                   ELSE 0.3
+           END AS bonus
+FROM emp e,
+     emp_bonus3_9 eb
+WHERE e.empno = eb.empno
+  AND e.deptno = 10;
+/*Пока что все хорошо, но при попытке присоединить таблицу emp_bonus3_9, чтобы вычислить
+  сумму премий, возникают проблемы
+  сумма total_sal вычисляется некорректно*/
+
+select x1.deptno,
+       sum(x1.sal) as total_sal,
+       sum(x1.bonus) as total_nonus
+from (SELECT e.empno,
+             e.ename,
+             e.sal,
+             e.deptno,
+             e.sal * CASE
+                         WHEN eb.type = 1 THEN 0.1
+                         WHEN eb.type = 2 THEN 0.2
+                         ELSE 0.3
+                 END AS bonus
+      FROM emp e,
+           emp_bonus3_9 eb
+      WHERE e.empno = eb.empno
+        AND e.deptno = 10) as x1
+GROUP BY x1.deptno; ---10050
+
+select sum(sal) as total_sal2
+from emp where deptno = 10; --- 8750
+
+/*Но почему total_sal вычисляется неправильно, потому что объединение
+  создает дубликаты строк в столбце sal*/
+
+SELECT e.ename, ---два раза учитывается MILLER
+       e.sal
+FROM emp e,
+     emp_bonus3_9 eb
+WHERE e.empno = eb.empno
+  AND e.deptno = 10;
+
+/*Решение.
+  Вычисление общих сумм в объединенных таблицах требует осторожного подхода
+  Избежать неправильных результатов вычислений, вызываемых дублированием строк
+  при объединении таблиц с помощью агрегатных функций можно двумя способами.
+  Первый - просто используя в вызове агрегатной функции ключевое слово distinct,
+  обеспечивающее обработку только однозначных экземпляров каждого значения.
+  Второй - выполняя агрегирование во вложенном запросе, прежде чем выполнять объединение - агрегация
+  будет вычислена еще до объединения, что полностью устраняет проблему*/
+
+EXPLAIN ANALYZE
+select x1.deptno,
+       sum(distinct x1.sal) as total_sal, ---добаввляем dictinct
+       sum(x1.bonus) as total_nonus
+from (SELECT e.empno,
+             e.ename,
+             e.sal,
+             e.deptno,
+             e.sal * CASE
+                         WHEN eb.type = 1 THEN 0.1
+                         WHEN eb.type = 2 THEN 0.2
+                         ELSE 0.3
+                 END AS bonus
+      FROM emp e,
+           emp_bonus3_9 eb
+      WHERE e.empno = eb.empno
+        AND e.deptno = 10) as x1
+GROUP BY x1.deptno; ---10050
+
+EXPLAIN ANALYZE
+---второй вариант
+SELECT e.deptno,
+       SUM(e.sal) AS total_sal,
+       SUM(e.sal * (SELECT SUM(CASE
+                                   WHEN type = 1 THEN 0.1
+                                   WHEN type = 2 THEN 0.2
+                                   ELSE 0.3
+           END)
+                    FROM emp_bonus3_9 eb
+                    WHERE eb.empno = e.empno)
+       ) AS total_bonus
+FROM emp e
+WHERE e.deptno = 10
+GROUP BY e.deptno;
+
+/*Выполнение внешних объединений при использовании агрегатных функций
+  Постановка задачи та же что и для рецепта 3_9 с тем отличием, что не
+  все служащие отдела 10 получили премии, что отражено в таблице
+  emp_bonus_3_10
+
+Таблица A = множество строк {a1, a2, a3}
+Таблица B = множество строк {b1, b2, b3}
+INNER JOIN A и B по условию =
+{ (a1,b1), (a2,b2) } где каждая пара удовлетворяет условию
+Это НОВОЕ множество пар, "объединенных" по условию.
+
+*/
+
+SELECT deptno,
+       SUM(sal)   AS total_sal, ---2600
+       SUM(bonus) AS total_bonus
+FROM (SELECT e.empno,
+             e.ename,
+             e.sal,
+             e.deptno,
+             e.sal * CASE
+                         WHEN type = 1 THEN 0.1
+                         WHEN type = 2 THEN 0.2
+                         ELSE 0.3
+                 END AS bonus
+      FROM emp e,
+           emp_bonus3_10 eb
+      WHERE e.empno = eb.empno
+        AND e.deptno = 10)
+GROUP BY deptno;
+
+/*Два раза в итоговую сумму попадает Миллер, остальные служащие
+  отдела 10 не попадают в выборку, а это является некорректным расчетом*/
+SELECT e.empno,
+       e.ename,
+       e.sal,
+       e.deptno,
+       e.sal * CASE
+                   WHEN type = 1 THEN 0.1
+                   WHEN type = 2 THEN 0.2
+                   ELSE 0.3
+           END AS bonus
+FROM emp e,
+     emp_bonus3_10 eb
+WHERE e.empno = eb.empno
+  AND e.deptno = 10;
+
+
+/*Корректное решение*/
+EXPLAIN ANALYZE
+SELECT e.deptno,
+       SUM(e.sal) AS total_sal,
+       SUM(e.sal * (SELECT SUM(CASE
+                                   WHEN type = 1 THEN 0.1
+                                   WHEN type = 2 THEN 0.2
+                                   ELSE 0.3
+           END)
+                    FROM emp_bonus3_10 eb
+                    WHERE eb.empno = e.empno)
+       )          AS total_bonus
+FROM emp e
+WHERE e.deptno = 10
+GROUP BY e.deptno;
+
+
+/*Чем плох
+Проблема: Коррелированный подзапрос выполняется для каждой строки из filtered_emp!
+Если в 10-м отделе 100 сотрудников:
+Подзапрос выполнится 100 раз
+Каждый раз - поиск в таблице emp_bonus3_10*/
+EXPLAIN ANALYZE
+WITH filtered_emp AS (
+    SELECT e.empno, e.sal, e.deptno
+    FROM emp e
+    WHERE e.deptno = 10
+),
+     bonus_calc AS (
+         SELECT fe.*,
+                (SELECT SUM(CASE
+                                WHEN eb.type = 1 THEN 0.1
+                                WHEN eb.type = 2 THEN 0.2
+                                ELSE 0.3
+                    END)
+                 FROM emp_bonus3_10 eb
+                 WHERE eb.empno = fe.empno) AS bonus_rate
+         FROM filtered_emp fe
+     )
+SELECT deptno,
+       SUM(sal) AS total_sal,
+       SUM(sal * COALESCE(bonus_rate, 0)) AS total_bonus
+FROM bonus_calc
+GROUP BY deptno;
+
+
+/*Вариант оптимизированный:
+Заменяет коррелированный подзапрос на JOIN
+Обычно дает лучший план выполнения
+Легче читается и поддерживается*/
+EXPLAIN ANALYZE
+SELECT e.deptno,
+       SUM(e.sal) AS total_sal,
+       SUM(e.sal * COALESCE(eb.total_rate, 0)) AS total_bonus
+FROM emp e
+ LEFT JOIN (
+    SELECT empno,
+           SUM(CASE
+                   WHEN type = 1 THEN 0.1
+                   WHEN type = 2 THEN 0.2
+                   ELSE 0.3
+               END) AS total_rate
+    FROM emp_bonus3_10
+    GROUP BY empno
+) eb ON e.empno = eb.empno
+WHERE e.deptno = 10
+GROUP BY e.deptno;
+
+
+/*Возвращение отсутствующих данных из нескольких таблиц
+  Это можно сделать с помощью полного внешнего объединения
+  полное внешнее объединение это комбинация двух типов объединений
+  левого и правого.
+*/
+
+insert into emp(empno, ename, job, mgr, hiredate, sal, comm,deptno)
+select 1111,'YODA','JEDI',null,hiredate,sal,comm,null
+    from emp
+where ename = 'KING';
+
+
+SELECT d.deptno, d.dname, e.ename
+FROM dept d
+         FULL OUTER JOIN emp e ON d.deptno = e.deptno;
+
+/*Значения null в вычислениях и сравнениях
+  значение null не может быть равным или не равным любому значению, даже другому значению null
+  Но нам нужно выполнить операции со значениями столбца, который может содержать значения
+  null также, как и операции с действительными значениями.
+  Например, необходимо найти в таблице EMP всех служащих, для которых значение премии comm меньше
+  чем размер премии служащего ward
+  Результирующее множество также должно содержать служащих для которых значение
+  премии равно null*/
+
+select
+ename,
+comm,
+coalesce(comm,0)
+from emp
+where coalesce(comm,0) < (SELECT comm from emp where ename = 'WARD');
+
+
+/*
+Вставка, обновление и удаление записей
+копирование строк одной таблицы в другую
+*/
+
+create table dept_east(deptno numeric(2) ,dname varchar(10),loc varchar(10));
+
+insert into dept_east (deptno,dname,loc)
+select *
+from dept
+where loc in ('NEW YORK','BOSTON');
+
+/*Копирование определения таблицы
+  требуется создать таблицу с набором столбцов как и в существующей
+  таблице.
+  Например, создать копию dept присвоив ей название dept_2
+  Копировать строки в новую таблицу не нужно, только структуру столбцов
+*/
+
+CREATE TABLE dept_2
+AS
+SELECT *
+FROM dept
+where 1 = 0;
+
+DROP table dept_2;
+
+CREATE TABLE dept_2 (LIKE dept
+                         INCLUDING DEFAULTS      -- Значения по умолчанию
+                         INCLUDING CONSTRAINTS   -- Ограничения (CHECK)
+                         INCLUDING IDENTITY      -- Identity/Serial столбцы
+                         INCLUDING INDEXES       -- Индексы
+                         INCLUDING STORAGE       -- Настройки хранения
+                         INCLUDING COMMENTS      -- Комментарии
+                         INCLUDING GENERATED     -- Генерируемые столбцы
+                         INCLUDING STATISTICS);  -- Статистики
+
+-- 3. Создаём копию "хорошим" способом
+CREATE TABLE dept_good_copy (LIKE dept INCLUDING ALL);
+
+/*Если нужны не все столбцы*/
+CREATE TABLE new_table (LIKE original_table INCLUDING ALL);
+ALTER TABLE new_table DROP COLUMN column_to_remove;
+
+select *
+from dept_2;
+
