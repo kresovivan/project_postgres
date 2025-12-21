@@ -64,7 +64,7 @@ SELECT *
 FROM emp
 WHERE deptno = 10
    OR comm IS NOT NULL
-   OR sal <= 2000 AND deptno = 20
+   OR sal <= 2000 AND deptno = 20;
 
 
 /*(deptno = 10 OR comm IS NOT NULL OR sal <= 2000)
@@ -106,9 +106,9 @@ FROM emp;
 [2025-12-21 01:23:58] Позиция: 60
 */
 
-SELECT sal as salary, comm as comission
-from emp
-where salary < 5000;
+--SELECT sal as salary, comm as comission
+--from emp
+--where salary < 5000;
 
 /*Эту ошибку можно устранить с помощью вложенного запроса
   приведенное рещение необходимо в тех случаях, когда в
@@ -226,18 +226,18 @@ and (ename LIKE '%I%' or job like '%ER');
 SELECT ename, job, sal
 FROM emp
 WHERE deptno = 10
-ORDER BY sal ASC; -- по возрастанию
+ORDER BY sal; -- по возрастанию
 
 SELECT ename, job, sal
 FROM emp
 WHERE deptno = 10
-ORDER BY sal DESC -- по убыванию
+ORDER BY sal DESC; -- по убыванию
 
 ---также можно указать номер столбца сортировки
 SELECT ename, job, sal
 FROM emp
 WHERE deptno = 10
-ORDER BY 3 DESC -- по убыванию
+ORDER BY 3 DESC; -- по убыванию
 
 /*Сортировка по нескольким столбцам
   требуется отсортировать строки результирующего набора по столбцу deptno по возрастанию,
@@ -341,7 +341,6 @@ from (
          from emp) x
 order by is_null desc, comm desc
 
-     );
 
 
 
