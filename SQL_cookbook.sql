@@ -1228,5 +1228,180 @@ where ns.deptno = emp.deptno;
   соответствующей записи.
   В частности, если запись существует, обновить ее, если нет - вставить, а если обновленная запись не отвечает
   определенному условию - удалить ее.
-
 */
+
+select deptno, empno, ename, comm
+    from emp
+    order by 1;
+
+create table emp_comission
+(
+    deptno  int,
+    empno   int,
+    ename   varchar(50),
+    comm    numeric(7,2)
+);
+
+insert into emp_comission(deptno,  empno, ename,  comm)
+values
+(10,7782, 'CLARK', null),
+(10,7839, 'KING', null),
+(10,7934, 'MILLER', null);
+
+select deptno, empno, ename, comm
+from emp_comission
+order by 1;
+
+MERGE INTO emp_comission AS ec
+USING emp ON (ec.empno = emp.empno)
+/*
+Условие: зарплата < 2000
+WHEN MATCHED AND emp.sal < 2000 THEN DELETE
+Пример: если emp.sal = 1500 → запись удаляется*/
+WHEN MATCHED AND emp.sal < 2000 THEN
+    DELETE
+WHEN MATCHED THEN
+/*Для остальных совпадений
+WHEN MATCHED THEN UPDATE SET comm = 1000
+Пример: если emp.sal = 2500 → comm устанавливается в 1000
+empno | ename  | sal    | Что произойдет?
+------|--------|--------|-----------------
+1     | John   | 1500   → DELETE (sal < 2000)
+2     | Jane   | 1999.99 → DELETE (sal < 2000)
+3     | Bob    | 2000    → UPDATE (comm = 1000)
+4     | Alice  | 2000.01 → UPDATE (comm = 1000)
+5     | Mark   | 3000    → UPDATE (comm = 1000)
+6     | Tom    | NULL    → UPDATE (comm = 1000)
+*/
+    UPDATE SET comm = 1000
+WHEN NOT MATCHED THEN
+/*
+-- Пример: сотрудник есть в emp, но нет в emp_comission
+-- Добавляется с комиссией = 1000
+*/
+    INSERT (empno, ename, deptno, comm)
+    VALUES (emp.empno, emp.ename, emp.deptno, 1000);
+
+
+-- Выполняем MERGE
+MERGE INTO emp_comission AS ec
+USING emp ON (ec.empno = emp.empno)
+WHEN MATCHED AND emp.sal < 2000 THEN
+    DELETE
+WHEN MATCHED THEN
+    UPDATE SET comm = 1000
+WHEN NOT MATCHED THEN
+    INSERT (empno, ename, deptno, comm)
+    VALUES (emp.empno, emp.ename, emp.deptno, 1000);
+
+-- Затем подсчитываем результаты
+WITH stats AS (
+    SELECT
+        e.empno,
+        ec.empno as existed,
+        e.sal,
+        CASE
+            WHEN ec.empno IS NULL THEN 'INSERTED'
+            WHEN e.sal < 2000 THEN 'DELETED'
+            ELSE 'UPDATED'
+            END as action
+    FROM emp e
+             LEFT JOIN emp_comission ec ON e.empno = ec.empno
+)
+SELECT *
+FROM stats
+ORDER BY action;
+
+
+select *
+from emp_comission;
+
+/*Удаление записей таблицы*/
+truncate emp_comission;
+
+/*Удаление определенных записей*/
+delete from emp_comission where deptno = 10;
+
+/*Удаление строк, нарушающих ссылочную целостность
+  Например требуется удалить записи, ссылающиеся на несуществующие
+  записи в какой-то таблице. Например, для некоторых служащих может
+  быть указан несуществующий номер отдела. Запись таких служащих нужно удалить*/
+
+delete
+from emp
+where not exists (select *
+from dept
+where dept.deptno = emp.deptno)
+
+/*Также можно использовать такой запрос*/
+
+delete from emp
+where deptno not in (select deptno from dept);
+
+/*Удаление дубликатов записей, при удалении дубликатов необходимо
+  точно определить, что именно делает строки дублирующимися. В рассматриваемом
+  примере дубликатами являются записи, содержащие одинаковые значения столбца name
+  Смысл решения состоит в группировке записей по дубликатам значений с последующим
+*/
+truncate table dupes;
+create table dupes (id integer, name varchar(10));
+
+insert into dupes values (1,'NAPOLEON');
+insert into dupes values (2,'DYNAMO');
+insert into dupes values (3,'DYNAMO');
+insert into dupes values (4,'SHE SELLS');
+insert into dupes values (5,'SHE SELLS');
+insert into dupes values (6,'SEA SHELLS');
+insert into dupes values (7,'SEA SHELLS');
+insert into dupes values (8,'SEA SHELLS');
+insert into dupes values (9,'SEA SHELLS');
+
+
+select *
+from dupes
+order by 1;
+
+
+-- Удалить дубликаты, оставляя первую запись
+DELETE FROM dupes
+WHERE id IN (
+    SELECT id
+    FROM (
+             SELECT
+                 id,
+                 ROW_NUMBER() OVER (PARTITION BY name ORDER BY id) as rn
+             FROM dupes
+         ) t
+    WHERE rn > 1
+);
+
+
+delete from dupes
+where id not in (select min(id) from dupes group by name);
+/*-- Создать новую таблицу без дубликатов
+CREATE TABLE dupes_new AS
+SELECT DISTINCT ON (name) *
+FROM dupes
+ORDER BY name, id;
+
+-- Удалить старую и переименовать
+DROP TABLE dupes;
+ALTER TABLE dupes_new RENAME TO dupes;
+*/
+
+/*Удаление записей, на которые есть ссылки из другой таблицы*/
+CREATE TABLE dept_accidents
+(
+    deptno integer,
+    accident_name varchar(20)
+);
+INSERT INTO dept_accidents (deptno, accident_name)
+VALUES (10, 'BROKEN FOOT'),
+       (10, 'FLESH WOUND'),
+       (20, 'FIRE'),
+       (20, 'FIRE'),
+       (20, 'FLOOD'),
+       (30, 'BRUISED GLUTE');
+
+select *
+from dept_accidents;
