@@ -1,3 +1,109 @@
+-- Создание таблицы DEPT
+
+---truncate table dept;
+CREATE TABLE dept (
+                      deptno INTEGER PRIMARY KEY,
+                      dname  VARCHAR(14),
+                      loc    VARCHAR(13)
+);
+
+-- Вставка данных в DEPT
+INSERT INTO dept VALUES (10, 'ACCOUNTING', 'NEW YORK');
+INSERT INTO dept VALUES (20, 'RESEARCH',   'DALLAS');
+INSERT INTO dept VALUES (30, 'SALES',      'CHICAGO');
+INSERT INTO dept VALUES (40, 'OPERATIONS', 'BOSTON');
+
+----truncate table emp;
+-- Создание таблицы EMP
+CREATE TABLE emp (
+                     empno    INTEGER PRIMARY KEY,
+                     ename    VARCHAR(10),
+                     job      VARCHAR(9),
+                     mgr      INTEGER,
+                     hiredate DATE,
+                     sal      DECIMAL(7,2),
+                     comm     DECIMAL(7,2),
+                     deptno   INTEGER REFERENCES dept(deptno)
+);
+
+-- Вставка данных в EMP
+INSERT INTO emp VALUES
+    (7369, 'SMITH',  'CLERK',     7902, '1980-12-17',  800, NULL, 20);
+INSERT INTO emp VALUES
+    (7499, 'ALLEN',  'SALESMAN',  7698, '1981-02-20', 1600,  300, 30);
+INSERT INTO emp VALUES
+    (7521, 'WARD',   'SALESMAN',  7698, '1981-02-22', 1250,  500, 30);
+INSERT INTO emp VALUES
+    (7566, 'JONES',  'MANAGER',   7839, '1981-04-02', 2975, NULL, 20);
+INSERT INTO emp VALUES
+    (7654, 'MARTIN', 'SALESMAN',  7698, '1981-09-28', 1250, 1400, 30);
+INSERT INTO emp VALUES
+    (7698, 'BLAKE',  'MANAGER',   7839, '1981-05-01', 2850, NULL, 30);
+INSERT INTO emp VALUES
+    (7782, 'CLARK',  'MANAGER',   7839, '1981-06-09', 2450, NULL, 10);
+INSERT INTO emp VALUES
+    (7788, 'SCOTT',  'ANALYST',   7566, '1982-12-09', 3000, NULL, 20);
+INSERT INTO emp VALUES
+    (7839, 'KING',   'PRESIDENT', NULL, '1981-11-17', 5000, NULL, 10);
+INSERT INTO emp VALUES
+    (7844, 'TURNER', 'SALESMAN',  7698, '1981-09-08', 1500,    0, 30);
+INSERT INTO emp VALUES
+    (7876, 'ADAMS',  'CLERK',     7788, '1983-01-12', 1100, NULL, 20);
+INSERT INTO emp VALUES
+    (7900, 'JAMES',  'CLERK',     7698, '1981-12-03',  950, NULL, 30);
+INSERT INTO emp VALUES
+    (7902, 'FORD',   'ANALYST',   7566, '1981-12-03', 3000, NULL, 20);
+INSERT INTO emp VALUES
+    (7934, 'MILLER', 'CLERK',     7782, '1982-01-23', 1300, NULL, 10);
+
+
+-- Создание таблицы EMP_BONUS
+CREATE TABLE emp_bonus (
+                           empno INTEGER,
+                           received DATE,
+                           type INTEGER
+);
+
+-- Пример 1: Данные из рецепта 10.1 (Chapter 10)
+INSERT INTO emp_bonus VALUES
+                          (7369, '2005-03-14', 1),
+                          (7900, '2005-03-14', 2),
+                          (7788, '2005-03-14', 3);
+
+-- Пример 2: Дополнительные данные из других рецептов
+INSERT INTO emp_bonus VALUES
+                          (7934, '2005-03-14', 1),
+                          (7934, '2005-03-15', 2),
+                          (7839, '2005-03-15', 3),
+                          (7782, '2005-03-15', 1);
+
+
+-- Создание таблицы CUSTOMERS
+CREATE TABLE customers (
+                           cust_id INTEGER PRIMARY KEY,
+                           cust_name VARCHAR(50) NOT NULL,
+                           cust_city VARCHAR(50),
+                           cust_state CHAR(2),
+                           cust_zip VARCHAR(10),
+                           cust_email VARCHAR(100)
+);
+
+-- Вставка данных в CUSTOMERS (из рецептов книги)
+INSERT INTO customers (cust_id, cust_name, cust_city, cust_state, cust_zip, cust_email)
+VALUES (1001, 'JOHN SMITH', 'NEW YORK', 'NY', '10001', 'john.smith@email.com'),
+       (1002, 'MARY JONES', 'LOS ANGELES', 'CA', '90001', 'mary.jones@email.com'),
+       (1003, 'BOB JOHNSON', 'CHICAGO', 'IL', '60601', 'bob.johnson@email.com'),
+       (1004, 'SARA LEE', 'HOUSTON', 'TX', '77001', 'sara.lee@email.com'),
+       (1005, 'MIKE BROWN', 'PHILADELPHIA', 'PA', '19019', 'mike.brown@email.com'),
+       (1006, 'LISA WHITE', 'PHOENIX', 'AZ', '85001', 'lisa.white@email.com'),
+       (1007, 'DAVID MILLER', 'SAN ANTONIO', 'TX', '78201', 'david.miller@email.com'),
+       (1008, 'JENNIFER DAVIS', 'SAN DIEGO', 'CA', '92101', 'jennifer.davis@email.com'),
+       (1009, 'TOM WILSON', 'DALLAS', 'TX', '75201', 'tom.wilson@email.com'),
+       (1010, 'AMANDA TAYLOR', 'SAN JOSE', 'CA', '95101', 'amanda.taylor@email.com');
+
+
+
+
 /*Проверка тестовых таблиц*/
 
 SELECT *
@@ -1405,3 +1511,253 @@ VALUES (10, 'BROKEN FOOT'),
 
 select *
 from dept_accidents;
+
+/*Нужно удалить записи EMP для служащих работающих в отделах в которых произошло три и более несчастных случая*/
+
+delete
+from emp
+where deptno in (select deptno from dept_accidents
+                               group by deptno
+                               having count(*) >=3);
+
+select *
+from emp;
+
+/*Запросы на получение метаданных
+  Информация о конкретной схеме базы данных, о созданных таблицах, о проиндексированных ключах*/
+
+SELECT *
+FROM information_schema.tables
+WHERE table_schema = 'SMEAGOL';
+
+CREATE SCHEMA IF NOT EXISTS smeagol;
+
+CREATE TABLE smeagol.emp (
+                             empno    INTEGER PRIMARY KEY,
+                             ename    VARCHAR(10),
+                             job      VARCHAR(9),
+                             mgr      INTEGER,
+                             hiredate DATE,
+                             sal      DECIMAL(7,2),
+                             comm     DECIMAL(7,2),
+                             deptno   INTEGER
+);
+
+-- Устанавливаем схему по умолчанию
+SET search_path TO smeagol, public;
+
+CREATE TABLE smeagol.emp (
+                             empno    INTEGER PRIMARY KEY,
+                             ename    VARCHAR(10),
+                             job      VARCHAR(9),
+                             mgr      INTEGER,
+                             hiredate DATE,
+                             sal      DECIMAL(7,2),
+                             comm     DECIMAL(7,2),
+                             deptno   INTEGER
+);
+
+INSERT INTO smeagol.emp
+VALUES (7369, 'SMITH', 'CLERK', 7902, '1980-12-17', 800, NULL, 20),
+       (7499, 'ALLEN', 'SALESMAN', 7698, '1981-02-20', 1600, 300, 30),
+       (7521, 'WARD', 'SALESMAN', 7698, '1981-02-22', 1250, 500, 30),
+       (7566, 'JONES', 'MANAGER', 7839, '1981-04-02', 2975, NULL, 20),
+       (7654, 'MARTIN', 'SALESMAN', 7698, '1981-09-28', 1250, 1400, 30),
+       (7698, 'BLAKE', 'MANAGER', 7839, '1981-05-01', 2850, NULL, 30),
+       (7782, 'CLARK', 'MANAGER', 7839, '1981-06-09', 2450, NULL, 10),
+       (7788, 'SCOTT', 'ANALYST', 7566, '1982-12-09', 3000, NULL, 20),
+       (7839, 'KING', 'PRESIDENT', NULL, '1981-11-17', 5000, NULL, 10),
+       (7844, 'TURNER', 'SALESMAN', 7698, '1981-09-08', 1500, 0, 30),
+       (7876, 'ADAMS', 'CLERK', 7788, '1983-01-12', 1100, NULL, 20),
+       (7900, 'JAMES', 'CLERK', 7698, '1981-12-03', 950, NULL, 30),
+       (7902, 'FORD', 'ANALYST', 7566, '1981-12-03', 3000, NULL, 20),
+       (7934, 'MILLER', 'CLERK', 7782, '1982-01-23', 1300, NULL, 10);
+
+CREATE TABLE smeagol.dept (
+                              deptno INTEGER PRIMARY KEY,
+                              dname  VARCHAR(14),
+                              loc    VARCHAR(13)
+);
+
+INSERT INTO smeagol.dept VALUES
+                             (10, 'ACCOUNTING', 'NEW YORK'),
+                             (20, 'RESEARCH',   'DALLAS'),
+                             (30, 'SALES',      'CHICAGO'),
+                             (40, 'OPERATIONS', 'BOSTON');
+
+
+CREATE TABLE smeagol.emp_bonus (
+                                   empno INTEGER,
+                                   received DATE,
+                                   type INTEGER
+);
+
+INSERT INTO smeagol.emp_bonus VALUES
+                                  (7369, '2005-03-14', 1),
+                                  (7900, '2005-03-14', 2),
+                                  (7788, '2005-03-14', 3),
+                                  (7934, '2005-03-14', 1);
+
+
+CREATE TABLE smeagol.dupes (
+                               id INTEGER,
+                               name VARCHAR(10)
+);
+
+INSERT INTO smeagol.dupes
+VALUES (1, 'NAPOLEON'),
+       (2, 'DYNAMO'),
+       (3, 'DYNAMO'),
+       (4, 'SHE SELLS'),
+       (5, 'SHE SELLS'),
+       (6, 'SEA SHELLS'),
+       (7, 'SEA SHELLS'),
+       (8, 'SEA SHELLS'),
+       (9, 'SEA SHELLS');
+
+CREATE TABLE smeagol.emp_comission (
+                                       empno INTEGER,
+                                       ename VARCHAR(10),
+                                       deptno INTEGER,
+                                       comm DECIMAL(7,2)
+);
+
+INSERT INTO smeagol.emp_comission VALUES
+                                      (1, 'JOHN', 10, 500),
+                                      (2, 'JANE', 20, 300),
+                                      (4, 'ALICE', 30, 400);
+
+
+CREATE TABLE smeagol.dept_accidents (
+                                        deptno INTEGER,
+                                        accident_name VARCHAR(50)
+);
+
+INSERT INTO smeagol.dept_accidents VALUES
+                                       (10, 'BROKEN FOOT'),
+                                       (10, 'FLESH WOUND'),
+                                       (20, 'FIRE'),
+                                       (20, 'FIRE'),
+                                       (20, 'FLOOD'),
+                                       (30, 'BRUISED GLUTE');
+
+CREATE TABLE smeagol.t1 (
+                            id INTEGER PRIMARY KEY
+);
+
+INSERT INTO smeagol.t1 VALUES (1);
+
+CREATE TABLE smeagol.t10 (
+                             id INTEGER PRIMARY KEY
+);
+
+INSERT INTO smeagol.t10
+SELECT generate_series(1, 10);
+
+
+CREATE TABLE smeagol.t100 (
+                              id INTEGER PRIMARY KEY
+);
+
+INSERT INTO smeagol.t100
+SELECT generate_series(1, 100);
+
+
+CREATE TABLE smeagol.emp2
+(
+    empno INTEGER PRIMARY KEY,
+    ename VARCHAR(10),
+    job VARCHAR(9),
+    sal DECIMAL(7, 2),
+    deptno INTEGER
+);
+
+INSERT INTO smeagol.emp2
+VALUES (7369, 'SMITH', 'CLERK', 800, 20),
+       (7499, 'ALLEN', 'SALESMAN', 1600, 30),
+       (7521, 'WARD', 'SALESMAN', 1250, 30),
+       (7566, 'JONES', 'MANAGER', 2975, 20),
+       (7654, 'MARTIN', 'SALESMAN', 1250, 30);
+
+CREATE TABLE smeagol.v (
+                           id INTEGER PRIMARY KEY,
+                           val INTEGER
+);
+
+INSERT INTO smeagol.v VALUES
+                          (1, 100),
+                          (2, 200),
+                          (3, 300),
+                          (4, 400);
+
+
+CREATE TABLE smeagol.emp_sales
+(
+    empno INTEGER,
+    sales_date DATE,
+    sales_amount DECIMAL(10, 2)
+);
+
+INSERT INTO smeagol.emp_sales
+VALUES (7499, '2024-01-15', 1000),
+       (7499, '2024-01-20', 1500),
+       (7499, '2024-02-01', 800),
+       (7521, '2024-01-18', 1200),
+       (7521, '2024-02-05', 900),
+       (7654, '2024-01-25', 2000),
+       (7654, '2024-02-10', 1100);
+
+
+CREATE TABLE smeagol.orders (
+                                order_id INTEGER PRIMARY KEY,
+                                customer_id INTEGER,
+                                order_date DATE,
+                                ship_date DATE,
+                                amount DECIMAL(10,2)
+);
+
+INSERT INTO smeagol.orders VALUES
+                               (1, 101, '2024-01-15', '2024-01-18', 150.00),
+                               (2, 102, '2024-01-16', '2024-01-19', 225.50),
+                               (3, 103, '2024-01-17', '2024-01-20', 300.00),
+                               (4, 101, '2024-02-01', '2024-02-03', 180.00),
+                               (5, 102, '2024-02-05', '2024-02-07', 275.25),
+                               (6, 104, '2024-02-10', '2024-02-12', 420.75),
+                               (7, 101, '2024-02-15', '2024-02-17', 190.00);
+
+
+select *
+from information_schema.tables
+where table_schema = 'smeagol'
+
+/*Создание списка столбцов таблицы*/
+
+SELECT column_name, ordinal_position, data_type, udt_name,
+       numeric_precision,  -- общее количество цифр
+       numeric_scale,      -- количество цифр после запятой
+       is_nullable         -- может ли столбец содержать NULL значения.
+FROM information_schema.columns
+WHERE table_schema = 'smeagol'
+  AND table_name = 'emp';
+
+/*Создание списка индексированных столбцов таблицы*/
+
+select a.tablename, a.indexname, a.indexdef, b.column_name
+from  pg_catalog.pg_indexes a,
+      information_schema.columns b
+where a.schemaname = 'smeagol'
+and a.tablename = b.table_name
+and a.tablename='emp';
+
+/*Создание списка ограничений, наложенных на таблицу*/
+
+select a.table_name, a.constraint_name, b.column_name, a.constraint_type
+from information_schema.table_constraints a,
+information_schema.key_column_usage b
+where a.table_name = 'emp'
+and a.table_schema= 'smeagol'
+and a.table_name = b.table_name
+and a.table_schema = b.table_schema
+and a.constraint_name = b.constraint_name
+
+/*Создание списка внешних ключей*/
