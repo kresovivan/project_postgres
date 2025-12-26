@@ -1760,4 +1760,44 @@ and a.table_name = b.table_name
 and a.table_schema = b.table_schema
 and a.constraint_name = b.constraint_name
 
-/*Создание списка внешних ключей*/
+/*Создание списка внешних ключей без соответствующих индексов
+  Требуется создать список таблиц, содержащих непроиндексированные
+  столбцы внешних ключей, например нужно узнать проиндексированы
+  ли внешние ключи таблицы emp*/
+
+WITH foreign_key_info AS (
+    SELECT
+        a.constraint_schema,
+        a.table_name,
+        a.constraint_name,
+        a.column_name
+    FROM information_schema.key_column_usage a
+             INNER JOIN information_schema.referential_constraints b
+                        ON a.constraint_name = b.constraint_name
+                            AND a.constraint_schema = b.constraint_schema
+    WHERE a.constraint_schema = 'smeagol'
+      AND a.table_name = 'emp'
+),
+     index_info AS (
+         SELECT
+             a.schemaname,
+             a.tablename,
+             a.indexname,
+             b.column_name
+         FROM pg_catalog.pg_indexes a
+                  INNER JOIN information_schema.columns b
+                             ON a.tablename = b.table_name
+                                 AND a.schemaname = b.table_schema
+     )
+SELECT
+    fk.table_name,
+    fk.constraint_name,
+    fk.column_name,
+    idx.indexname
+FROM foreign_key_info fk
+         LEFT JOIN index_info idx
+                   ON fk.constraint_schema = idx.schemaname
+                       AND fk.table_name = idx.tablename
+                       AND fk.column_name = idx.column_name
+WHERE idx.indexname IS NULL;
+
