@@ -1089,6 +1089,20 @@ SELECT *
 FROM dept
 where 1 = 0;
 
+
+CREATE TABLE dept_west
+AS
+SELECT *
+FROM dept
+where 1 = 0;
+
+
+CREATE TABLE dept_mid
+AS
+SELECT *
+FROM dept
+where 1 = 0;
+
 DROP table dept_2;
 
 CREATE TABLE dept_2 (LIKE dept
@@ -1111,3 +1125,59 @@ ALTER TABLE new_table DROP COLUMN column_to_remove;
 select *
 from dept_2;
 
+/*Вставка строк одновременно в несколько таблиц
+Решение заключаается во вставке строк результирующего множества запроса
+в таблицы назначения
+Через CTE будет ошибка, потому как CTE в PostgreSQL действует
+только для следующего за ним оператора.
+После первого INSERT CTE source_data_dept  больше не доступен.
+*/
+
+CREATE TEMP TABLE source_data_dept AS
+SELECT deptno, dname, loc
+FROM dept;
+
+-- Используем временную таблицу
+INSERT INTO dept_east(deptno, dname, loc)
+SELECT deptno, dname, loc FROM source_data_dept
+WHERE loc IN ('NEW YORK', 'BOSTON');
+
+INSERT INTO dept_mid(deptno, dname, loc)
+SELECT deptno, dname, loc FROM source_data_dept
+WHERE loc = 'CHICAGO';
+
+INSERT INTO dept_west(deptno, dname, loc)
+SELECT deptno, dname, loc FROM source_data_dept
+WHERE loc NOT IN ('NEW YORK', 'BOSTON', 'CHICAGO');
+
+-- Очищаем временную таблицу (автоматически удалится при завершении сессии)
+DROP TABLE source_data_dept;
+
+/*Блокировка вставки данных в определенные столбцы
+  требуется предотвратить вставку пользователями или программами значения в определенные столбцы
+  таблицы. Например, нужно решить вставку значений программой только в столбцы empno, ename, job
+  Создаем представление таблицы, содержащее только таблицы, в которые разрешена вставка и позволяет вам все вставки
+  только через это представление.
+*/
+
+create view new_emps as
+select empno, ename, job
+from emp;
+
+/*Пользователям предоставляем доступ к этому представлению
+GRANT SELECT ON new_emps TO username;
+GRANT INSERT, UPDATE, DELETE ON new_emps TO username;
+
+Тогда пользователи могут вставлять новые записи в таблицу EMP, создавая новые записи в представлении
+NEW_EMP, но при этом заполняя только те три столбца таблицы, которые указаны в определении представления.
+*/
+
+insert into new_emps
+(empno, ename, job)
+VALUES(1,'Jonathan', 'Editor');
+
+/*В таблице emp новая запись*/
+select *
+from emp;
+
+/*Изменение записей в таблице*/
