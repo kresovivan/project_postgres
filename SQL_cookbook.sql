@@ -1201,3 +1201,32 @@ where deptno = 20;
 update emp
 set sal = sal * 1.20
 where empno in (select empno from emp_bonus);
+
+/*Обновление значениями из другой таблицы*/
+create table new_sal
+(
+    deptno int,
+    sal numeric(10, 2)
+);
+insert into new_sal(deptno, sal)
+values(10,4000);
+
+/*Изменим тип данных*/
+ALTER TABLE new_sal
+ALTER COLUMN  sal TYPE numeric(15,2);
+
+select *
+from new_sal;
+
+update emp
+set sal = ns.sal
+from new_sal ns
+where ns.deptno = emp.deptno;
+
+/*Слияние записей
+  требуется выполнить, вставку, обновление, удаление записи в таблице, в зависимости от наличия или состояния
+  соответствующей записи.
+  В частности, если запись существует, обновить ее, если нет - вставить, а если обновленная запись не отвечает
+  определенному условию - удалить ее.
+
+*/
