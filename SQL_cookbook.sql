@@ -1801,3 +1801,471 @@ FROM foreign_key_info fk
                        AND fk.column_name = idx.column_name
 WHERE idx.indexname IS NULL;
 
+/*Установка DBLINK*/
+SELECT * FROM pg_extension WHERE extname = 'dblink';
+CREATE EXTENSION IF NOT EXISTS dblink;
+
+/*Как выполнить запрос через db_link*/
+SELECT * FROM dblink(
+                      'host=localhost dbname=demo_one user=postgres password=M*******900',
+                      'SELECT * FROM bookings'
+              ) AS t(
+                     book_ref char(6),
+                     book_date timestamp with time zone,
+                     total_amount numeric(10,2)
+    );
+
+/*Функции
+  Любой оператор в выполняемой секции блока может быть вложенным блоком. Вложенные блоки используются для логической группировки
+  нескольких операторов или локализации области действия переменных для группы операторов. Во время выполнения вложенного блока
+  переменные, объявленные в нём, скрывают переменные внешних блоков с такими же именами. Чтобы получить доступ к внешним
+  переменным, нужно дополнить их имена меткой блока. Например:*/
+CREATE FUNCTION somefunc() RETURNS integer AS $$
+<< outerblock >>
+    DECLARE
+    quantity integer := 30;
+BEGIN
+    RAISE NOTICE 'Сейчас quantity = %', quantity;  -- Выводится 30
+    quantity := 50;
+    --
+    -- Вложенный блок
+    --
+    DECLARE
+        quantity integer := 80;
+    BEGIN
+        RAISE NOTICE 'Сейчас quantity = %', quantity;  -- Выводится 80
+        RAISE NOTICE 'Во внешнем блоке quantity = %', outerblock.quantity;  -- Выводится 50
+    END;
+
+    RAISE NOTICE 'Сейчас quantity = %', quantity;  -- Выводится 50
+
+    RETURN quantity;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE FUNCTION sales_tax(real) RETURNS real AS $$
+DECLARE
+    subtotal ALIAS FOR $1;
+BEGIN
+    RETURN subtotal * 0.06;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE FUNCTION sales_tax(subtotal real) RETURNS real AS $$
+BEGIN
+    RETURN subtotal * 0.06;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION sales_tax(subtotal real DEFAULT 0.0) RETURNS real AS $$
+BEGIN
+    RETURN subtotal * 0.06;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+/*Скалярная функция*/
+---Функция, возвращающая приветствие
+CREATE OR REPLACE FUNCTION greet(name TEXT)
+    RETURNS TEXT AS $$
+BEGIN
+    RETURN 'Привет, ' || name || '!';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Использование:
+SELECT greet('Иван');  -- 'Привет, Иван!'
+
+/*Функция, возвращающая таблицу*/
+---
+---Возвращает таблицу сотрудников по отделу
+CREATE OR REPLACE FUNCTION get_employees_by_dept(p_dept_id INT)
+    RETURNS TABLE(
+                     ename TEXT,
+                     job TEXT,
+                     sal NUMERIC(7,2),
+                     deptno INT
+                 ) AS $$
+BEGIN
+    RETURN QUERY
+        SELECT
+            emp.ename::TEXT,  -- Явное приведение к TEXT
+            emp.job::TEXT,    -- Приведение и для job на всякий случай
+            emp.sal,
+            emp.deptno
+        FROM emp
+        WHERE emp.deptno = p_dept_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Использование:
+SELECT * FROM get_employees_by_dept(10);
+
+/*Функции без возвращаемого значения (процедуры)*/
+-- Создаем процедуру (функция с VOID)
+CREATE OR REPLACE FUNCTION log_message(msg TEXT)
+    RETURNS VOID AS $$
+BEGIN
+    INSERT INTO logs(message, created_at)
+    VALUES (msg, NOW());
+END;
+$$ LANGUAGE plpgsql;
+
+-- Использование:
+SELECT log_message('Система запущена');
+
+/*Способы передачи параметров*/
+
+-- 1. Позиционные параметры (как в примере выше)
+CREATE FUNCTION func1(a INT, b INT) RETURNS INT ...
+
+-- 2. Параметры с значениями по умолчанию
+    CREATE FUNCTION func2(a INT DEFAULT 10, b INT DEFAULT 20) ...
+
+-- 3. Именованные параметры (рекомендуется для читаемости)
+    CREATE FUNCTION func3(a INT, b INT) ...
+    -- Вызов: SELECT func3(a => 10, b => 20);
+
+-- 4. VARIADIC - переменное число параметров
+    CREATE FUNCTION sum_all(VARIADIC nums INT[]) RETURNS INT AS $$
+DECLARE
+    total INT := 0;
+    num INT;
+BEGIN
+    FOREACH num IN ARRAY nums LOOP
+        total := total + num;
+    END LOOP;
+    RETURN total;
+END;
+$$ LANGUAGE plpgsql;
+
+/*Условные операторы*/
+CREATE OR REPLACE FUNCTION get_discount(amount DECIMAL, is_regular BOOLEAN)
+    RETURNS DECIMAL AS $$
+DECLARE
+    discount DECIMAL := 0;
+BEGIN
+    IF amount > 10000 THEN
+        discount := 0.15;  -- 15%
+    ELSIF amount > 5000 THEN
+        discount := 0.10;  -- 10%
+    ELSE
+        discount := 0.05;  -- 5%
+    END IF;
+
+    -- Дополнительная скидка для постоянных клиентов
+    IF is_regular THEN
+        discount := discount + 0.05;
+    END IF;
+
+    RETURN amount * (1 - discount);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION get_grade(score INT)
+    RETURNS TEXT AS $$
+DECLARE
+    grade TEXT;
+BEGIN
+    CASE
+        WHEN score >= 90 THEN grade := 'A';
+        WHEN score >= 80 THEN grade := 'B';
+        WHEN score >= 70 THEN grade := 'C';
+        WHEN score >= 60 THEN grade := 'D';
+        ELSE grade := 'F';
+        END CASE;
+
+    RETURN grade;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+/*Циклы LOOP c EXIT*/
+
+CREATE OR REPLACE FUNCTION factorial(n INT)
+    RETURNS INT AS $$
+DECLARE
+    result INT := 1;
+    counter INT := 1;
+BEGIN
+    LOOP
+        EXIT WHEN counter > n;
+        result := result * counter;
+        counter := counter + 1;
+    END LOOP;
+
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+/*While*/
+
+CREATE OR REPLACE FUNCTION sum_to_n(n INT)
+    RETURNS INT AS $$
+DECLARE
+    total INT := 0;
+    i INT := 1;
+BEGIN
+    WHILE i <= n LOOP
+            total := total + i;
+            i := i + 1;
+        END LOOP;
+
+    RETURN total;
+END;
+$$ LANGUAGE plpgsql;
+
+/*FOR LOOP*/
+
+-- FOR по результату запроса
+CREATE OR REPLACE FUNCTION get_employee_names()
+    RETURNS TEXT AS $$
+DECLARE
+    emp_record RECORD;
+    names TEXT := '';
+BEGIN
+    FOR emp_record IN
+        SELECT ename, deptno
+        FROM emp
+        ORDER BY ename
+        LOOP
+            names := names || emp_record.ename || ', ' ||
+                     emp_record.deptno || E'\n';
+        END LOOP;
+
+    RETURN names;
+END;
+$$ LANGUAGE plpgsql;
+
+select *
+from get_employee_names()
+
+/*FOR EACH по массиву*/
+
+CREATE OR REPLACE FUNCTION array_to_string(arr TEXT[])
+    RETURNS TEXT AS $$
+DECLARE
+    element TEXT;
+    result TEXT := '';
+BEGIN
+    FOREACH element IN ARRAY arr LOOP
+            result := result || element || ', ';
+        END LOOP;
+
+    -- Убираем последнюю запятую и пробел
+    RETURN TRIM(TRAILING ', ' FROM result);
+END;
+$$ LANGUAGE plpgsql;
+
+/*Работа со строками
+  Проход строки, требуется выполнить проход по строке, чтобы выполнить каждый ее символ в отдельной строке таблицы,
+  хотя  операции SQL нет цикла.
+  Нужно отобразить вместо king
+  k
+  i
+  n
+  g
+  */
+
+EXPLAIN ANALYZE
+  select substr(e.ename, iter.pos, 1) as c
+  from (select ename from emp where ename = 'KING') e,
+       (select id as pos from t10) iter
+  where iter.pos <= length(e.ename);
+
+EXPLAIN ANALYZE
+SELECT substr(e.ename, iter.pos, 1) as c --- e.ename, iter.pos,
+FROM (SELECT ename FROM emp WHERE ename = 'KING') e
+         CROSS JOIN LATERAL (
+    SELECT generate_series(1, length(e.ename)) as pos
+    ) iter;
+
+EXPLAIN ANALYZE
+SELECT  iter.c -----e.ename ----, iter.pos,
+FROM (SELECT ename FROM emp WHERE ename = 'MILLER') e
+         CROSS JOIN LATERAL (
+    SELECT ordinality as pos, c
+/*WITH ORDINALITY — это расширение SQL в PostgreSQL, которое добавляет порядковый номер (начиная с 1)
+  к каждой строке, возвращаемой функцией, возвращающей набор (set-returning function).
+-- Результат:
+-- letter | pos
+-- -------|----
+-- A      | 1
+-- B      | 2
+-- C      | 3
+  */
+    FROM unnest(string_to_array(e.ename, NULL)) WITH ORDINALITY AS t(c, ordinality)
+    ) iter;
+
+/*Вставка кавычек в строковые константы
+Количество кавычек в любой строке должно быть четным
+Нужно помнить что строковая константа из двух кавычек,
+не содержащая ничего между ними, представляет значение null*/
+
+select 'g''day mate' qmarks from t1
+UNION ALL
+select 'beavers'' teeth' from t1
+UNION ALL
+select '''' from t1;
+
+/*Подсчет количества вхождений в строку определенного символа.
+  Требуется подсчитать количество вхождений символа или подстроки в заданную строку*/
+
+/*Объяснение формулы:
+LENGTH('10, CLARK, MANAGER') = длина всей строки = 19 символов
+REPLACE('10, CLARK, MANAGER', ',', '') = удаляем все запятые → '10 CLARK MANAGER'
+LENGTH('10 CLARK MANAGER') = длина без запятых = 17 символов
+Разница: 19 - 17 = 2 символа (это запятые);
+Длина разделителя LENGTH(',') = 1;
+
+Результат: 2 / 1 = 2 запятых*/
+SELECT (LENGTH('10, CLARK, MANAGER') - LENGTH(REPLACE('10, CLARK, MANAGER', ',', ''))) / LENGTH(',') AS cnt
+FROM t1
+
+/*Удаление символа из строки
+  Требуется удалить из данных определенные символы*/
+
+SELECT ename,
+       REPLACE(TRANSLATE(ename, 'AEIOU', 'aeiou'), 'a', '') AS stripped1,
+       ---TRANSLATE Заменяет заглавные гласные на строчные:
+       ---REPLACE(..., 'a', '') Удаляет все буквы 'a' (только строчные!) из результата TRANSLATE.
+       sal,
+       REPLACE(CAST(sal AS char(4)), '0', '')               AS stripper2
+FROM emp;
+
+/*Разделение цифровых и символьных данных*/
+
+SELECT
+    REPLACE(
+            TRANSLATE(data, '0123456789', '00000000000'),
+            '0',
+            ''
+    ) as ename,
+    CAST(
+            REPLACE(
+                    TRANSLATE(LOWER(data),
+                              'abcdefghijklmnopqrstuvwxyz',
+                              RPAD('z', 26, 'z')),
+                    'z',
+                    ''
+            ) AS NUMERIC  -- или DECIMAL вместо INTEGER
+    ) as sal
+FROM (
+         SELECT ename || sal as data
+         FROM emp
+     ) x;
+
+----можно использовать регулярные выражения
+SELECT
+    REGEXP_REPLACE(data, '[0-9\.]', '', 'g') as ename,
+    CAST(REGEXP_REPLACE(data, '[^0-9\.]', '', 'g') AS NUMERIC) as sal
+FROM (
+         SELECT ename || sal as data
+         FROM emp
+     ) x;
+
+/*Содержит ли строка только буквенно-цифровые символы
+  Вы хотите вернуть строки из таблицы только в том случае, когда заданный столбец не содержит никаких иных
+  символов, кроме цифр и букв*/
+
+  create view D as
+      select ename as data
+  from emp
+  where deptno = 10
+  union all
+  select ename||', $'|| cast(sal as char(4)) ||'0.00' as data
+  from emp
+  where deptno = 20
+  union all
+  select ename|| cast(deptno as char(4)) as data
+  from emp
+  where deptno = 30;
+/*
+data
+CLARK
+KING
+MILLER
+SMITH, $800.0.00
+JONES, $29750.00
+SCOTT, $30000.00
+ADAMS, $11000.00
+FORD, $30000.00
+ALLEN30
+WARD30
+MARTIN30
+BLAKE30
+TURNER30
+JAMES30
+*/
+select *
+from D;
+
+select data
+from d
+where translate(lower(data),
+    '0123456789abcdefghijklmnopqrstuvwxyz',
+      rpad('a', 36, 'a')) = rpad('a', length(data),'a');
+
+SELECT data
+FROM d
+WHERE data ~ '^[A-Za-z]+$';  -- только буквы от начала до конца
+
+SELECT data
+FROM d
+WHERE REGEXP_REPLACE(data, '[A-Za-z]', '', 'g') = '';  -- после удаления букв ничего не осталось
+
+/*
+
+Оператор	Описание
+~	Совпадает с регулярным выражением (регистрозависимый)
+~*	Совпадает с регулярным выражением (регистронезависимый)
+!~	НЕ совпадает с регулярным выражением (регистрозависимый)
+!~*	НЕ совпадает с регулярным выражением (регистронезависимый)
+*/
+
+SELECT data
+FROM d
+WHERE data ~* '[^0-9a-z]';  -- только буквы от начала до конца
+
+SELECT data
+FROM d
+WHERE data ~ '[^0-9a-zA-Z]';
+
+SELECT data
+FROM d
+WHERE data !~ '[^0-9a-zA-Z]';
+
+SELECT data
+FROM d
+WHERE regexp_match(data, '[^0-9a-zA-Z]') IS NOT NULL;
+
+/*Извлечение инициалов из имен*/
+
+SELECT REPLACE('banana', 'a', 'o');
+SELECT REPLACE('Hello World', 'World', 'PostgreSQL');
+
+-- Замена гласных
+SELECT TRANSLATE('Hello World', 'aeiou', 'AEIOU');
+SELECT TRANSLATE('800.00', '.', '');
+-- Если строка замены короче - лишние символы удаляются!
+SELECT TRANSLATE('Hello', 'Helo', '12');
+-- Порядок важен!
+SELECT TRANSLATE('12345', '123', 'abc');  -- 1→a, 2→b, 3→c
+
+SELECT RPAD('Hello', 10, '*');
+-- Результат: 'Hello*****'
+-- Дополнение пробелами (по умолчанию)
+SELECT RPAD('Hello', 10);
+-- Результат: 'Hello
+SELECT RPAD('Hello World', 15, '*');
+-- Результат: 'Hello' (обрезается!)
+
+-- Создание строки из повторяющихся символов
+SELECT RPAD('*', 10, '*');
+
+/**/
