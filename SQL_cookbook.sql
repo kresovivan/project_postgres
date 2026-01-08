@@ -2268,4 +2268,22 @@ SELECT RPAD('Hello World', 15, '*');
 -- Создание строки из повторяющихся символов
 SELECT RPAD('*', 10, '*');
 
-/**/
+/*
+SELECT oid, datname
+FROM pg_database
+WHERE oid = 16388;
+*/
+
+/*Сортировка по подстрокам необходимо упорядочить
+  по последним двум символам каждой записи
+
+Разберем выражение:
+length(ename) - возвращает длину строки
+length(ename)-1 - возвращает позицию предпоследнего символа
+substr(ename, length(ename)-1) - извлекает подстроку, начиная с предпоследнего символа до конца строки, то есть последние два симво
+
+*/
+
+select ename,substr(ename, length(ename)-1)
+from emp
+order by substr(ename, length(ename)-1)
