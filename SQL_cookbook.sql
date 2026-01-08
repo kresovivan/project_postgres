@@ -2287,3 +2287,37 @@ substr(ename, length(ename)-1) - извлекает подстроку, начи
 select ename,substr(ename, length(ename)-1)
 from emp
 order by substr(ename, length(ename)-1);
+
+/*Сортировка по числу в строке*/
+
+create view a as
+select e.ename ||' '|| cast(e.empno as char(4)) ||' '|| d.dname as data
+from emp e, dept d
+where e.deptno = d.deptno;
+
+select *
+from a;
+
+SELECT data,
+       CAST(
+               REPLACE(
+                       TRANSLATE(data,
+                                 REPLACE(
+                                         TRANSLATE(data, '0123456789', '##########'),
+                                         '#', ''), RPAD('#', 20, '#'))
+                   , '#', '') AS integer) AS int
+FROM v
+ORDER BY CAST(
+                 REPLACE(
+                         TRANSLATE(data,
+                                   REPLACE(
+                                           TRANSLATE(data, '0123456789', '##########'),
+                                           '#', ''), RPAD('#', 20, '#'))
+                     , '#', '') AS integer)
+
+/*Создание из строк таблицы списка с разделителями*/
+
+SELECT deptno,
+       STRING_AGG(ename, ',' ORDER BY empno) as emps
+FROM emp
+GROUP BY deptno;
