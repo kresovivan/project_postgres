@@ -2341,6 +2341,13 @@ ORDER BY a.ename;
 
 /*Парсинг IP-адреса требуется произвести парсинг адреса
   и поместить значения полей в отдельные столбцы таблицы
+
+Функция split_part(text, delimiter, field_number):
+y.ip - исходная строка (IP-адрес)
+'.' - разделитель (точка в IP-адресе)
+1 - номер части (нумерация с 1)
+Возвращает: первую часть строки после разбиения по разделителю
+
 */
 
 select
@@ -2349,3 +2356,20 @@ select
     split_part(y.ip,'.',3) as c,
     split_part(y.ip,'.',4) as d
 from (select cast('92.111.0.2' as text) as ip from t1) as y
+
+/*Операции с числами*/
+
+select  avg(sal) as avg_sal
+from emp;
+
+select deptno, avg(sal) as avg_sal
+from emp
+group by deptno;
+
+/*Определение минимального или максимального значения столбца*/
+
+select deptno, min(sal) as min_sal, max(sal) as max_sal,  round(avg(sal),2) as avg_sal
+from emp
+group by deptno;
+
+
