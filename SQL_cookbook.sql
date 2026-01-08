@@ -2286,4 +2286,4 @@ substr(ename, length(ename)-1) - извлекает подстроку, начи
 
 select ename,substr(ename, length(ename)-1)
 from emp
-order by substr(ename, length(ename)-1)
+order by substr(ename, length(ename)-1);
