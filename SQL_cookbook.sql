@@ -2339,5 +2339,13 @@ FROM emp a
 GROUP BY a.ename
 ORDER BY a.ename;
 
-/*Парсинг IP адреса*/
+/*Парсинг IP-адреса требуется произвести парсинг адреса
+  и поместить значения полей в отдельные столбцы таблицы
+*/
 
+select
+    split_part(y.ip,'.',1) as a,
+    split_part(y.ip,'.',2) as b,
+    split_part(y.ip,'.',3) as c,
+    split_part(y.ip,'.',4) as d
+from (select cast('92.111.0.2' as text) as ip from t1) as y
