@@ -2450,7 +2450,111 @@ select date1, sales, lag(sales,1) over(order by date1) as salesLagOne,
      +  lag(sales, 2) over(order by date1)) / 3 as MovingAverage
 from sales;
 
+/*Вычисление моды
+  мода - это элемент с наибольшим количеством вхождений в рассматриваемый набор данных
+  например моду зарплат отдела 20
+
+sal
+800.00
+1100.00
+2975.00
+3000.00
+3000.00
+
+В этом наборе данных модой является 3000.00, так как это значение встречается чаще всего (2 раза),
+в то время как остальные значения уникальным*/
+
+  select sal
+  from emp
+  where deptno = 20
+  order by sal;
+
+SELECT MODE() WITHIN GROUP (ORDER BY sal) as modal_salary
+FROM emp
+WHERE deptno = 20;
 
 
+SELECT sal
+FROM (
+         SELECT
+             sal,
+             DENSE_RANK() OVER (ORDER BY COUNT(*) DESC) as rnk
+         FROM emp
+         WHERE deptno = 20
+         GROUP BY sal
+     ) t
+WHERE rnk = 1;
 
 
+/*Вычисление медианы (значение среднего элемента
+упорядоченного множества)*/
+
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sal) as median_salary
+FROM emp
+WHERE deptno = 20;
+
+WITH dept20 AS (
+    SELECT sal FROM emp WHERE deptno = 20
+)
+SELECT 'Среднее' as metric, AVG(sal) as value FROM dept20
+UNION ALL
+SELECT 'Медиана (CONT)', PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sal) FROM dept20
+UNION ALL
+SELECT 'Медиана (DISC)', PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY sal) FROM dept20
+UNION ALL
+SELECT 'Мода', MODE() WITHIN GROUP (ORDER BY sal) FROM dept20;
+
+
+/*Вычисление процентной доли от целого
+определить процентную долю суммы определенной группы значений столбца от общей суммы столбца
+*/
+
+select
+    (sum(
+             case when deptno = 10 then sal end) / sum(sal)
+        ) * 100 as pct,
+    sum(sal) as sum_sal_total,
+    sum(case when deptno = 10 then sal end) as sum_sal_d10,
+    round(sum(case when deptno = 10 then sal end) / sum(sal) * 100,2) as pct_rasch
+    from emp;
+
+/*Агрегация столбцов, содержащих значения null*/
+
+select
+    avg(coalesce(comm,0)) as avg_comm,
+    avg(comm) as avg_comm_no_correct ----игнорируются значения null
+from emp
+WHERE deptno = 30;
+
+/*Вычисление среднего без учета крайних значений
+требуется вычислить среднее значение не учитывая наибольшее и наименьшее значение, чтобы
+попытаться уменьшить ассиметрию распределения
+Такое среднее называется усеченным*/
+
+select avg(sal)
+from emp
+where sal not in (
+    (select min(sal) from emp),
+    (select max(sal) from emp)
+);
+
+
+/*если нужно исключить все min/max */
+SELECT AVG(sal) as avg_without_min_max
+FROM emp
+WHERE sal NOT IN (
+    SELECT MIN(sal) FROM emp
+    UNION ALL
+    SELECT MAX(sal) FROM emp
+);
+
+
+-- Исключаем по одному минимальному и максимальному значению
+SELECT AVG(sal)
+FROM (
+         SELECT sal,
+                ROW_NUMBER() OVER (ORDER BY sal ASC)  as rn_asc,
+                ROW_NUMBER() OVER (ORDER BY sal DESC) as rn_desc
+         FROM emp
+     ) t
+WHERE rn_asc > 1 AND rn_desc > 1;
