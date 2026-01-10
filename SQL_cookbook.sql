@@ -2558,3 +2558,60 @@ FROM (
          FROM emp
      ) t
 WHERE rn_asc > 1 AND rn_desc > 1;
+
+
+/*Изменение значений в текущей сумме*/
+
+create view e (id, amt, trx)
+as
+select 1, 100, 'PR'
+from t1
+union all
+
+select 2, 100, 'PR'
+from t1
+union all
+
+select 3, 50, 'PY'
+from t1
+union all
+
+select 4, 100, 'PR'
+from t1
+union all
+
+select 5, 200, 'PY'
+from t1
+union all
+
+select 6, 50, 'PY'
+from t1;
+
+
+select
+    case when trx = 'PY'
+then 'PAYMENT'
+else 'PURCHASE'
+end as trx_type,
+amt,
+case when trx = 'PY'
+    then (-amt)
+    else amt end as balance
+from e;
+
+
+select
+    case when trx = 'PY'
+             then 'PAYMENT'
+         else 'PURCHASE'
+        end as trx_type,
+    amt,
+    sum(case when trx = 'PY'
+             then (-amt)
+         else amt end) over (order by id,amt) as balance,
+    case when trx = 'PY'
+             then (-amt)
+         else amt end as amt_real
+from e;
+
+
