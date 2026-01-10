@@ -2405,7 +2405,52 @@ select deptno, count(comm)
 from emp
 group by deptno;
 
-/*Вычисление текущей суммы*/
+/*Вычисление текущей суммы
+  заработной платы для всех служащих
+  c нарастающим итогом
+*/
+
+select ename,
+       sal,
+       sum(sal) over (order by sal, empno) as running_total, ----указываем столбец первичного ключа empno чтобы не было дублей!!!
+       sum(sal) over (order by sal) as running_total_2
+from emp
+order by sal;
+
+
+/*Сглаживание последовательности значений,
+  необходимо определить общую тенденцию продаж, то есть
+  убрать колебания, которые усложняют выявления скрытых тенденций
+  можно применить метод скользящего среднего, складывая n-значение с предыдущим n-1 и разделив
+  полученную сумму на n*/
+
+
+-- Таблица для расчета скользящего среднего
+drop table sales;
+CREATE TABLE sales (
+                       date1 DATE PRIMARY KEY,
+                       sales DECIMAL(10,2) NOT NULL
+);
+
+INSERT INTO sales (date1, sales) VALUES
+                                          ('2023-01-01', 647),
+                                          ('2023-01-02', 561),
+                                          ('2023-01-03', 741),
+                                          ('2023-01-04', 978),
+                                          ('2023-01-05', 1062),
+                                          ('2023-01-06', 1072),
+                                          ('2023-01-07', 805),
+                                          ('2023-01-08', 662),
+                                          ('2023-01-09', 1083),
+                                          ('2023-01-10', 970);
+
+select date1, sales, lag(sales,1) over(order by date1) as salesLagOne,
+       lag(sales,2) over(order by date1) as salesLagTwo,
+       (sales + (lag(sales, 1) over(order by date1))
+     +  lag(sales, 2) over(order by date1)) / 3 as MovingAverage
+from sales;
+
+
 
 
 
