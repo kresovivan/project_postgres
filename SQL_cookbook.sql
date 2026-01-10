@@ -2615,3 +2615,123 @@ select
 from e;
 
 
+/*Обнаруживаем аномальные значения используя закон Бенфорда
+  Закон Бенфорда — это закономерность распределения первых цифр в реальных наборах числовых данных.
+  Он гласит, что в естественно возникающих наборах
+  чисел цифра 1 встречается на первом месте примерно в 30% случаев,
+  а каждая последующая цифра встречается реже.
+*/
+
+WITH
+first_digits(first_digit) as
+    (select left(cast(sal as char),1 ) as first_digit
+     from emp),
+
+
+
+select *
+from emp
+
+total_count(total) as
+(select count(*) as total
+ from emp),
+
+expected_benford (digit, expected) as
+    (select id as digit, (log10(id+1) - log10(id)) as expected
+         from t10
+         where id < 10)
+
+select count(first_digit),
+       digit,
+       COALESCE(COUNT(fd.first_digit)::DECIMAL / NULLIF(tc.total, 0), 0) as actual_proportion,
+       eb.expected
+    FROM first_digits fd
+    cross JOIN total_count tc
+    RIGHT JOIN  expected_benford eb on fd.first_digit::INTEGER = eb.digit
+group by eb.digit, eb.expected,tc.total
+order by eb.digit;
+
+
+-- Хи-квадрат тест для ваших данных
+WITH
+    first_digits(first_digit) as
+        (select left(cast(sal as char),1 ) as first_digit
+         from emp),
+
+    total_count(total) as
+        (select count(*) as total
+         from emp),
+
+    expected_benford (digit, expected) as
+        (select id as digit, (log10(id+1) - log10(id)) as expected
+         from t10
+         where id < 10),
+
+observed AS (
+    SELECT digit, COUNT(fd.first_digit) as observed
+    FROM expected_benford eb
+             LEFT JOIN first_digits fd ON fd.first_digit::INTEGER = eb.digit
+    GROUP BY digit
+),
+     expected AS (
+         SELECT digit, expected * 14 as expected_count  -- 14 = общее количество записей
+         FROM expected_benford
+     )
+SELECT
+    SUM(POWER(o.observed - e.expected_count, 2) / e.expected_count) as chi_square,
+    CASE
+        WHEN SUM(POWER(o.observed - e.expected_count, 2) / e.expected_count) > 15.51
+            THEN 'Отклоняем гипотезу (p < 0.05)'
+        ELSE 'Не отклоняем гипотезу'
+        END as conclusion
+FROM observed o
+         JOIN expected e ON o.digit = e.digit;
+
+
+
+-- ЗАКОН БЕНФОРДА ДЛЯ ЗАРПЛАТ (SAL) ИЗ ТАБЛИЦЫ EMP
+WITH
+    first_digits AS (
+        SELECT LEFT(CAST(sal AS VARCHAR), 1)::INTEGER as first_digit
+        FROM emp
+        WHERE sal >= 1 AND sal IS NOT NULL
+    ),
+    total_count AS (
+        SELECT COUNT(*) as total_records FROM first_digits
+    ),
+    digit_stats AS (
+        SELECT
+            first_digit,
+            COUNT(*) as frequency,
+            COUNT(*)::NUMERIC / (SELECT total_records FROM total_count) as actual_proportion
+        FROM first_digits
+        GROUP BY first_digit
+    ),
+    benford_law AS (
+        SELECT
+            digit,
+            -- Явно приводим к NUMERIC здесь
+            (LOG(1 + 1.0/digit) / LOG(10))::NUMERIC as expected_proportion
+        FROM generate_series(1, 9) digit
+    )
+SELECT
+    bl.digit as "Первая цифра",
+    COALESCE(ds.frequency, 0) as "Частота",
+    tc.total_records as "Всего записей",
+    ROUND(COALESCE(ds.actual_proportion, 0) * 100, 2) as "Факт %",
+    ROUND(bl.expected_proportion * 100, 2) as "Бенфорд %",
+    ROUND(ABS(COALESCE(ds.actual_proportion, 0) - bl.expected_proportion) * 100, 2) as "Отклонение %",
+    CASE
+        WHEN COALESCE(ds.frequency, 0) = 0 THEN '❌ Отсутствует'
+        WHEN ABS(COALESCE(ds.actual_proportion, 0) - bl.expected_proportion) * 100 < 5 THEN '✅ Норма'
+        WHEN ABS(COALESCE(ds.actual_proportion, 0) - bl.expected_proportion) * 100 < 10 THEN '⚠ Внимание'
+        ELSE '❌ Сильное отклонение'
+        END as "Оценка"
+FROM benford_law bl
+         CROSS JOIN total_count tc
+         LEFT JOIN digit_stats ds ON bl.digit = ds.first_digit
+ORDER BY bl.digit;
+
+/*Арифметические операции с датами*/
+
+/*Сложение и вычитание дней месяцев и лет*/
