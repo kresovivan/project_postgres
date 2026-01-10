@@ -2372,4 +2372,40 @@ select deptno, min(sal) as min_sal, max(sal) as max_sal,  round(avg(sal),2) as a
 from emp
 group by deptno;
 
+/*Суммирование значений столбца когда группой или окном является вся таблица
+*/
+
+select sum(sal) as total_for_dept
+from emp;
+
+/*Вычисление подсумм или нескольких групп или окон данных*/
+select deptno, sum(sal) as total_for_dept
+from emp
+group by deptno;
+
+/*Подсчет строк в таблице
+  Функция count игнорирует null если к качестве аргумента передается столбце, но учитывает null, если
+  в качестве аргумента в count передается "*"  или любая константа */
+
+select deptno,comm
+from emp;
+
+select count(*), count(deptno), count(comm), count('hello')
+from emp;
+
+
+select deptno, count(*)
+from emp
+group by deptno;
+
+/*Подсчет значений столбца подсчитаем количество комиссионных в каждом отделе, если указывается
+  столбец,то null значения не рассчитываются*/
+
+select deptno, count(comm)
+from emp
+group by deptno;
+
+/*Вычисление текущей суммы*/
+
+
 
