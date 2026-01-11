@@ -2877,3 +2877,37 @@ FROM
      FROM emp WHERE hiredate = (SELECT MIN(hiredate) FROM emp)) first_hire,
     (SELECT ename as имя, hiredate as дата_приема
      FROM emp WHERE hiredate = (SELECT MAX(hiredate) FROM emp)) last_hire;
+
+
+
+WITH data AS (
+    SELECT
+        MIN(hiredate) as min_date,
+        MAX(hiredate) as max_date
+    FROM emp
+)
+SELECT
+    (SELECT ename FROM emp WHERE hiredate = min_date) as "Первый",
+    min_date as "Дата первого",
+    (SELECT ename FROM emp WHERE hiredate = max_date) as "Последний",
+    max_date as "Дата последнего",
+    max_date - min_date as "Дней между",
+    -- Секунды
+    (max_date - min_date) * 24 * 60 * 60 as "Секунд",
+    -- Минуты
+    (max_date - min_date) * 24 * 60 as "Минут",
+    -- Часы
+    (max_date - min_date) * 24 as "Часов"
+FROM data;
+
+/*Вычисление разницы в днях между датами двух записей*/
+
+select x.*, x.next_hd - x.hiredate as diff
+    from (
+        select e.deptno, e.ename, e.hiredate,
+        lead(e.hiredate) over(order by e.hiredate) as next_hd
+
+            from emp e
+            where e.deptno = 10
+         ) x
+
