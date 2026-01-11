@@ -2927,3 +2927,4 @@ SELECT CAST((x.curr_year + INTERVAL '1 year') AS date) - x.curr_year
 FROM (SELECT CAST(DATE_TRUNC('year', CURRENT_DATE) AS date) AS curr_year
       FROM t1) x
 
+/*Извлечение из даты единиц времени*/
