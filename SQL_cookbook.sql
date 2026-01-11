@@ -3025,10 +3025,12 @@ FROM benchmark_extract();
 
 /*Вычисление первого и последнего дня текущего месяца*/
 
-
 SELECT x.firstday, CAST(x.firstday + INTERVAL '1 month' - INTERVAL '1 day' AS date) AS lastday
 FROM (SELECT CAST(DATE_TRUNC('month', CURRENT_DATE) AS date) AS firstday
       FROM t1) x;
+
+/*Вычисление дат определенного дня недели для всего года,
+  например список пятниц текущего года*/
 
 
 
