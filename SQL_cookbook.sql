@@ -2902,12 +2902,28 @@ FROM data;
 
 /*Вычисление разницы в днях между датами двух записей*/
 
-select x.*, x.next_hd - x.hiredate as diff
-    from (
-        select e.deptno, e.ename, e.hiredate,
-        lead(e.hiredate) over(order by e.hiredate) as next_hd
+SELECT x.*, x.next_hd - x.hiredate AS diff
+FROM (SELECT e.deptno,
+             e.ename,
+             e.hiredate,
+             LEAD(e.hiredate) OVER (ORDER BY e.hiredate) AS next_hd
+      FROM emp e
+      WHERE e.deptno = 10) x;
 
-            from emp e
-            where e.deptno = 10
-         ) x
+/*Определение високосного года*/
+
+SELECT MAX(TO_CHAR(tmp2.dy + x.id, 'DD')) AS dy
+FROM (SELECT dy, TO_CHAR(dy, 'MM') AS mth
+      FROM (SELECT CAST(CAST(DATE_TRUNC('year', CURRENT_DATE) AS date) + INTERVAL '1 month' AS date) AS dy
+            FROM t1)
+          tmp1) tmp2
+    CROSS JOIN GENERATE_SERIES(0, 29) x(id)
+WHERE TO_CHAR(tmp2.dy + x.id, 'MM') = tmp2.mth;
+
+/*Определение количества дней в году
+  это разница между первым днем следующего года и первым днем текущего года*/
+
+SELECT CAST((x.curr_year + INTERVAL '1 year') AS date) - x.curr_year
+FROM (SELECT CAST(DATE_TRUNC('year', CURRENT_DATE) AS date) AS curr_year
+      FROM t1) x
 
