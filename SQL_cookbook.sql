@@ -2940,7 +2940,96 @@ with
               to_number(to_char(dt.tsm,'mm'),'99')     as mth,
               to_number(to_char(dt.tsm,'yyyy'),'9999') as yr
        FROM dt
-   );
+   )
 
 select *
-from extractdt
+from extractdt;
+
+
+
+WITH dt AS (
+    SELECT current_timestamp as tsm
+)
+SELECT
+    EXTRACT(HOUR FROM tsm)::INTEGER as hh,
+    EXTRACT(MINUTE FROM tsm)::INTEGER as min,
+    EXTRACT(SECOND FROM tsm)::INTEGER as sec,
+    EXTRACT(DAY FROM tsm)::INTEGER as day,
+    EXTRACT(MONTH FROM tsm)::INTEGER as mth,
+    EXTRACT(YEAR FROM tsm)::INTEGER as yr
+FROM dt;
+
+
+SELECT
+    DATE_PART('hour', current_timestamp)::INTEGER as hh,
+    DATE_PART('minute', current_timestamp)::INTEGER as min,
+    DATE_PART('second', current_timestamp)::INTEGER as sec,
+    DATE_PART('day', current_timestamp)::INTEGER as day,
+    DATE_PART('month', current_timestamp)::INTEGER as mth,
+    DATE_PART('year', current_timestamp)::INTEGER as yr;
+
+
+SELECT
+    EXTRACT(HOUR FROM now()) as hh,
+    EXTRACT(MINUTE FROM now()) as min,
+    EXTRACT(SECOND FROM now()) as sec,
+    EXTRACT(DAY FROM now()) as day,
+    EXTRACT(MONTH FROM now()) as mth,
+    EXTRACT(YEAR FROM now()) as yr;
+
+
+SELECT
+    EXTRACT(HOUR FROM clock_timestamp()) as hh,
+    EXTRACT(MINUTE FROM clock_timestamp()) as min,
+    EXTRACT(SECOND FROM clock_timestamp()) as sec,
+    EXTRACT(DAY FROM clock_timestamp()) as day,
+    EXTRACT(MONTH FROM clock_timestamp()) as mth,
+    EXTRACT(YEAR FROM clock_timestamp()) as yr;
+
+
+-- Создаем тестовую функцию
+CREATE OR REPLACE FUNCTION benchmark_extract()
+    RETURNS TABLE(method text, time_ms numeric) AS $$
+DECLARE
+    start_time timestamp;
+    iterations int := 1000000;
+    i int;
+BEGIN
+    -- Метод 1: Ваш оригинальный (to_char/to_number)
+    start_time := clock_timestamp();
+    FOR i IN 1..iterations LOOP
+            PERFORM to_number(to_char(clock_timestamp(),'hh24'),'99');
+        END LOOP;
+    RETURN QUERY SELECT 'to_char/to_number'::text, 1000 * EXTRACT(EPOCH FROM (clock_timestamp() - start_time));
+
+    -- Метод 2: EXTRACT
+    start_time := clock_timestamp();
+    FOR i IN 1..iterations LOOP
+            PERFORM EXTRACT(HOUR FROM clock_timestamp());
+        END LOOP;
+    RETURN QUERY SELECT 'EXTRACT'::text, 1000 * EXTRACT(EPOCH FROM (clock_timestamp() - start_time));
+
+    -- Метод 3: DATE_PART
+    start_time := clock_timestamp();
+    FOR i IN 1..iterations LOOP
+            PERFORM DATE_PART('hour', clock_timestamp());
+        END LOOP;
+    RETURN QUERY SELECT 'DATE_PART'::text, 1000 * EXTRACT(EPOCH FROM (clock_timestamp() - start_time));
+END;
+
+$$ LANGUAGE plpgsql;
+
+-- Запускаем тест
+SELECT *
+FROM benchmark_extract();
+
+/*Вычисление первого и последнего дня текущего месяца*/
+
+
+SELECT x.firstday, CAST(x.firstday + INTERVAL '1 month' - INTERVAL '1 day' AS date) AS lastday
+FROM (SELECT CAST(DATE_TRUNC('month', CURRENT_DATE) AS date) AS firstday
+      FROM t1) x;
+
+
+
+
