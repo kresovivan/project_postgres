@@ -2928,3 +2928,19 @@ FROM (SELECT CAST(DATE_TRUNC('year', CURRENT_DATE) AS date) AS curr_year
       FROM t1) x
 
 /*Извлечение из даты единиц времени*/
+with
+    dt as (
+        select current_timestamp as tsm
+    ),
+   extractdt as (
+       select to_number(to_char(dt.tsm,'hh24'),'99')   as hh,
+              to_number(to_char(dt.tsm,'mi'),'99')     as min,
+              to_number(to_char(dt.tsm,'ss'),'99')     as sec,
+              to_number(to_char(dt.tsm,'dd'),'99')     as day,
+              to_number(to_char(dt.tsm,'mm'),'99')     as mth,
+              to_number(to_char(dt.tsm,'yyyy'),'9999') as yr
+       FROM dt
+   )
+
+select *
+from extractdt
