@@ -2925,7 +2925,7 @@ WHERE TO_CHAR(tmp2.dy + x.id, 'MM') = tmp2.mth;
 
 SELECT CAST((x.curr_year + INTERVAL '1 year') AS date) - x.curr_year
 FROM (SELECT CAST(DATE_TRUNC('year', CURRENT_DATE) AS date) AS curr_year
-      FROM t1) x
+      FROM t1) x;
 
 /*Извлечение из даты единиц времени*/
 with
@@ -2940,7 +2940,7 @@ with
               to_number(to_char(dt.tsm,'mm'),'99')     as mth,
               to_number(to_char(dt.tsm,'yyyy'),'9999') as yr
        FROM dt
-   )
+   );
 
 select *
 from extractdt
