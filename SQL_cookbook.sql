@@ -2735,3 +2735,145 @@ ORDER BY bl.digit;
 /*Арифметические операции с датами*/
 
 /*Сложение и вычитание дней месяцев и лет*/
+
+select hiredate,
+       hiredate - interval '5 day' as hd_minus_5d,
+       hiredate + interval '5 day' as hd_plus_5d,
+       hiredate - interval '5 month' as hd_minus_5M,
+       hiredate + interval '5 month' as hd_plus_5M,
+       hiredate - interval '5 year' as hd_minus_5Y,
+       hiredate + interval '5 year' as hd_plus_5Y
+from emp
+where deptno = 10;
+
+/*Вычисление количества дней между двумя датами*/
+
+SELECT x.ward_hd - y.allen_hd
+FROM (SELECT hiredate AS ward_hd
+      FROM emp
+      WHERE ename = 'WARD') AS x
+         CROSS JOIN
+     (SELECT hiredate AS allen_hd
+      FROM emp
+      WHERE ename = 'ALLEN') AS y;
+
+SELECT x.ward_hd - y.allen_hd
+FROM (SELECT hiredate AS ward_hd
+      FROM emp
+      WHERE ename = 'WARD') AS x,
+     (SELECT hiredate AS allen_hd
+      FROM emp
+      WHERE ename = 'ALLEN') AS y;
+
+/*Вычисление рабочих дней между двумя датами*/
+
+
+WITH dates AS (
+    SELECT
+        (SELECT hiredate FROM emp WHERE ename = 'BLAKE') as end_date,
+        (SELECT hiredate FROM emp WHERE ename = 'JONES') as start_date
+),
+     working_days AS (
+         SELECT COUNT(*) as workdays_count
+         FROM generate_series(
+                      (SELECT start_date FROM dates),
+                      (SELECT end_date FROM dates),
+                      '1 day'::interval
+              ) as day
+         WHERE EXTRACT(DOW FROM day) NOT IN (0, 6)  -- Не воскресенье (0) и не суббота (6)
+     )
+SELECT workdays_count FROM working_days;
+
+
+SELECT COUNT(*) as working_days
+FROM generate_series(
+             (SELECT hiredate FROM emp WHERE ename = 'JONES'),
+             (SELECT hiredate FROM emp WHERE ename = 'BLAKE'),
+             '1 day'
+     ) as day
+WHERE EXTRACT(DOW FROM day) NOT IN (0, 6);
+
+/*Вычисление количества месяцев или лет между двумя датами*/
+
+SELECT
+    mnth as total_months,
+    mnth / 12 as total_years
+FROM (
+         SELECT
+             (EXTRACT(YEAR FROM max_hd) - EXTRACT(YEAR FROM min_hd)) * 12
+                 +
+             (EXTRACT(MONTH FROM max_hd) - EXTRACT(MONTH FROM min_hd)) as mnth
+         FROM (
+                  SELECT
+                      MIN(hiredate) as min_hd,
+                      MAX(hiredate) as max_hd
+                  FROM emp
+              ) x
+     ) y;
+
+
+SELECT
+    MIN(hiredate) as first_hire,
+    MAX(hiredate) as last_hire,
+    DATE_PART('year', AGE(MAX(hiredate), MIN(hiredate))) as years_diff,
+    DATE_PART('month', AGE(MAX(hiredate), MIN(hiredate))) as months_diff,
+    DATE_PART('year', AGE(MAX(hiredate), MIN(hiredate))) * 12 + DATE_PART('month', AGE(MAX(hiredate), MIN(hiredate))) as total_months
+FROM emp;
+
+
+/* Находим самого первого и самого последнего сотрудника */
+WITH first_last AS (
+    SELECT
+        MIN(hiredate) as first_hire_date,
+        MAX(hiredate) as last_hire_date
+    FROM emp
+)
+
+/* Считаем разницу в годах и месяцах */
+SELECT
+    first_hire_date,
+    last_hire_date,
+    -- Используем функцию AGE для расчета разницы
+    AGE(last_hire_date, first_hire_date) as time_difference,
+    -- Извлекаем отдельно годы и месяцы
+    EXTRACT(YEAR FROM AGE(last_hire_date, first_hire_date)) as years,
+    EXTRACT(MONTH FROM AGE(last_hire_date, first_hire_date)) as months
+FROM first_last;
+
+
+/* ШАГ 1: Кто был нанят первым, а кто последним? */
+SELECT
+    'Самый первый сотрудник' as info,
+    ename as имя,
+    hiredate as дата_найма
+FROM emp
+WHERE hiredate = (SELECT MIN(hiredate) FROM emp)
+
+UNION ALL
+
+SELECT
+    'Самый последний сотрудник',
+    ename,
+    hiredate
+FROM emp
+WHERE hiredate = (SELECT MAX(hiredate) FROM emp)
+
+ORDER BY дата_найма;
+
+/* ШАГ 2: Сколько времени между ними? */
+SELECT
+    first_hire.имя as первый_сотрудник,
+    first_hire.дата_приема as дата_первого,
+    last_hire.имя as последний_сотрудник,
+    last_hire.дата_приема as дата_последнего,
+    last_hire.дата_приема - first_hire.дата_приема as дней_между,
+    CONCAT(
+            EXTRACT(YEAR FROM AGE(last_hire.дата_приема, first_hire.дата_приема)), ' лет ',
+            EXTRACT(MONTH FROM AGE(last_hire.дата_приема, first_hire.дата_приема)), ' месяцев ',
+            EXTRACT(DAY FROM AGE(last_hire.дата_приема, first_hire.дата_приема)), ' дней'
+    ) as разница_во_времени
+FROM
+    (SELECT ename as имя, hiredate as дата_приема
+     FROM emp WHERE hiredate = (SELECT MIN(hiredate) FROM emp)) first_hire,
+    (SELECT ename as имя, hiredate as дата_приема
+     FROM emp WHERE hiredate = (SELECT MAX(hiredate) FROM emp)) last_hire;
