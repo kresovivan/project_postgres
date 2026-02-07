@@ -3038,7 +3038,8 @@ WITH RECURSIVE cal(dy)
 
                        SELECT dy + 1
                        FROM cal
-                       WHERE EXTRACT(YEAR FROM dy) = EXTRACT(YEAR FROM (dy + 1)))
+                       WHERE EXTRACT(YEAR FROM dy) = EXTRACT(YEAR FROM (dy + 1))
+                       )
 
 SELECT dy, EXTRACT(DOW FROM dy)
 FROM cal
@@ -3054,3 +3055,110 @@ FROM generate_series(
 WHERE EXTRACT(dow FROM day) = 6;
 
 
+
+/*Вычисление дат первого и последнего вхождения заданного дня недели
+  Например, требуется вычислить первый и последний понедельник текущего месяца*/
+
+WITH month_dates AS (
+    SELECT generate_series(
+                   date_trunc('month', current_date),  -- первый день месяца
+                   date_trunc('month', current_date) + interval '1 month' - interval '1 day',  -- последний день месяца
+                   interval '1 day'
+           )::date as day_date
+)
+SELECT
+    MIN(day_date) as first_monday,
+    MAX(day_date) as last_monday
+FROM month_dates
+WHERE EXTRACT(DOW FROM day_date) = 1  -- 1 = понедельник;
+
+/*Создание календаря
+  Требуется создать календарь для текущего месяца*/
+
+WITH month_days AS (
+    SELECT
+        day_date::date,
+        EXTRACT(DOW FROM day_date)::integer as dow,
+        EXTRACT(DAY FROM day_date)::integer as day_num,
+        TO_CHAR(day_date, 'Day') as day_name_short,
+        EXTRACT(WEEK FROM day_date)::integer as week_num
+    FROM generate_series(
+                 date_trunc('month', CURRENT_DATE)::date,
+                 (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date,
+                 INTERVAL '1 day'
+         ) AS day_date
+),
+     week_groups AS (
+         SELECT
+             week_num,
+             MAX(CASE WHEN dow = 1 THEN day_num END) as "Пн",
+             MAX(CASE WHEN dow = 2 THEN day_num END) as "Вт",
+             MAX(CASE WHEN dow = 3 THEN day_num END) as "Ср",
+             MAX(CASE WHEN dow = 4 THEN day_num END) as "Чт",
+             MAX(CASE WHEN dow = 5 THEN day_num END) as "Пт",
+             MAX(CASE WHEN dow = 6 THEN day_num END) as "Сб",
+             MAX(CASE WHEN dow = 0 THEN day_num END) as "Вс"
+         FROM month_days
+         GROUP BY week_num
+         ORDER BY week_num
+     )
+SELECT
+    week_num as "Неделя",
+    COALESCE("Пн"::text, '') as "Пн",
+    COALESCE("Вт"::text, '') as "Вт",
+    COALESCE("Ср"::text, '') as "Ср",
+    COALESCE("Чт"::text, '') as "Чт",
+    COALESCE("Пт"::text, '') as "Пт",
+    COALESCE("Сб"::text, '') as "Сб",
+    COALESCE("Вс"::text, '') as "Вс"
+FROM week_groups;
+
+
+SELECT
+    day_date::date,
+    EXTRACT(DAY FROM day_date)::integer,
+    TRIM(TO_CHAR(day_date, 'Day')) as day_name,
+    EXTRACT(WEEK FROM day_date)::integer,
+    EXTRACT(DOW FROM day_date)::integer IN (0, 6) as is_weekend,
+    TRIM(TO_CHAR(day_date, 'Month')) as month_name,
+    EXTRACT(YEAR FROM day_date)::integer,
+    EXTRACT(QUARTER FROM day_date)::integer
+FROM generate_series(
+             date_trunc('month', CURRENT_DATE)::date,
+             (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date,
+             INTERVAL '1 day'
+     ) AS day_date;
+
+---календаоб за год
+WITH year_dates AS (
+    SELECT generate_series(
+                   date_trunc('year', CURRENT_DATE)::date,  -- 1 января текущего года
+                   date_trunc('year', CURRENT_DATE) + INTERVAL '1 year' - INTERVAL '1 day',  -- 31 декабря
+                   INTERVAL '1 day'
+           )::date as day_date
+)
+SELECT
+    day_date,
+    EXTRACT(YEAR FROM day_date)::integer as year,
+    EXTRACT(MONTH FROM day_date)::integer as month,
+    EXTRACT(DAY FROM day_date)::integer as day,
+    TRIM(TO_CHAR(day_date, 'Month')) as month_name,
+    TRIM(TO_CHAR(day_date, 'Day')) as day_name,
+    EXTRACT(DOW FROM day_date)::integer as day_of_week,
+    EXTRACT(WEEK FROM day_date)::integer as week_of_year,
+    EXTRACT(QUARTER FROM day_date)::integer as quarter,
+    CASE
+        WHEN EXTRACT(DOW FROM day_date)::integer IN (0, 6) THEN TRUE
+        ELSE FALSE
+        END as is_weekend,
+    CASE EXTRACT(DOW FROM day_date)::integer
+        WHEN 0 THEN 'Воскресенье'
+        WHEN 1 THEN 'Понедельник'
+        WHEN 2 THEN 'Вторник'
+        WHEN 3 THEN 'Среда'
+        WHEN 4 THEN 'Четверг'
+        WHEN 5 THEN 'Пятница'
+        WHEN 6 THEN 'Суббота'
+        END as day_name_full
+FROM year_dates
+ORDER BY day_date;
