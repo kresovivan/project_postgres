@@ -57,4 +57,151 @@
   -Не могут быть вызваны
   */
 
+set search_path = "hr_poc";
+
 DO
+$$
+    DECLARE
+        a         real := -1;
+        b         real := -1;
+        c         real := -6;
+        d         real;
+        x1        real;
+        x2        real;
+        text_var1 text;
+        text_var2 text;
+    BEGIN
+
+        d := SQRT(b * b - 4 * a * c);
+        x1 := (-b - d) / (2 * a);
+        x2 := (-b + d) / (2 * a);
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'Корни уравнения: a*x*x + b*x + c = 0';
+        RAISE NOTICE ' x1 = %', x1;
+        RAISE NOTICE ' x2 = %', x2;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            GET STACKED DIAGNOSTICS text_var1 = MESSAGE_TEXT,
+                text_var2 = RETURNED_SQLSTATE;
+            RAISE NOTICE 'Причина ошибки = %', text_var1;
+            RAISE NOTICE 'Код ошибки = %', text_var2;
+
+    END
+$$;
+
+/*Где это возможно необходимо делать обработку ошибок, проверку ошибок,
+  а не обработку исключений*/
+
+DO
+$$
+    DECLARE
+        a         real :=  1;
+        b         real := -1;
+        c         real := -6;
+        d         real;
+        x1        real;
+        x2        real;
+    BEGIN
+        IF (b * b - 4 * a * c) >= 0
+        THEN
+
+            d := SQRT(b * b - 4 * a * c);
+            x1 := (-b - d) / (2 * a);
+            x2 := (-b + d) / (2 * a);
+            RAISE NOTICE 'Результат: ';
+            RAISE NOTICE 'Корни уравнения: a*x*x + b*x + c = 0';
+            RAISE NOTICE ' x1 = %', x1;
+            RAISE NOTICE ' x2 = %', x2;
+
+        ELSE
+            RAISE NOTICE 'Результат: ';
+            RAISE NOTICE 'Действительных корней нет';
+        END IF;
+
+    END
+$$;
+
+/*Переменные, константы и типы данных
+  Переменная это именованная область памяти, которая может содержать данные
+  определенного типа.
+  Все используемые переменные должны быть объявлены
+  Если при объявлении указано служебное слово CONSTANT, то этот идентификатор является константой,
+  ему нужно при объявлении присвоить значение, которое нельзя будет менять.
+  При объявлении ей можно задать значение - это называется иницииализацией.
+*/
+
+/*3.1. Использование переменных числового типа*/
+
+DO
+$$
+    DECLARE
+        a         real;
+        b         real;
+        c         real;
+        p         real;
+        s         real;
+    BEGIN
+
+            a:= 3;
+            b:= 4;
+            c := SQRT(a*a + b*b);
+            p := a+b+c;
+            s := a*b/2;
+            RAISE NOTICE 'Результат: ';
+            RAISE NOTICE 'Параметры прямоугольного треугольника ';
+            RAISE NOTICE 'Катет a= %', a;
+            RAISE NOTICE 'Катет b= %', b;
+            RAISE NOTICE 'Гипотенуза c= %',c;
+            RAISE NOTICE 'Периметр p= %',c;
+            RAISE NOTICE 'Площадь s= %',s;
+
+
+    END
+$$;
+
+----Если не объявить переменные значения будут равны NULL
+DO
+$$
+    DECLARE
+        a         real;
+        b         real;
+        c         real;
+        p         real;
+        s         real;
+    BEGIN
+
+        c := SQRT(a*a + b*b);
+        p := a+b+c;
+        s := a*b/2;
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'Параметры прямоугольного треугольника ';
+        RAISE NOTICE 'Катет a= %', a;
+        RAISE NOTICE 'Катет b= %', b;
+        RAISE NOTICE 'Гипотенуза c= %',c;
+        RAISE NOTICE 'Периметр p= %',c;
+        RAISE NOTICE 'Площадь s= %',s;
+
+
+    END
+$$;
+
+/*3.2. Использование переменных символьного типа*/
+
+
+DO
+$$
+    DECLARE
+        v_f_name varchar(10);
+        v_l_name varchar(10);
+        v_name varchar(20);
+    BEGIN
+
+        RAISE NOTICE 'Результат: ';
+        v_f_name :='Ivan';
+        v_l_name :='Petrov';
+        v_name :=  v_f_name ||' '|| v_l_name;
+        RAISE NOTICE 'Меня зовут: %', v_name;
+
+    END
+$$;
