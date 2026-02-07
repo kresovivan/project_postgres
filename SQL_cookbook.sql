@@ -3196,3 +3196,160 @@ FROM all_months am
          LEFT JOIN emp e ON DATE_TRUNC('month', e.hiredate) = am.month_start
 GROUP BY am.year_month, am.month_year_full, am.month_start
 ORDER BY am.month_start;
+
+/*Поиск по заданным единицам времени.
+  Требуется найти даты содержащие месяц, день недели,
+  или какую - либо другую единицу времени
+*/
+
+SELECT ename,
+       RTRIM(TO_CHAR(hiredate, 'month')),
+       RTRIM(TO_CHAR(hiredate, 'day'))
+FROM emp
+WHERE RTRIM(TO_CHAR(hiredate, 'month')) IN ('february', 'december')
+   OR RTRIM(TO_CHAR(hiredate, 'day')) = 'tuesday'
+
+/*Сравнение записей по определенным частям даты
+  Требуется определить служащих, которые были приняты в один и тот же месяц и день недели
+*/
+
+/*
+JAMES was hired on the same month and weekday as FORD
+SCOTT was hired on the same month and weekday as JAMES
+SCOTT was hired on the same month and weekday as FORD
+*/
+select
+    a.ename || ' was hired on the same month and weekday as ' ||
+    b.ename as msg,
+    to_char(a.hiredate,'DMON'),
+    to_char(b.hiredate, 'DMON'),
+    b.hiredate,
+    a.hiredate
+from emp a, emp b
+where  to_char(a.hiredate,'DMON') = to_char(b.hiredate, 'DMON') ---условие совпадения месяца и дня недели
+and a.empno < b.empno ---не будут сравниваться сотрудники сами с собой
+order by a.ename
+
+/*Выявление наложений диапазонов дат
+  требуется выявить всех служащих начинающих свой новый проект до завершения текущего
+*/
+
+----drop table public.emp_projects;
+-- Создаем таблицу проектов сотрудников
+CREATE TABLE emp_project (
+                             project_id SERIAL PRIMARY KEY,
+                             empno integer,
+                             project_name VARCHAR(100) NOT NULL,
+                             project_role VARCHAR(50),
+                             proj_start DATE NOT NULL,
+                             proj_end DATE,
+                             budget DECIMAL(10,2),
+                             status VARCHAR(20) CHECK (status IN ('active', 'completed', 'cancelled', 'planned')),
+                             overlap_type VARCHAR(50) -- для демонстрации наложений
+);
+
+-- Вставляем данные с намеренными наложениями диапазонов
+INSERT INTO emp_project (empno, project_name, project_role, proj_start, proj_end, budget, status, overlap_type) VALUES
+-- SMITH (7369) - несколько проектов с наложениями
+(7369, 'Database Migration', 'Data Clerk', '1981-01-15', '1981-06-30', 5000.00, 'completed', 'no overlap'),
+(7369, 'Reporting System', 'Junior Analyst', '1981-05-01', '1981-12-31', 8000.00, 'completed', 'partial overlap with prev'),
+(7369, 'Year-end Audit', 'Support Clerk', '1981-12-01', '1982-02-28', 3000.00, 'completed', 'sequential with gap'),
+
+-- ALLEN (7499) - проекты с полным наложением
+(7499, 'East Region Sales', 'Sales Lead', '1981-03-01', '1981-09-30', 15000.00, 'completed', 'no overlap'),
+(7499, 'New Product Launch', 'Promotion Specialist', '1981-06-01', '1981-08-31', 12000.00, 'completed', 'fully within prev'),
+(7499, 'Client Training', 'Trainer', '1981-08-15', '1981-10-15', 7000.00, 'completed', 'starts during, ends after'),
+
+-- WARD (7521) - перекрывающиеся проекты
+(7521, 'West Region Expansion', 'Sales Rep', '1981-03-10', '1981-07-15', 9000.00, 'completed', 'no overlap'),
+(7521, 'Summer Campaign', 'Field Sales', '1981-06-01', '1981-08-31', 7500.00, 'completed', 'overlap with prev'),
+(7521, 'Q3 Sales Drive', 'Team Member', '1981-08-20', '1981-11-30', 6000.00, 'completed', 'sequential with small gap'),
+
+-- JONES (7566) - управленческие проекты с наложениями
+(7566, 'Department Restructure', 'Project Manager', '1981-05-01', '1981-10-31', 25000.00, 'completed', 'no overlap'),
+(7566, 'Budget Planning 1982', 'Finance Lead', '1981-08-01', '1981-12-15', 18000.00, 'completed', 'overlap with prev'),
+(7566, 'System Upgrade', 'IT Manager', '1981-11-01', '1982-03-31', 32000.00, 'completed', 'sequential'),
+
+-- MARTIN (7654) - продажи с сезонными наложениями
+(7654, 'Holiday Sales 1981', 'Sales Rep', '1981-09-01', '1982-01-15', 11000.00, 'completed', 'no overlap'),
+(7654, 'Year-end Clearance', 'Promotions', '1981-11-20', '1982-02-28', 8500.00, 'completed', 'starts during prev'),
+(7654, 'Spring Collection', 'Sales Associate', '1982-02-01', '1982-05-31', 9500.00, 'completed', 'overlap with prev'),
+
+-- BLAKE (7698) - одновременное управление
+(7698, 'Regional Management', 'Operations Manager', '1981-05-15', '1982-05-14', 45000.00, 'active', 'long running'),
+(7698, 'Team Building 1981', 'HR Coordinator', '1981-08-01', '1981-08-31', 5000.00, 'completed', 'fully within long'),
+(7698, 'Performance Reviews', 'Manager', '1981-11-01', '1981-11-30', 8000.00, 'completed', 'within long running'),
+
+-- CLARK (7782) - административные проекты
+(7782, 'Office Relocation', 'Facilities Lead', '1981-07-01', '1981-10-31', 35000.00, 'completed', 'no overlap'),
+(7782, 'New Hire Onboarding', 'Training Lead', '1981-09-15', '1981-12-15', 12000.00, 'completed', 'overlap with prev'),
+(7782, 'Year-end Reporting', 'Compliance Officer', '1981-11-01', '1982-01-31', 15000.00, 'completed', 'overlap with prev'),
+
+-- SCOTT (7788) - технические проекты
+(7788, 'System Analysis', 'Lead Analyst', '1983-01-15', '1983-06-30', 28000.00, 'completed', 'no overlap'),
+(7788, 'Database Optimization', 'DBA', '1983-04-01', '1983-09-30', 32000.00, 'completed', 'overlap with prev'),
+(7788, 'Reporting Dashboard', 'Developer', '1983-08-15', '1983-12-31', 25000.00, 'completed', 'overlap with prev'),
+
+-- KING (7839) - стратегические проекты
+(7839, 'Corporate Strategy 1982', 'Strategic Lead', '1981-12-01', '1982-03-31', 60000.00, 'completed', 'no overlap'),
+(7839, 'Merger Exploration', 'Executive Lead', '1982-02-01', '1982-08-31', 85000.00, 'completed', 'overlap with prev'),
+(7839, 'International Expansion', 'CEO Sponsor', '1982-06-01', '1983-06-30', 120000.00, 'completed', 'overlap with prev'),
+
+-- TURNER (7844) - торговые проекты
+(7844, 'Retail Partnership', 'Account Manager', '1981-10-01', '1982-02-28', 14000.00, 'completed', 'no overlap'),
+(7844, 'Winter Promotion', 'Sales Lead', '1981-12-01', '1982-03-31', 11000.00, 'completed', 'overlap with prev'),
+(7844, 'Spring Trade Show', 'Exhibitor', '1982-02-15', '1982-04-30', 9000.00, 'completed', 'overlap with prev');
+
+-- Добавляем специальные случаи наложений
+INSERT INTO emp_project (empno, project_name, project_role, proj_start, proj_end, budget, status, overlap_type) VALUES
+-- Случай 1: Точное совпадение дат
+(7369, 'Emergency Backup', 'Support', '1981-05-01', '1981-06-30', 2000.00, 'completed', 'exact overlap with Reporting System'),
+
+-- Случай 2: Проект начинается до окончания предыдущего
+(7499, 'Q4 Sales Push', 'Sales Lead', '1981-09-15', '1981-12-15', 10000.00, 'completed', 'starts before prev ends'),
+
+-- Случай 3: Несколько проектов в одно время
+(7566, 'Leadership Workshop', 'Participant', '1981-08-15', '1981-08-20', 3000.00, 'completed', 'multiple overlaps'),
+(7566, 'Vendor Meeting', 'Negotiator', '1981-08-18', '1981-08-22', 1500.00, 'completed', 'multiple overlaps'),
+
+-- Случай 4: Проект без даты окончания (активный)
+(7698, 'Ongoing Operations', 'Department Head', '1982-01-01', NULL, NULL, 'active', 'open-ended overlap');
+
+
+-- 1. Просмотр всех проектов
+SELECT
+    ep.project_id,
+    ep.empno,
+    e.ename,
+    e.job as emp_job,
+    ep.project_name,
+    ep.project_role,
+    ep.proj_start,
+    ep.proj_end,
+    ep.budget,
+    ep.status,
+    ep.overlap_type,
+    -- Длительность проекта в днях
+    CASE
+        WHEN ep.proj_end IS NOT NULL THEN (ep.proj_end - ep.proj_start + 1)
+        ELSE NULL
+        END as duration_days
+FROM emp_project ep
+         JOIN emp e ON ep.empno = e.empno
+ORDER BY ep.empno, ep.proj_start, ep.project_id;
+
+
+select a.empno,
+       'project '||b.project_id|| ' overlaps project '||a.project_id as msg,
+    a.proj_start,
+    a.proj_end,
+    b.proj_start,
+    b.proj_end
+    from emp_project a,
+         emp_project b
+WHERE a.empno = b.empno
+and b.proj_start >= a.proj_start
+and b.proj_start <= a.proj_end
+and a.project_id != b.project_id
+
+/*Работа с диапазонами значений*/
