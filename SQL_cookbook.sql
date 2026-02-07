@@ -3162,3 +3162,37 @@ SELECT
         END as day_name_full
 FROM year_dates
 ORDER BY day_date;
+
+/*Дополнение недостающих дат
+  требуется создать строку для каждого дня (недели, месяца, года) в п пределах заданного интервала
+  такие методы часто используется при создании сводных отчетов
+  Нам нужно подсчитать количество принятых на работу служащих в каждом месяце каждого года,
+  когда производился прием на работу
+
+  Генерируем все месяцы начиная с первого месяца приема на работу с помощью обобщенного табличного выражения
+  Затем выполняем левое внешнее объединение полученных строк с таблицей EMP, используя месяц и год
+  каждой сгенерированной строки, чтобы включить подсчет count количества приемов на работу за каждый
+  месяц*/
+
+WITH all_months AS (SELECT DATE_TRUNC('month', generate_series)                        AS month_start,
+                           TO_CHAR(DATE_TRUNC('month', generate_series), 'YYYY-MM')    AS year_month,
+                           TO_CHAR(DATE_TRUNC('month', generate_series), 'Month YYYY') AS month_year_full
+                    FROM GENERATE_SERIES(
+                                 '1980-12-01'::date, -- первый месяц найма (SMITH был нанят 1980-12-17)
+                                 '1982-12-01'::date, -- последний месяц найма (SCOTT был нанят 1982-12-09)
+                                 INTERVAL '1 month'
+                         ) AS generate_series)
+
+
+SELECT am.year_month      AS "Год-Месяц",
+       am.month_year_full AS "Месяц и год",
+       COUNT(e.empno)     AS "Количество наймов",
+       CASE
+           WHEN COUNT(e.empno) > 0 THEN STRING_AGG(e.ename || ' (' || TO_CHAR(e.hiredate, 'DD.MM.YYYY') || ')', ', '
+                                                   ORDER BY e.hiredate)
+           ELSE 'Нет наймов'
+           END            AS "Сотрудники (дата найма)"
+FROM all_months am
+         LEFT JOIN emp e ON DATE_TRUNC('month', e.hiredate) = am.month_start
+GROUP BY am.year_month, am.month_year_full, am.month_start
+ORDER BY am.month_start;
