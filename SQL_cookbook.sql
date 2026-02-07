@@ -3030,8 +3030,27 @@ FROM (SELECT CAST(DATE_TRUNC('month', CURRENT_DATE) AS date) AS firstday
       FROM t1) x;
 
 /*Вычисление дат определенного дня недели для всего года,
-  например список пятниц текущего года*/
+  например список суббот текущего года*/
+
+WITH RECURSIVE cal(dy)
+                   AS (SELECT CURRENT_DATE - (CAST(EXTRACT(DOY FROM CURRENT_DATE) AS integer) - 1) --первое января текущего года
+                       UNION ALL
+
+                       SELECT dy + 1
+                       FROM cal
+                       WHERE EXTRACT(YEAR FROM dy) = EXTRACT(YEAR FROM (dy + 1)))
+
+SELECT dy, EXTRACT(DOW FROM dy)
+FROM cal
+WHERE CAST(EXTRACT(DOW FROM dy) AS integer) = 6;
 
 
+SELECT day::date
+FROM generate_series(
+             date_trunc('year', now())::timestamp,
+             date_trunc('year', now()) + interval '1 year' - interval '1 day',
+             interval '1 day'
+     ) day
+WHERE EXTRACT(dow FROM day) = 6;
 
 
