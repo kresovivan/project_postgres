@@ -205,3 +205,43 @@ $$
 
     END
 $$;
+
+
+DO
+$$
+    DECLARE
+        v_f_name varchar(10);
+        v_l_name varchar(10);
+        v_m_name varchar(20) := 'Ivan Petrov';
+        v_w_name varchar(20) := 'Olga Titova';
+
+    BEGIN
+
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'Имена молодоженов ';
+        RAISE NOTICE 'Он: %',  v_m_name;
+        RAISE NOTICE 'Она: %', v_w_name;
+        v_f_name := substr(v_w_name, 1, (strpos(v_w_name,' ')-1));
+        -- Функция strpos(v_w_name, ' '):
+        -- Ищет позицию первого пробела в строке 'Olga Titova'
+        -- Возвращает число: 5 (пробел между "Olga" и "Titova")
+        -- Выражение (strpos(v_w_name,' ')-1):
+        -- 5 - 1 = 4 (позиция последнего символа перед пробелом)
+        -- Функция substr(v_w_name, 1, ...):
+        --Извлекает подстроку из v_w_name
+        -- Начиная с позиции 1 (первый символ)
+        -- Длиной 4 символа (результат из шага strpos)
+        -- Результат: 'Olga'
+        v_l_name := substr(v_m_name, (strpos(v_m_name, ' ')+1));
+        v_w_name :=v_f_name||' '||v_l_name||'a';
+          RAISE NOTICE 'Имена супругов: ';
+        RAISE NOTICE 'Муж: %', v_m_name;
+        RAISE NOTICE 'Жена: %', v_w_name;
+    END
+$$;
+
+
+/*3.3 Использование переменных типа DATE
+  Объявление и обработка переменных типа DATE
+*/
+
