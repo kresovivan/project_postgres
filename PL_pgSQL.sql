@@ -245,3 +245,26 @@ $$;
   Объявление и обработка переменных типа DATE
 */
 
+DO
+$$
+    DECLARE
+        v_m_name          varchar(20) := 'Ivan Kresov';
+        v_m_date_of_birth date        := '10.12.1984';
+        v_diff            integer;
+        v_date            date;
+        v_day             text;
+        v_time            text;
+    BEGIN
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'Меня зовут: %', v_m_name;
+        RAISE NOTICE 'Я родился: %', v_m_date_of_birth;
+        v_date := TO_CHAR(CURRENT_DATE, 'DD-MM-YYYY');
+        v_day := TO_CHAR(CURRENT_DATE, 'DAY');
+        v_time := TO_CHAR(CURRENT_TIMESTAMP, 'HH24:MI:SS');
+        v_diff := EXTRACT(YEAR FROM AGE(v_m_date_of_birth)); ---текущая дата
+        RAISE NOTICE 'Сегодня: %', v_date;
+        RAISE NOTICE 'День недели %', v_day;
+        RAISE NOTICE 'Время: %', v_time;
+        RAISE NOTICE 'Мне: % ', (v_diff||'год');
+    END
+$$;
