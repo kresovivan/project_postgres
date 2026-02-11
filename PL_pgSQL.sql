@@ -400,8 +400,36 @@ $$;
   {метка блока}.{имя переменной}
 */
 
-DO $$
-
-
-
+DO
 $$
+    <<A>>
+        DECLARE
+        v_name          varchar(30) := 'Анатолий Иванов';
+        v_date_of_birth date        := TO_DATE('06.JAN.1968', 'DD.MON.YYYY');
+    BEGIN
+        <<B>>
+            DECLARE
+            v_name          varchar(30) := 'Надежда Иванова';
+            v_date_of_birth date        := TO_DATE('06.AUG.1997', 'DD.MON.YYYY');
+            v_age_father    integer;
+            v_age_children  integer;
+            v_age_ftch      integer;
+        BEGIN
+            v_age_father := EXTRACT(YEAR FROM AGE(a.v_date_of_birth));
+            v_age_children := EXTRACT(YEAR FROM AGE(v_date_of_birth));
+            v_age_ftch := v_age_father - v_age_children;
+
+            ----
+            RAISE NOTICE 'Результат: ';
+            RAISE NOTICE 'Сегодня: %', CURRENT_DATE;
+            RAISE NOTICE 'Имя моего отца: %', A.v_name;
+            RAISE NOTICE 'Он родился: %', A.v_date_of_birth;
+            RAISE NOTICE 'Сейчас моему отцу: %', B.v_age_father;
+            RAISE NOTICE 'Меня зовут: %', B.v_name;
+            RAISE NOTICE 'Я родилась: %', B.v_date_of_birth;
+            RAISE NOTICE 'Когда я родилась, отцу было %', B.v_age_ftch;
+
+        END;
+
+    END
+$$;
