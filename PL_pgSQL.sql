@@ -318,3 +318,30 @@ $$
         RAISE NOTICE 'Новая зарплата =: %' , v_new_sal;
     END
 $$;
+
+/*Можно создать переменную, содержащую несколько полей, структура которой совпадает со структурой
+  определенной таблицы
+  Синтаксис:
+  {имя переменной} {имя таблицы}%ROWTYPE
+  обращение к определенному полю такой переменной имеет следующий вид:
+  {имя переменной}.{имя поля}
+*/
+
+do $$
+DECLARE
+    v_1 customers%rowtype;
+    v_2 customers%rowtype;
+    v_sum_limit numeric(10,2);
+begin
+    v_1.c_name :='Ivan Petrov';
+    v_1.credit_limit := 200000;
+    v_2.c_name := 'Sergey Ivanov';
+    v_2.credit_limit := 300000;
+    v_sum_limit := v_1.credit_limit + v_2.credit_limit;
+    RAISE NOTICE 'Результат: ';
+    RAISE NOTICE 'Имя клиента 1: % % %', v_1.c_name,
+                 'Кредитный лимит: ', v_1.credit_limit;
+    RAISE NOTICE 'Имя клиента 2: % % %', v_2.c_name,
+                 'Кредитный лимит: ', v_2.credit_limit;
+    RAISE NOTICE 'Суммарный кредитный лимит: %', v_sum_limit;
+END $$;
