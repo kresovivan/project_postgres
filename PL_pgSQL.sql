@@ -279,3 +279,42 @@ $$;
   {имя переменной} {таблица.столбец}%Type
 */
 
+/*
+Переключается на схему hr_poc.
+Берет сотрудника с ID = 106.
+Запоминает его текущую зарплату в переменную v_old_sal.
+Увеличивает этому сотруднику зарплату на 10%.
+Запоминает новую зарплату в переменную v_new_sal.
+Выводит в консоль (NOTICE) ID, старую и новую зарплату.
+*/
+set search_path = "hr_poc";
+DO
+$$
+    DECLARE
+        v_emp_id  employees.employee_id%type := 106;
+        v_old_sal employees.salary%type;
+        v_new_sal v_old_sal%type;
+    BEGIN
+        SELECT salary
+        INTO v_old_sal
+        FROM employees
+        WHERE employee_id = v_emp_id;
+
+        ---
+        UPDATE employees
+        SET salary = employees.salary * 1.1
+        WHERE employees.employee_id = v_emp_id;
+        ---
+
+        SELECT salary
+        INTO v_new_sal
+        FROM employees
+        WHERE employee_id = v_emp_id;
+
+        ---
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'employee_id= %', v_emp_id;
+        RAISE NOTICE 'Старая зарплата =: %', v_old_sal;
+        RAISE NOTICE 'Новая зарплата =: %' , v_new_sal;
+    END
+$$;
