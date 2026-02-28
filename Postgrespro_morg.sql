@@ -10195,10 +10195,16 @@ ORDER BY
 $$ LANGUAGE sql;
 
 
+explain ANALYZE
  select *
  from
      flights as f,
      occupancy_rate(flight_id) as o
  where f.flight_id in (1,1162);
 
+
+
+SELECT table_schema, table_name
+FROM information_schema.tables
+WHERE table_name = 'accounts_directory';
 
