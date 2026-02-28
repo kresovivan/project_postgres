@@ -402,12 +402,12 @@ $$;
 
 DO
 $$
-    <<A>>
+    <<a>>
         DECLARE
         v_name          varchar(30) := 'Анатолий Иванов';
         v_date_of_birth date        := TO_DATE('06.JAN.1968', 'DD.MON.YYYY');
     BEGIN
-        <<B>>
+        <<b>>
             DECLARE
             v_name          varchar(30) := 'Надежда Иванова';
             v_date_of_birth date        := TO_DATE('06.AUG.1997', 'DD.MON.YYYY');
@@ -422,12 +422,12 @@ $$
             ----
             RAISE NOTICE 'Результат: ';
             RAISE NOTICE 'Сегодня: %', CURRENT_DATE;
-            RAISE NOTICE 'Имя моего отца: %', A.v_name;
-            RAISE NOTICE 'Он родился: %', A.v_date_of_birth;
-            RAISE NOTICE 'Сейчас моему отцу: %', B.v_age_father;
-            RAISE NOTICE 'Меня зовут: %', B.v_name;
-            RAISE NOTICE 'Я родилась: %', B.v_date_of_birth;
-            RAISE NOTICE 'Когда я родилась, отцу было %', B.v_age_ftch;
+            RAISE NOTICE 'Имя моего отца: %', a.v_name;
+            RAISE NOTICE 'Он родился: %', a.v_date_of_birth;
+            RAISE NOTICE 'Сейчас моему отцу: %', b.v_age_father;
+            RAISE NOTICE 'Меня зовут: %', b.v_name;
+            RAISE NOTICE 'Я родилась: %', b.v_date_of_birth;
+            RAISE NOTICE 'Когда я родилась, отцу было %', b.v_age_ftch;
 
         END;
 
@@ -472,3 +472,91 @@ into [strict] {список переменных}
 /*
 Извлечение значения одного столбца
 */
+
+SET search_path = "hr_poc";
+
+DO
+$$
+    DECLARE
+        v_emp_id     employees.employee_id%type := 120;
+        v_emp_salary employees.salary%type;
+    BEGIN
+        SELECT salary
+        INTO v_emp_salary
+        FROM employees
+        WHERE employee_id = v_emp_id;
+
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'employee_id = %', v_emp_id;
+        RAISE NOTICE 'salary = %', v_emp_salary;
+
+    END
+$$;
+
+/*Значение переменной может быть результатом обработки данных, например значением,
+  возвращаемым агрегатной функцией*/
+
+DO
+$$
+    DECLARE
+        v_dep_id     employees.department_id%type := 80;
+        v_max_salary employees.salary%type;
+    BEGIN
+        SELECT max(salary)
+        INTO v_max_salary
+        FROM employees
+        WHERE department_id = v_dep_id;
+
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE 'department_id = %', v_dep_id;
+        RAISE NOTICE 'MAX(salary) = %', v_max_salary;
+
+    END
+$$;
+
+/*Можно извлечь и присвоить переменные значения нескольких столбцов*/
+
+DO
+$$
+    DECLARE
+        v_emp_id     employees.employee_id%type := 120;
+        v_first_n    employees.first_name%type;
+        v_last_n     employees.last_name%type;
+        v_job        employees.job_id%type;
+        v_emp_salary employees.salary%type;
+    BEGIN
+        select employee_id, first_name, last_name, job_id, salary
+        into v_emp_id, v_first_n, v_last_n, v_job, v_emp_salary
+        from employees
+        where employee_id = v_emp_id;
+
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE '%', format('%-12s %-12s %-12s %-10s %-10s',
+                                 'employee_id', 'first_name', 'last_name', 'job_id', 'salary');
+        RAISE NOTICE '%', format('%-12s %-12s %-12s %-10s %-10s',
+                                 v_emp_id, v_first_n, v_last_n, v_job, v_emp_salary);
+    END
+$$;
+
+/*В подобных случаях удобно использовать переменную, использующую
+  тип ROWTYPE */
+
+
+DO
+$$
+    DECLARE
+        v_emp_id     employees.employee_id%type := 120;
+        v_emp employees%ROWTYPE;
+    BEGIN
+        select *
+        into v_emp
+        from employees
+        where employee_id = v_emp_id;
+
+        RAISE NOTICE 'Результат: ';
+        RAISE NOTICE '%', format('%-12s %-12s %-12s %-10s %-10s',
+                                 'employee_id', 'first_name', 'last_name', 'job_id', 'salary');
+        RAISE NOTICE '%', format('%-12s %-12s %-12s %-10s %-10s',
+                                 v_emp_id, v_emp.first_name, v_emp.last_name, v_emp.job_id, v_emp.salary);
+    END
+$$;
