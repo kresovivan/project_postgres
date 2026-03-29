@@ -331,4 +331,20 @@ ORDER BY
     city,
     salary,
     id
- /*  */
+
+
+/*Чтобы границы фрейма совпадали с границами секции или всего окна, если секция одна -
+  rows between unbounded preceding and unbounded following*/
+
+
+/*Агрегация - когда мы считаем суммарные показатели или агрегаты
+  Агрегат по секции
+  Посмотрим какой процент от фонда оплаты труда составляет каждая зарплата сотрудника*/
+
+select name,
+       department,
+       salary,
+       sum(salary) over (partition by department) as fot,
+       round((salary * 100.0) /  sum(salary) over (partition by department),2) as percent
+    from employees
+order by department, salary, id;
