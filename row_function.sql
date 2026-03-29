@@ -364,4 +364,102 @@ select name,
 from employees
 order by city, salary, id;
 
-/*Средняя зарплата по департаменту*/
+/*Средняя зарплата по департаменту
+  сколько человек трудится в отделе
+  какая средняя зарплата по отделу
+  на сколько процентов отклоняется средняя зарплата от среднего по отделу
+  Отклонение = (зарплата сотрудника - средняя зарплата) * 100 / средняя_зарплата
+*/
+
+
+
+select name,
+       department,
+       round(salary,2) as salary,
+       count(*)    over (partition by department) as emp_cnt,
+       round(avg(salary) over (partition by department),2) as sal_avg,
+       round(
+               ((salary - AVG(salary) OVER (PARTITION BY department)) * 100.00 /
+                          avg(salary) OVER (PARTITION BY department)
+               )
+            ,2) as diff
+from employees
+order by department, salary, id;
+
+/*Фильтрация и порядок выполнения
+Допустим мы хотим оставить в отчете только самарских сотрудников
+
+1.Взять нужны таблицы from
+2.Отфильтровать строки where
+3.Сгруппировать строки group by
+4.Отфильтровать результат группировки having
+5.Взять конкретные столбцы из результата select
+6.Рассчитать значения оконных функций
+7.Отсортироровать то, что получилось order by
+*/
+
+with emp as (
+    select
+        name,
+        city,
+        salary,
+        sum(salary) over (partition by department) as fund
+        from employees
+order by department, salary, id
+)
+
+select
+    name,
+    salary,
+    fund
+from emp
+where city = 'Самара';
+
+/*Описание окна
+  Без partition и order считается вся сумма по окну*/
+
+select
+    name,
+    salary,
+    count(*)    over() as emp_count, ---общее количество строк по окну
+    sum(salary) over() as fund,       ---общая сумма по окну
+    sum(salary) over(partition by city) as fund_city, ---общая сумма по городу
+    sum(salary) over(order by salary) as accumulate_fund,  ---Накопительная сумма по Salary по всему окну
+    sum(salary) over(partition by city order by salary) as accumulate_fund_city ------Накопительная сумма salary по City
+from employees
+order by city, salary, id;
+
+
+select
+    city,
+    department,
+    sum(sum(salary)) over() as fund,       ---общая сумма по окну
+    sum(sum(salary)) over(partition by city) as fund_city,
+    sum(salary) as dep_salary,
+    SUM(SUM(salary)) OVER (
+        PARTITION BY city
+        ORDER BY SUM(salary) DESC, city
+        ) AS accumulate_fund_city ---накопительный итог по городу
+from employees
+GROUP BY city, department
+ORDER BY city, dep_salary DESC;
+
+
+SELECT
+    city,
+    department,
+    STRING_AGG(salary::TEXT, ', ') AS dep_salary_list,
+    sum(salary) as salary
+FROM employees
+GROUP BY city, department
+ORDER BY city, department;
+
+
+/*Скользящие агрегаты*/
+
+
+
+
+
+
+
