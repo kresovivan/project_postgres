@@ -339,7 +339,8 @@ ORDER BY
 
 /*Агрегация - когда мы считаем суммарные показатели или агрегаты
   Агрегат по секции
-  Посмотрим какой процент от фонда оплаты труда составляет каждая зарплата сотрудника*/
+  Посмотрим какой процент от фонда оплаты труда по дерпартаменту составляет каждая зарплата сотрудника
+  в департаменте*/
 
 select name,
        department,
@@ -348,3 +349,19 @@ select name,
        round((salary * 100.0) /  sum(salary) over (partition by department),2) as percent
     from employees
 order by department, salary, id;
+
+
+/*Фонд оплаты труда по городу
+  Посчитать сколько процентов составляет зарплата сотрудника от общего фонда оплаты
+  труда по городу*/
+
+
+select name,
+       city,
+       salary,
+       sum(salary) over (partition by city) as fot,
+       round((salary * 100.0) /  sum(salary) over (partition by city),2) as percent
+from employees
+order by city, salary, id;
+
+/*Средняя зарплата по департаменту*/
