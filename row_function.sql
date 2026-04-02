@@ -859,10 +859,17 @@ ORDER BY salary;
 */
 
 SELECT
-    name,
-    salary,
-    round(percent_rank() OVER (ORDER BY salary)::numeric, 2) AS perc_rank,
-    cume_dist() over (order by salary) as cume_dist
-FROM employees
-ORDER BY salary;
+    wdate,
+    wtemp,
+    round(percent_rank() OVER (order by wtemp)::numeric, 2) AS perc_rank,
+    round(cume_dist()    OVER (order by wtemp)::numeric, 2) AS cume_dist
+FROM weather
+where wdate between '2020-03-01' and '2020-03-31'
+ORDER BY wtemp DESC
+limit 5;
+
+/*
+
+
+*/
 
