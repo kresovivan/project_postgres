@@ -1007,3 +1007,75 @@ FROM employees
 ORDER BY department, id;
 
 
+SELECT name,
+       department,
+       COUNT(*) OVER (ORDER BY department GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) AS cnt
+FROM employees
+ORDER BY department, id;
+
+/*Фрейм от текущей до следующей группы*/
+SELECT name,
+       department,
+       COUNT(*) OVER (ORDER BY department GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS cnt
+FROM employees
+ORDER BY department, id;
+
+/*
+Итог
+Этот запрос показывает, сколько всего строк в таблице имеют зарплату, не меньшую, чем у текущего сотрудника
+(с учётом того, что все строки с одинаковой зарплатой считаются вместе, и их все включают).
+По сути, это «ранг» в обратном порядке: самая низкая зарплата получает максимальное количество строк,
+самая высокая — минимальное (1).
+*/
+SELECT name,
+       department,
+       salary,
+       COUNT(*) OVER (ORDER BY salary GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS cnt
+FROM employees
+ORDER BY salary, id;
+
+/*Сотрудники с ближайшей большей зарплатой
+
+
+Когда может пригодиться
+Такой запрос полезен, когда нужно для каждой категории (зарплаты, цены, веса) найти следующую отличную категорию
+– например, «следующий тарифный план», «следующий уровень скидки», «ближайший более высокий балл».
+Это альтернатива DENSE_RANK и самосоединению, но более компактная и эффективная.
+Ключевой вывод:
+GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING создаёт окно из одной следующей группы целиком,
+а FIRST_VALUE извлекает значение из этой группы.
+Таким образом, запрос отображает соответствие между
+текущей зарплатой и следующей по величине уникальной зарплатой.
+
+
+Когда может пригодиться
+Такой запрос полезен, когда нужно для каждой категории (зарплаты, цены, веса) найти следующую отличную
+категорию – например, «следующий тарифный план», «следующий уровень скидки», «ближайший более высокий балл».
+Это альтернатива DENSE_RANK и самосоединению, но более компактная и эффективная.
+
+Ключевой вывод
+GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING создаёт окно из одной следующей группы целиком,
+а FIRST_VALUE извлекает значение из этой группы. Таким образом, запрос отображает соответствие между
+текущей зарплатой и следующей по величине уникальной зарплатой.
+*/
+
+SELECT id,
+       name,
+       salary,
+       FIRST_VALUE(salary) OVER (ORDER BY salary GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING)
+FROM employees
+ORDER BY salary, id;
+
+
+/*Range фреймы это фреймы по диапазону
+range оперирует группами строк, которые попадают в диапазон
+Посчитаем количество сотрудников по каждому диапазону
+*/
+
+SELECT name, salary,
+       salary - 10 AS lower_bound,
+       salary + 10 AS upper_bound,
+       ARRAY_AGG(salary) OVER (ORDER BY salary RANGE BETWEEN 10 PRECEDING AND 10 FOLLOWING) AS salaries_in_range,
+       COUNT(*) OVER (ORDER BY salary RANGE BETWEEN 10 PRECEDING AND 10 FOLLOWING) AS cnt
+FROM employees
+ORDER BY salary, id;
