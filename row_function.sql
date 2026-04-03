@@ -868,8 +868,23 @@ where wdate between '2020-03-01' and '2020-03-31'
 ORDER BY wtemp DESC
 limit 5;
 
-/*
 
+WITH temps AS (SELECT wdate,    -- Дата измерения погоды
+                      wtemp,    -- Температура воздуха
+                      ROUND(
+                                      CUME_DIST() OVER (
+                                  PARTITION BY EXTRACT(MONTH FROM wdate) -- Группировка по месяцу (1-12)
+                                  ORDER BY wtemp -- Сортировка внутри месяца по температуре
+                                  )::numeric,
+                                      2
+                      ) AS perc -- Перцентиль температуры (0.00 - 1.00)
+               FROM weather -- Исходная таблица с данными о погоде
+)
 
-*/
+SELECT wdate, -- Дата измерения
+       wtemp, -- Температура
+       perc   -- Перцентиль температуры в месяце
+FROM temps -- Ссылка на CTE (временный результат)
+WHERE EXTRACT(DAY FROM wdate) = 7 -- Фильтр: только 7-е число каждого месяца
+ORDER BY wdate; -- Сортировка по дате возрастания
 
