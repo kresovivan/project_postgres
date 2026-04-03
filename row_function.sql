@@ -1106,4 +1106,23 @@ SELECT name,
 FROM employees
 ORDER BY salary, id
 
+/*
+Посчитаем среднюю зарплату по сотрудникам которые получают
+столько же или больше, чем он, но не более чем 20 тыс.
+Сортировка по зарплате
+фрейм по диапазону от текущей зарплаты до +20K руб.,
+кроме текущего сотрудника.
+*/
+
+SELECT id,
+       name,
+       salary,
+       ROUND(AVG(salary) OVER w) AS p20_sal
+FROM employees
+WINDOW w AS (
+        ORDER BY salary
+        RANGE BETWEEN CURRENT ROW AND 20 FOLLOWING
+            EXCLUDE CURRENT ROW
+        )
+ORDER BY salary, id;
 
