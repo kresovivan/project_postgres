@@ -1079,3 +1079,31 @@ SELECT name, salary,
        COUNT(*) OVER (ORDER BY salary RANGE BETWEEN 10 PRECEDING AND 10 FOLLOWING) AS cnt
 FROM employees
 ORDER BY salary, id;
+
+
+SELECT
+    wdate,
+    wtemp,
+    (wdate - interval '1 day')::date AS lower_bound,
+    wdate AS upper_bound,
+    COUNT(*) OVER (ORDER BY wdate RANGE BETWEEN '1 day' PRECEDING AND CURRENT ROW) AS cnt
+FROM weather
+ORDER BY wdate;
+
+/*Exclude при применении оконных функций
+  Используется, когда необходимо исключить часть записей из фрейма
+
+Мы хотим понять как изменится средняя зарплата одного из сотрудников, есkb уволить
+  того или иного сотрудника.
+Здесь фрейм включает все записи кроме текущей, а функция считает среднюю зарплату для
+  всех коллег сотрудника, исключая его самого.
+*/
+
+SELECT name,
+       salary,
+       ROUND(AVG(salary) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+           EXCLUDE CURRENT ROW ), 2)
+FROM employees
+ORDER BY salary, id
+
+
