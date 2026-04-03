@@ -730,7 +730,7 @@ order by year, month;
   Правило такое - если в окне есть order by и используется функция агрегации и не указано определение
   фрейма, то используем фрейм по умолчанию
   Фрейм по умолчанию распространяется от первой до текущей записи.
-  но так бывает не всегда, поэтому лучше всего указывать фрейм явно, если добавили в окно order by
+  Но так бывает не всегда, поэтому лучше всего указывать фрейм явно, если добавили в окно order by
   сразу добавьте фрейм
   */
 
@@ -745,7 +745,8 @@ window w as (order by year, month)
 order by year, month;
 
 /*Если убрать order by из окна, то агрегат превратится в обычный
-  и в каждой строке отобразится сумма всех строк*/
+  и в каждой строке отобразится сумма всех строк
+*/
 select
     year,
     month,
@@ -945,5 +946,64 @@ order by wmonth;
   у прочих функций фрейм всегда равен секции, а если секция не задана то окну в целом.
 */
 
+
+/*Из таблицы сотрудников employees необходимо вывести
+  -размер зарплаты предыдущего сотрудника (не использовать lag и lead)
+  -максимальную з.п по департаменту
+  */
+
+SELECT id,
+       name,
+       department,
+       salary,
+       FIRST_VALUE(salary) OVER (PARTITION BY department ORDER BY salary, id
+           ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS prev_salary,
+       LAST_VALUE(salary) OVER (PARTITION BY department ORDER BY salary, id
+           ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS max_salary
+FROM employees
+ORDER BY department, id, salary;
+
+
+SELECT id, name, department, salary,
+       LAG(salary, 1) OVER (PARTITION BY department ORDER BY salary) AS prev_salary,
+       MAX(salary) OVER (PARTITION BY department) AS max_salary
+FROM employees
+ORDER BY department, id, salary;
+
+
+
+/*Кроме фреймов по строкам бывают еще фреймы по группам groups и диапазонам range
+
+  rows between frame_start and frame_end
+  groups between frame_start and frame_end
+  range between frame_start and frame_end
+
+Практические рекомендации
+Используйте ROWS, когда вам нужно чёткое количество строк (например, «предыдущие 5 заказов»).
+Используйте GROUPS, когда вы работаете с категориями или хотите, чтобы дубликаты не разрывались
+(например, «предыдущий тарифный план»).
+Используйте RANGE, когда логика основана на разнице значений (даты, температуры, цены).
+По умолчанию (если фрейм не указан явно) в PostgreSQL действует RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
+Это часто приводит к «неправильному» поведению LAST_VALUE (возвращает текущую строку),
+поэтому профессионалы всегда указывают фрейм явно, когда используют FIRST_VALUE/LAST_VALUE.
+*/
+
+SELECT name,
+       department,
+       COUNT(*) OVER (ORDER BY department, id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as cnt
+FROM employees
+ORDER BY department, id;
+
+/*Rows фрейм оперирует индивидуальными записями, а groups фрейм - группами записей, у которых одинаковое
+  значение столбца order by - в данном случае одинаковый департамент
+  В обоих случаях запрос считает количество записей нарастающим итогом от начала до конца фрейма,
+  но у rows фрейм заканчивается на текущей записи, а у groups - на последней записи текущей группы!!!
+  Поскольку групп всего три, то фрейм смещается рывками.
+  */
+SELECT name,
+       department,
+       COUNT(*) OVER (ORDER BY department GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as cnt
+FROM employees
+ORDER BY department, id;
 
 
