@@ -1437,6 +1437,15 @@ order by plan, month;
   округлите выручку до целого
 
   сортировка по месяцам
-  строковый фрейм на предыдущю текущую и следующую записи
+  строковый фрейм на предыдущую текущую и следующую записи
   avg для расчета скользящего среднего*/
+
+SELECT year,
+       month,
+       revenue,
+       AVG(revenue) OVER (ORDER BY month ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS "avg3"
+FROM sales
+WHERE year = 2020
+  AND plan = 'platinum'
+ORDER BY month
 
