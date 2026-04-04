@@ -1449,3 +1449,112 @@ WHERE year = 2020
   AND plan = 'platinum'
 ORDER BY month
 
+/*Сравнение с декабрем, есть таблица продаж sales посчитайте выручку по месяцам для тарифа silver
+  для каждого месяца дополнительно укажите
+  выручку за декабрь этого же года
+  процент, который составляет выручка текущего месяца от декабря 2026
+
+  фрейм равен секции год
+  last_value чтобы получить выручку за декабрь
+*/
+
+select
+    year,
+    month,
+    revenue,
+    last_value(revenue) over w as decembr,
+    round(revenue * 100 / last_value(revenue) OVER w) as perc
+
+    from sales
+where plan = 'silver'
+window w as (
+    PARTITION BY year
+    ORDER BY month
+    ROWS BETWEEN UNBOUNDED PRECEDING and UNBOUNDED FOLLOWING
+        )
+order by year, month;
+
+/*Как работает: NTH_VALUE(revenue, 3)
+берёт значение из третьей строки окна
+(при ORDER BY month это месяц=3)
+
+Партиция для year=2020 (plan='silver'):
+
+┌───────┬─────────┬─────────┐
+│ month │ revenue │ позиция │
+├───────┼─────────┼─────────┤
+│   1   │  14400  │    1    │
+│   2   │  61200  │    2    │
+│   3   │  42000  │    3    │ ← NTH_VALUE(..., 3) = 42000
+│   4   │  42000  │    4    │
+│   5   │  39000  │    5    │
+│  ...  │   ...   │   ...   │
+│  12   │  28800  │   12    │
+└───────┴─────────┴─────────┘
+
+Для каждой строки в этой партиции:
+march_revenue = 42000 (одинаково для всех строк)
+perc = revenue * 100 / 42000
+
+
+NULLIF(NULL, 0)   -- возвращает NULL (первый аргумент)
+NULLIF(0, 0)      -- возвращает NULL (аргументы равны)
+NULLIF(5, 0)      -- возвращает 5 (аргументы не равны)
+NULLIF(NULL, NULL) -- возвращает NULL (аргументы равны, оба NULL)
+
+Если NTH_VALUE вернёт 0:
+NULLIF(0, 0) → NULL
+100.0 / NULL → NULL (нет ошибки)
+ROUND(NULL, 2) → NULL
+
+
+SELECT NULLIF(trim(phone), '') AS phone FROM users;
+-- '' (пустая строка) становится NULL
+
+SELECT NULLIF(temperature, -999) AS temp FROM sensors;
+-- -999 (признак отсутствия данных) становится NULL
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      Функция NULLIF(x, 0)                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ x = 42000 ──→ 42000 != 0 ──→ возвращаем 42000                   │
+│                                                                 │
+│ x = 0 ──────→ 0 == 0 ──────→ возвращаем NULL                    │
+│                                                                 │
+│ x = NULL ───→ NULL != 0? Сравнение даёт NULL ──→ возвращаем NULL│
+│                 (по правилам SQL, NULL не равно 0)              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+*/
+
+SELECT
+    year,
+    month,
+    revenue,
+    NTH_VALUE(revenue, 3) OVER w AS march_revenue,
+    ROUND(revenue * 100.0 / NULLIF(NTH_VALUE(revenue, 3) OVER w, 0), 2) AS percent_of_march
+FROM sales
+WHERE plan = 'silver'
+WINDOW w AS (
+        PARTITION BY year
+        ORDER BY month
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        )
+ORDER BY year, month;
+
+SELECT
+    year,
+    month,
+    revenue,
+    MAX(revenue) FILTER (WHERE month = 3) OVER (PARTITION BY year) AS march,
+    ROUND(revenue * 100 / NULLIF(MAX(revenue) FILTER (WHERE month = 3) OVER (PARTITION BY year), 0), 2) AS perc
+FROM sales
+WHERE plan = 'silver'
+ORDER BY year, month;
+
+/*Вклад тарифов
+  запрос агрегируем выручку по тарифам внутри года
+  затем берем окно с секцией по годам
+  считаем выручку за год через sum() по секции.
+*/
