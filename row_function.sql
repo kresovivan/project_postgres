@@ -1246,3 +1246,33 @@ select
     round(salary * 100 / avg(salary) filter (where city = 'Самара') over ()) as perc_sam
 from employees
 order by id;
+
+/*CASE как альтернатива FILTER
+Нас интересует вариант:
+- увольняем кого-то из сотрудников
+- остальным повышаем зарплату на 10%
+- а айтишникам з.п не повышаем и так большая и здесь не получится использовать filter,
+так как он совсем отсеивает айтишников, а нам нужно учесть их зарплаты в фонде оплаты труда,
+но без повышения на 10%.
+*/
+
+SELECT name,
+       department,
+       salary,
+       SUM(salary) OVER ()      AS "база",
+       SUM(salary) OVER w       AS "+0%",
+       SUM(salary * 1.1) OVER w AS "+10%",
+       SUM(
+       CASE
+           WHEN department = 'it'
+               THEN salary
+           ELSE salary * 1.1
+           END
+          ) OVER w              AS "+10% кроме ИТ"
+
+FROM employees
+WINDOW w AS (
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            EXCLUDE CURRENT ROW
+        )
+ORDER BY id;
