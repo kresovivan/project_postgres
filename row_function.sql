@@ -2129,5 +2129,47 @@ order by 1
   Допустим нас интересуют острова по датам для пользователя 51 - то есть периоды времени, когда он
   занимался каждый день без перерыва.
 
+  Как преобразовать дату в количество дней
 */
+
+with agroups as (
+select adate,
+       extract(epoch from adate)/86400  - dense_rank() over (order by adate) as group_id
+from activity
+where user_id = 51
+)
+
+select
+    min(adate) as day_start,
+    max(adate) as day_end,
+    count(*) as day_count
+    from agroups
+group by group_id;
+
+/*Нужно найти серию без перерывов
+  посчитать периоды в которые пользователь набирал
+  хотя бы один балл каждый день без перерыва
+  Серия из одного дня тоже считается
+*/
+
+WITH agroups AS (SELECT user_id,
+                        adate,
+                        EXTRACT(EPOCH FROM adate) / 86400 -
+                        DENSE_RANK() OVER (PARTITION BY user_id ORDER BY adate) AS group_id
+                 FROM activity
+                 )
+
+select
+    user_id,
+    min(adate) as day_start,
+    max(adate) as day_end,
+    count(*) as day_count
+from agroups
+group by user_id, group_id
+ORDER BY user_id, day_start,day_end;
+
+
+
+
+
 
