@@ -2179,3 +2179,20 @@ SELECT
 FROM ngroups
 GROUP BY group_id;
 
+
+
+WITH distinct_numbers AS (
+    SELECT DISTINCT num FROM numbers
+),
+     nlags AS (
+         SELECT
+             num,
+             num - LAG(num) OVER (ORDER BY num) AS n_lag
+         FROM distinct_numbers
+     )
+
+--границы кластеров
+SELECT num,
+      CASE WHEN n_lag > 2 THEN 1 ELSE 0 END  AS is_boundary,
+      n_lag
+FROM nlags
