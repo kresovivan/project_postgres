@@ -1329,3 +1329,50 @@ select
 FROM employees
 window w as (partition by city)
 order by city, id
+
+/*Практика
+  Оконные функции используются в продуктовой и финансовой аналитике
+
+Сначала агрегация, затем окна
+Допустим мы хотим сначала посмотреть как выручка за каждый год соотносится с выручкой за два года
+Сначала считаем агрегаты по годам
+*/
+select
+    year,
+    sum(revenue) as revenue
+    from sales
+group by year
+
+/*Теперь с помощью оконных функций считаем общую выручку на агрегированных результатах:
+*/
+
+WITH data AS (SELECT year,
+                     SUM(revenue) AS revenue
+              FROM sales
+              GROUP BY year)
+
+SELECT year,
+       revenue,
+       SUM(revenue) OVER () AS total_revenue
+FROM data
+
+
+/*Можно написать короче
+GROUP BY year — группирует данные по годам
+SUM(revenue) — вычисляет сумму выручки за каждый год (агрегат первого уровня)
+SUM(SUM(revenue)) OVER () — берёт результат первого агрегата (годовые суммы)
+и суммирует их через оконную функцию по всей таблице
+Ошибка: Нельзя смешивать оконную функцию SUM OVER с GROUP BY, если в SELECT нет агрегации.
+PostgreSQL не поймёт, что делать.
+*/
+
+SELECT year,
+       SUM(revenue),
+       SUM(SUM(revenue)) OVER () AS total_revenue
+FROM sales
+GROUP BY year
+ORDER BY year;
+
+/*Сначала окна потом фильтрация
+  Мы хотим посмотреть как соотносится месячная выручка по тарифам silver и gold
+*/
