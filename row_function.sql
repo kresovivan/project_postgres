@@ -1126,3 +1126,123 @@ WINDOW w AS (
         )
 ORDER BY salary, id;
 
+/*Filter
+FILTER — это предложение, которое позволяет применить условную агрегацию
+внутри агрегатной функции. Она агрегирует только те строки, которые удовлетворяют условию,
+а остальные игнорирует.
+aggregate_function(...) FILTER (WHERE условие)
+Основное преимущество: несколько агрегатов за одно сканирование
+Без FILTER вам пришлось бы делать несколько подзапросов или CASE внутри агрегата.
+Как это работает физически
+При выполнении запроса PostgreSQL:
+Сканирует таблицу (или идёт по индексу) один раз.
+Для каждой строки проверяет все условия FILTER параллельно.
+Накапливает агрегаты только для тех строк, где условие истинно.
+Без FILTER с CASE происходит то же самое физически, но код менее читаемый.
+С несколькими подзапросами было бы несколько сканирований.
+
+
+Примеры:
+sql
+SELECT
+    product_id,
+    SUM(revenue) FILTER (WHERE date >= '2024-01-01') AS revenue_jan,
+    SUM(revenue) FILTER (WHERE date >= '2024-02-01' AND date < '2024-03-01') AS revenue_feb,
+    SUM(revenue) FILTER (WHERE date >= '2024-03-01') AS revenue_mar
+FROM sales
+GROUP BY product_id;
+
+SELECT
+    department,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (WHERE salary > 100000) AS high_paid,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE salary > 100000) / COUNT(*), 2) AS high_paid_pct
+FROM employees
+GROUP BY department;
+
+SELECT
+    category,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) AS median_all,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) FILTER (WHERE discount > 0) AS median_discounted
+FROM products
+GROUP BY category;
+
+SELECT
+    sensor_id,
+    AVG(temperature) FILTER (WHERE temperature BETWEEN -10 AND 40) AS avg_normal,
+    COUNT(*) FILTER (WHERE temperature < -10 OR temperature > 40) AS anomalies
+FROM sensor_data
+GROUP BY sensor_id;
+
+FILTER работает только с агрегатными функциями
+(COUNT, SUM, AVG, MIN, MAX, STRING_AGG, ARRAY_AGG, PERCENTILE_CONT и др.).
+
+Посчитаем как изменится фонд оплаты труда, если кого-то одного уволить, а остальным
+  поднять зарплату на 10%
+
+-- Для Ивана (120): +0% = 822 (все остальные)
+-- Т.е. если Иван уйдёт, ФОТ сократится с 942 до 822
+*/
+
+select
+    name,
+    department,
+    salary,
+    sum(salary) over () as "база",
+    sum(salary) over w as "+0%",
+    sum(salary * 1.1) over w as "+10%"
+    from employees
+    window w as (
+        rows between unbounded preceding and unbounded following
+        exclude current row
+            )
+order by id;
+
+/*А если уволить всех айтишников и отдать ИТ на аустсорс*/
+
+select
+    name,
+    department,
+    salary,
+    sum(salary) over () as "база",
+    sum(salary) over w as "+0%",
+    sum(salary * 1.1) over w as "+10%",
+    sum(salary * 1.5) filter(where department <> 'it') OVER () as "+50% без ИТ"
+
+from employees
+window w as (
+        rows between unbounded preceding and unbounded following
+            exclude current row
+        )
+order by id;
+
+/*Сравнить з.п со средней по городу, мы посчитали сколько процентов составляет
+  его зарплата от средней по компании
+*/
+
+select
+    id,
+    name,
+    salary,
+    round(avg(salary) over ()) as avg,
+    round((salary * 100)) as salary_100,
+    round(salary * 100 / avg(salary) over ()) as perc
+from employees
+order by id;
+
+/*Хотим посчитать, сколько процентов составляет зарплата сотрудника от средней по Москве и средней
+  по Самаре*/
+
+select
+    id,
+    name,
+    salary,
+    round(avg(salary) over ()) as avg,
+    round((salary * 100)) as salary_100,
+    round(salary * 100 / avg(salary) over ()) as perc,
+    round(avg(salary) filter (where city = 'Москва') over ()) as avg_msk,
+    round(salary * 100 / avg(salary) filter (where city = 'Москва') over ()) as perc_msk,
+    round(avg(salary) filter (where city = 'Самара') over ()) as avg_sam,
+    round(salary * 100 / avg(salary) filter (where city = 'Самара') over ()) as perc_sam
+from employees
+order by id;
