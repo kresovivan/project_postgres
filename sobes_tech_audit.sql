@@ -110,7 +110,7 @@ SELECT
     to_char(month, 'YYYY-MM'),
     category,
     monthly_quantity,
-    SUM(monthly_quantity) OVER (PARTITION BY category ORDER BY month) AS сum_totaal_sum
+    SUM(monthly_quantity) OVER (PARTITION BY category ORDER BY month) AS сum_total_sum
 FROM monthly_category_sales
 ORDER BY category, month;
 
