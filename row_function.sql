@@ -1558,3 +1558,49 @@ ORDER BY year, month;
   затем берем окно с секцией по годам
   считаем выручку за год через sum() по секции.
 */
+
+
+with data as (
+    select
+        year,
+        plan,
+        sum(revenue) as revenue
+    from sales
+group by year, plan
+)
+
+select
+    year,
+    plan,
+    revenue,
+    sum(revenue) OVER w as total,
+    round(revenue * 100 / sum(revenue) OVER w) as perc
+from data
+window w as (PARTITION BY year)
+order by year, plan
+
+/*Высокая, средняя и низкая выручка
+  агрегируем выручку по месяцам
+  разбиваем на группы через ntile()
+*/
+
+
+with data as (
+    select
+        year,
+        month,
+        sum(revenue) as revenue
+    from sales
+    where year = 2020
+    group by year, month
+)
+
+select
+    year,
+    month,
+    revenue,
+    ntile(3) over (order by revenue desc)
+from data
+order by revenue desc, month
+
+
