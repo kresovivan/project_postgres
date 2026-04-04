@@ -1,3 +1,7 @@
+/*Использованы примеры из книги
+  Энтони Молинаро SQL.Сборник Рецептов
+*/
+
 -- Создание таблицы DEPT
 
 ---truncate table dept;
@@ -155,10 +159,10 @@ SELECT *
 FROM emp
 WHERE deptno = 10;
 
-/*Возвращение строк оп нескольким условиям
+/*Возвращение строк по нескольким условиям
 Приоритет операторов в SQL:
-AND — высший приоритет (выполняется первым)
-OR — низший приоритет (выполняется последним)
+AND — высший приоритет (выполняется первым) !!!
+OR — низший приоритет (выполняется последним) !!!
 NOT — обычно между ними
 Интерпретируется как:
 WHERE (deptno = 10)
@@ -178,7 +182,7 @@ WHERE deptno = 10
 Затем результат из шага 1 объединяется через AND с deptno = 20:
 (результат_из_скобок) AND (deptno = 20)
 Ключевой момент:
-Даже если условие в скобках вернет TRUE, строка будет выбрана ТОЛЬКО если deptno = 20 тоже TRUE.
+Даже если условие в скобках вернет TRUE, строка будет выбрана ТОЛЬКО если deptno = 20 тоже TRUE!!!
 Только сотрудники, которые:
 Работают в отделе 20 (deptno = 20)
 И при этом удовлетворяют хотя бы одному из условий:
@@ -217,7 +221,7 @@ FROM emp;
 --where salary < 5000;
 
 /*Эту ошибку можно устранить с помощью вложенного запроса
-  приведенное рещение необходимо в тех случаях, когда в
+  приведенное решение необходимо в тех случаях, когда в
   предикате where нужно обращаться к любому из следующих
   элементов:
   -агрегатные функции,
@@ -261,7 +265,8 @@ WHERE deptno = 10;
 
 /*Использование условной логики в операторе Select
   при отсутствии оператора else выражение case возвращает
-  занчение null для любой строки, не удовлетворяющей проверяемому условию*/
+  занчение null для любой строки, не удовлетворяющей проверяемому условию!!!
+*/
 
 SELECT ename,
        sal,
@@ -272,13 +277,27 @@ SELECT ename,
            END AS status
 FROM emp;
 
+
+SELECT ename,
+       sal,
+       CASE
+           WHEN sal <= 2000 THEN 'UNDERPAID'
+           WHEN sal >= 4000 THEN 'OVERPAID'
+           END AS status
+FROM emp;
+
 /*Ограничение числа возвращаемых строк*/
 
-SELECT *
-FROM emp FETCH FIRST 5 ROWS ONLY;
+SELECT * -- "звёздочка" означает ВСЕ колонки таблицы
+FROM emp -- из таблицы "emp" (employees - сотрудники)
+    FETCH FIRST 5 ROWS ONLY; -- взять ТОЛЬКО ПЕРВЫЕ 5 строк (ограничение вывода)
 
 SELECT *
 FROM emp limit 5;
+
+SELECT * FROM emp
+ORDER BY empno
+    FETCH FIRST 5 ROWS ONLY;
 
 /*Извлечение произвольных записей
   количество строк ограничивается поле исполнения функции в операторе order by*/
@@ -294,6 +313,21 @@ SELECT *
 FROM emp
 WHERE comm IS NULL;
 
+SELECT *
+FROM
+    (VALUES (NULL IS NULL)) AS t(result);
+
+SELECT * FROM (VALUES
+                   (NULL OR NULL,      'NULL OR NULL → NULL'),
+                   (NULL OR TRUE,      'NULL OR TRUE → TRUE'),
+                   (NULL OR FALSE,     'NULL OR FALSE → NULL'),
+                   (NULL AND NULL,     'NULL AND NULL → NULL'),
+                   (NULL AND TRUE,     'NULL AND TRUE → NULL'),
+                   (NULL AND FALSE,    'NULL AND FALSE → FALSE'),
+                   (NOT NULL,          'NOT NULL → NULL'),
+                   (NULL IS NULL,          'NULL IS NULL → TRUE')
+              ) AS t(result, description);
+
 /*преобразования значений null в реальные значения
  в качестве аргументов функции coalesce передается одно или несколько значений,
 функция возвращает первое не null значение в этом списке*/
@@ -302,7 +336,6 @@ EXPLAIN ANALYZE
 select coalesce(comm,0)
     from emp;
 
-EXPLAIN ANALYZE
 SELECT CASE
            WHEN comm IS NOT NULL THEN comm
            ELSE 0
@@ -318,8 +351,8 @@ FROM emp
 WHERE deptno IN (10, 20);
 
 /*Из этого результирующего множества нужно извлечь только тех служащих, в именах которых
-  есть буква I или чье название должности заканчивается на ER
-  символ подчеркнивания _ возвращает любой отдельный символ*/
+есть буква I или чье название должности заканчивается на ER
+символ подчеркнивания _ возвращает любой отдельный символ*/
 
 SELECT ename, job
 FROM emp
@@ -413,6 +446,31 @@ FROM v
 ORDER BY CAST(
                  substring(data from '[0-9]+') AS INTEGER
          );
+
+SELECT data,
+       substring(data from '[0-9]+')::INTEGER AS numbers
+FROM v
+ORDER BY substring(data from '[0-9]+')::INTEGER;
+
+
+-- Удаляем всё, кроме цифр, затем преобразуем в число
+---regexp_replace(data, '[^0-9]', '', 'g')	Удаляет все НЕ цифры из строки
+---Флаг 'g' означает global (глобальный) — заменять все вхождения шаблона в строке, а не только первое.
+/*
+Исходная строка:     "A B C 1 2 3"
+                         ↓
+regexp_replace:     удаляем всё, кроме цифр
+                         ↓
+                   "1 2 3" → склеивается → "123"
+                         ↓
+::INTEGER:          преобразуем в число → 123
+                         ↓
+Результат:          123
+*/
+SELECT data,
+       NULLIF(regexp_replace(data, '[^0-9]', '', 'g'), '')::INTEGER AS numbers
+FROM v
+ORDER BY numbers;
 
 /*Сортировка по ename*/
 SELECT data, REPLACE(TRANSLATE(data, '0123456789', '##########'), '#', '') AS replace_num
@@ -3164,7 +3222,7 @@ FROM year_dates
 ORDER BY day_date;
 
 /*Дополнение недостающих дат
-  требуется создать строку для каждого дня (недели, месяца, года) в п пределах заданного интервала
+  требуется создать строку для каждого дня (недели, месяца, года) в пределах заданного интервала
   такие методы часто используется при создании сводных отчетов
   Нам нужно подсчитать количество принятых на работу служащих в каждом месяце каждого года,
   когда производился прием на работу
@@ -3196,6 +3254,84 @@ FROM all_months am
          LEFT JOIN emp e ON DATE_TRUNC('month', e.hiredate) = am.month_start
 GROUP BY am.year_month, am.month_year_full, am.month_start
 ORDER BY am.month_start;
+
+
+-- Генерируем все месяцы от первого до последнего найма
+WITH calendar_months AS (
+    SELECT
+        DATE_TRUNC('month', month_start) AS month_start,
+        TO_CHAR(month_start, 'YYYY-MM') AS year_month,
+        TO_CHAR(month_start, 'Month YYYY') AS month_name
+    FROM GENERATE_SERIES(
+                 (SELECT MIN(DATE_TRUNC('month', hiredate)) FROM emp),  -- первый месяц найма
+                 (SELECT MAX(DATE_TRUNC('month', hiredate)) FROM emp),  -- последний месяц найма
+                 INTERVAL '1 month'
+         ) AS month_start
+),
+-- Подсчитываем наймы по месяцам
+     hires_by_month AS (
+         SELECT
+             DATE_TRUNC('month', hiredate) AS month_start,
+             COUNT(*) AS hires_count,
+             STRING_AGG(ename || ' (' || TO_CHAR(hiredate, 'DD.MM.YYYY') || ')', ', '
+                        ORDER BY hiredate) AS hired_employees
+         FROM emp
+         GROUP BY DATE_TRUNC('month', hiredate)
+     )
+-- Соединяем календарь с данными о наймах
+SELECT
+    cm.year_month AS "Год-Месяц",
+    cm.month_name AS "Месяц и год",
+    COALESCE(hm.hires_count, 0) AS "Количество наймов",
+    COALESCE(hm.hired_employees, 'Нет наймов') AS "Сотрудники (дата найма)"
+FROM calendar_months cm
+         LEFT JOIN hires_by_month hm ON cm.month_start = hm.month_start
+ORDER BY cm.month_start;
+
+
+-- Шаг 1: Календарь всех месяцев
+WITH calendar AS (
+    SELECT
+        GENERATE_SERIES(
+                (SELECT MIN(DATE_TRUNC('month', hiredate)) FROM emp),
+                (SELECT MAX(DATE_TRUNC('month', hiredate)) FROM emp),
+                '1 month'::interval
+        ) AS month_start
+),
+-- Шаг 2: Форматирование календаря
+     months AS (
+         SELECT
+             month_start,
+             TO_CHAR(month_start, 'YYYY-MM') AS year_month,
+             TO_CHAR(month_start, 'Month YYYY') AS month_full
+         FROM calendar
+     ),
+-- Шаг 3: Данные по наймам
+     hires AS (
+         SELECT
+             DATE_TRUNC('month', hiredate) AS month_start,
+             COUNT(*) AS count,
+             STRING_AGG(ename || ' (' || TO_CHAR(hiredate, 'DD.MM.YYYY') || ')', ', ' ORDER BY hiredate) AS employees
+         FROM emp
+         GROUP BY DATE_TRUNC('month', hiredate)
+     )
+-- Шаг 4: Итоговый отчёт
+SELECT
+    m.year_month AS "Год-Месяц",
+    m.month_full AS "Месяц и год",
+    COALESCE(h.count, 0) AS "Количество наймов",
+    COALESCE(h.employees, 'Нет наймов') AS "Сотрудники (дата найма)"
+FROM months m
+         LEFT JOIN hires h ON m.month_start = h.month_start
+ORDER BY m.month_start;
+
+
+select *
+from  GENERATE_SERIES(
+    '1980-12-01'::date, -- первый месяц найма (SMITH был нанят 1980-12-17)
+    '1982-12-01'::date, -- последний месяц найма (SCOTT был нанят 1982-12-09)
+     INTERVAL '1 day'
+    ) AS generate_series;
 
 /*Поиск по заданным единицам времени.
   Требуется найти даты содержащие месяц, день недели,
@@ -3350,6 +3486,12 @@ select a.empno,
 WHERE a.empno = b.empno
 and b.proj_start >= a.proj_start
 and b.proj_start <= a.proj_end
-and a.project_id != b.project_id
+and a.project_id != b.project_id;
 
-/*Работа с диапазонами значений*/
+/*Работа с диапазонами значений
+  Поиск диапазона последовательных значений
+  Требуется определить диапазон строк, представляющих ряд последовательных
+  проектов*/
+
+  select *
+  from emp_project ep
