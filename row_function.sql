@@ -1462,7 +1462,7 @@ SELECT year,
 FROM sales
 WHERE year = 2020
   AND plan = 'platinum'
-ORDER BY month
+ORDER BY month;
 
 /*Сравнение с декабрем, есть таблица продаж sales посчитайте выручку по месяцам для тарифа silver
   для каждого месяца дополнительно укажите
@@ -1592,7 +1592,7 @@ select
     round(revenue * 100 / sum(revenue) OVER w) as perc
 from data
 window w as (PARTITION BY year)
-order by year, plan
+order by year, plan;
 
 /*Высокая, средняя и низкая выручка
   агрегируем выручку по месяцам
@@ -1616,7 +1616,7 @@ select
     revenue,
     ntile(3) over (order by revenue desc)
 from data
-order by revenue desc, month
+order by revenue desc, month;
 
 
 /*Выручка по кварталам 2020 года против 2019 года
@@ -1894,7 +1894,7 @@ SELECT year,
        MAX(CASE WHEN plan = 'platinum' THEN qrank ELSE 0 END)   AS platinum_qrank
 FROM data
 GROUP BY year, month
-ORDER BY month
+ORDER BY month;
 
 
 SELECT *
@@ -2068,7 +2068,7 @@ select
     count(*) as n_count
 from ngropus
 GROUP BY diff_id
-order by 1
+order by 1;
 
 /*Острова на датах
   представьте себе обучающую платформу, на которой люди выполняют задания и получают
@@ -2117,3 +2117,65 @@ select
 from agroups
 group by user_id, group_id
 ORDER BY user_id, day_start,day_end;
+
+
+/*Только серии ≥ 3 дней*/
+WITH agroups AS (SELECT user_id,
+                        adate,
+                        EXTRACT(EPOCH FROM adate) / 86400 -
+                        DENSE_RANK() OVER (PARTITION BY user_id ORDER BY adate) AS group_id
+                 FROM activity
+)
+
+SELECT
+    user_id,
+    MIN(adate) AS day_start,
+    MAX(adate) AS day_end,
+    COUNT(*) AS day_count
+FROM agroups
+GROUP BY user_id, group_id
+HAVING COUNT(*) >= 3   -- только серии от 3 дней и более
+ORDER BY user_id, day_start,day_end;
+
+/*Кластеры значений
+  Мы начали главу с того, что при анализе данных бывает удобно разбить датасет на группы
+  близких значений
+  Но близкие не означает того, что они идут подряд
+  Например есть числа 51.52.53.55.56.59.61.72
+включим в одну и ту же группу значения которые могут отличаться друг от друга на один или на два
+
+Кластер 1: 51-56 (5 элементов: 51,52,53,55,56)
+Кластер 2: 59-61 (2 элемента: 59,61)
+Кластер 3: 72-72 (1 элемент: 72)
+
+Ключевые наблюдения:
+
+Дубликат 52 не разрывает кластер (расстояние 0 не > 2)
+59 и 61 попали в один кластер (расстояние 2)
+72 — отдельный кластер (расстояние 11)
+*/
+
+--расстояния между соседями
+WITH distinct_numbers AS (
+    SELECT DISTINCT num FROM numbers
+),
+nlags AS (
+    SELECT
+        num,
+        num - LAG(num) OVER (ORDER BY num) AS n_lag
+    FROM distinct_numbers
+),
+
+--границы кластеров
+ngroups as (SELECT num,
+                   sum(CASE WHEN n_lag > 2 THEN 1 ELSE 0 END) over (order by num)  AS group_id
+            FROM nlags)
+--сами кластеры
+
+SELECT
+    MIN(num) AS n_start,
+    MAX(num) AS n_end,
+    COUNT(*) AS n_count
+FROM ngroups
+GROUP BY group_id;
+
