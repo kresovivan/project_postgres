@@ -1,3 +1,7 @@
+/*Использованы скрипты из книги Антона Жиянова Оконные функции SQL.
+  Анализ данных на практике
+*/
+
 CREATE SCHEMA IF NOT EXISTS row_function;
 
 drop table weather;
