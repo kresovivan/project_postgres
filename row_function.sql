@@ -1604,3 +1604,64 @@ from data
 order by revenue desc, month
 
 
+/*Выручка по кварталам 2020 года против 2019 года
+  -выручка за аналогичный квартал 2019 года prev
+  -процент, который составляет выручка текущего квартала от prev
+*/
+
+SELECT
+    quarter,
+    SUM(CASE WHEN year = 2020 THEN revenue END) AS revenue_2020,
+    SUM(CASE WHEN year = 2019 THEN revenue END) AS revenue_2019,
+    ROUND(
+            100.0 * SUM(CASE WHEN year = 2020 THEN revenue END) /
+            NULLIF(SUM(CASE WHEN year = 2019 THEN revenue END), 0)
+    ) AS yoy_percent
+FROM sales
+WHERE year IN (2019, 2020)
+GROUP BY quarter
+ORDER BY quarter;
+
+
+SELECT
+    quarter,
+    SUM(revenue) FILTER (WHERE year = 2020) AS revenue_2020,
+    SUM(revenue) FILTER (WHERE year = 2019) AS revenue_2019,
+    ROUND(100.0 * SUM(revenue) FILTER (WHERE year = 2020) /
+          NULLIF(SUM(revenue) FILTER (WHERE year = 2019), 0)) AS yoy_percent
+FROM sales
+WHERE year IN (2019, 2020)
+GROUP BY quarter
+ORDER BY quarter;
+
+WITH quarterly AS (
+    SELECT
+        quarter,
+        SUM(revenue) FILTER (WHERE year = 2020) AS revenue_2020,
+        SUM(revenue) FILTER (WHERE year = 2019) AS revenue_2019
+    FROM sales
+    WHERE year IN (2019, 2020)
+    GROUP BY quarter
+)
+SELECT
+    quarter,
+    revenue_2020,
+    revenue_2019,
+    ROUND(100.0 * revenue_2020 / NULLIF(revenue_2019, 0)) AS yoy_percent
+FROM quarterly
+ORDER BY quarter;
+
+
+
+SELECT
+    month,
+    SUM(revenue) FILTER (WHERE year = 2020) AS revenue_2020,
+    SUM(revenue) FILTER (WHERE year = 2019) AS revenue_2019,
+    ROUND(100.0 * SUM(revenue) FILTER (WHERE year = 2020) /
+          NULLIF(SUM(revenue) FILTER (WHERE year = 2019), 0), 2) AS yoy_percent
+FROM sales
+WHERE year IN (2019, 2020)
+GROUP BY month
+ORDER BY month;
+
+
