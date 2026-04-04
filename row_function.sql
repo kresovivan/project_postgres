@@ -1376,3 +1376,59 @@ ORDER BY year;
 /*Сначала окна потом фильтрация
   Мы хотим посмотреть как соотносится месячная выручка по тарифам silver и gold
 */
+
+SELECT month,
+       (CASE WHEN plan = 'silver' THEN revenue END)   AS silver,
+       (CASE WHEN plan = 'gold'   THEN revenue END)   AS gold
+FROM sales
+WHERE year = 2020
+  AND plan IN ('gold', 'silver')
+ORDER BY month, plan;
+
+/*Все хорошо только нужные нам значения оказались в различных строках
+  max выбирает не null значение, он схлопывает две строчи по каждому
+  месяцу в одну*/
+SELECT month,
+       MAX(CASE WHEN plan = 'silver' THEN revenue END) AS silver,
+       MAX(CASE WHEN plan = 'gold'   THEN revenue END) AS gold
+FROM sales
+WHERE year = 2020
+  AND plan IN ('gold', 'silver')
+GROUP BY month
+ORDER BY month;
+
+/*Посчитайте выручку по тарифу gold по месяцам 202 года
+  выручка за предыдущий месяц
+  процент который составляет выручка текущего месяца от предыдущего
+  сортировка по month
+*/
+
+select
+    year,
+    month,
+    revenue,
+    sum(revenue) over w as acc_sum,
+    lag(revenue) over w as prev,
+    round(revenue * 100 / lag(revenue) over w) as perc
+from sales
+where year = 2020 and plan = 'gold'
+window w as (order by month)
+order by month;
+
+/*Посчитайте выручку нарастающим итогом по каждому тарифному плану за первые три месяца 2020 года
+секции по тарифам
+сортировка по месяцам
+sum() для выручки нарастающим итогом
+*/
+
+select
+plan,
+year,
+month,
+revenue,
+sum(revenue) over w as total
+from sales
+where year = 2020 and quarter = 1
+window w as (partition by plan order by month)
+order by plan, month;
+
