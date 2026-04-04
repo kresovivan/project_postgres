@@ -2429,29 +2429,35 @@ SELECT wdate,
 FROM src
 WHERE rn = 1;
 
-/*Если в дни В1 и В2 выпало Н осадков, то в результаты должен попасть более поздний день
+/*Нужно получить апрельские данные без повторений осадков
+  Если в дни В1 и В2 выпало Н осадков, то в результаты должен попасть более поздний день
   секционируем дни по значению осадков и отсортируем по убыванию даты, самая поздняя
   дата получит номер 1, а более ранние дубли номера > 1*/
 
-with src as (
-  select
-      wdate,
-      wtemp,
-      precip, ---уровень осадков
-      row_number() OVER (PARTITION BY precip order by wdate desc) as rn
-  from weather
-  WHERE wdate between '2020-04-01' and '2020-04-30')
+WITH src AS (SELECT wdate,
+                    wtemp,
+                    precip, ---уровень осадков
+                    ROW_NUMBER() OVER (PARTITION BY precip ORDER BY wdate DESC) AS rn
+             FROM weather
+             WHERE wdate BETWEEN '2020-04-01' AND '2020-04-30')
 
-select
-    wdate,
-    wtemp,
-    precip,
-    rn
-    from src
-where rn = 1
-order by wdate;
+SELECT wdate,
+       wtemp,
+       precip,
+       rn
+FROM src
+WHERE rn = 1
+ORDER BY wdate;
 
+/*Пропуски в датах
+  Мы могли бы удалить пропуски в значениях, но применим другую техни ку - заполним пропуски
+  предыдушим значением, для наглядности будем работатать только с февралем
+*/
 
+SELECT wdate,
+       wtemp
+FROM weather
+where wdate between '2020-02-01' and '2020-02-08';
 
 
 
