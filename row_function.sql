@@ -2450,14 +2450,69 @@ WHERE rn = 1
 ORDER BY wdate;
 
 /*Пропуски в датах
-  Мы могли бы удалить пропуски в значениях, но применим другую техни ку - заполним пропуски
-  предыдушим значением, для наглядности будем работатать только с февралем
+  Мы могли бы удалить пропуски в значениях, но применим другую технику - заполним пропуски
+  предыдуoим значением, для наглядности будем работать только с февралем
 */
 
 SELECT wdate,
        wtemp
 FROM weather
+where wdate between '2020-02-01' and '2020-02-08'; --2020-02-05 null
+
+
+/*Нам нужно 5-го февраля получить температуру от предыдущего дня в отдельном столбце prev*/
+
+select
+    wdate,
+    wtemp,
+    lag(wtemp,1) over (order by wdate) as prev
+    from weather
 where wdate between '2020-02-01' and '2020-02-08';
 
+/*Выберем значение в тех случаях когда wtemp пустое.
+  В этом поможет стандартная функция
+  coalesce(), которая возвращает первое не null значение:
+*/
+
+select
+    wdate,
+    wtemp,
+    coalesce(wtemp, lag(wtemp,1) over (order by wdate)) as fixed
+from weather
+where wdate between '2020-02-01' and '2020-02-08';
+
+/*Пропущенные осадки
+  Заполните для тех дней в которых не указаны осадки как среднее арифметическое значение осадков
+  от предыдущего и следующего дней
+*/
+
+SELECT wdate,
+       precip,
+       COALESCE(precip, (LAG(precip, 1) OVER (ORDER BY wdate) + LEAD(precip, 1) OVER (ORDER BY wdate)) / 2) AS fixed
+FROM weather
+WHERE wdate BETWEEN '2020-03-06' AND '2020-03-11'
+   OR wdate BETWEEN '2020-06-01' AND '2020-06-06'
 
 
+SELECT
+    wdate,
+    precip,
+    COALESCE(
+            precip,
+            AVG(precip) OVER (ORDER BY wdate ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+    ) AS fixed
+FROM weather
+WHERE wdate BETWEEN '2020-03-06' AND '2020-03-11'
+   OR wdate BETWEEN '2020-06-01' AND '2020-06-06';
+
+/*Если даты идут не подряд (есть пропуски), RANGE учтёт интервал по значению:*/
+SELECT
+    wdate,
+    precip,
+    COALESCE(
+            precip,
+            AVG(precip) OVER (ORDER BY wdate RANGE BETWEEN '1 day' PRECEDING AND '1 day' FOLLOWING)
+    ) AS fixed
+FROM weather
+WHERE wdate BETWEEN '2020-03-06' AND '2020-03-11'
+   OR wdate BETWEEN '2020-06-01' AND '2020-06-06';
