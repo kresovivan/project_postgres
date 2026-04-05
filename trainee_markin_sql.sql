@@ -345,3 +345,412 @@ select *
 from abonent
 where phone is null
 order by fio;
+
+
+
+
+SELECT ROW_NUMBER() OVER () AS "номер",
+       fio
+FROM abonent
+WHERE 1 = 1;
+
+
+SELECT ROW_NUMBER() OVER () AS "номер",
+       fio
+FROM abonent
+WHERE '' IS NOT NULL;
+
+/*Чем отличается от обычного <> или !=?
+Обычное сравнение executiondate <> '20.12.2019' не вернёт строки, где executiondate IS NULL,
+потому что результат сравнения с NULL — это NULL, а не TRUE.
+IS DISTINCT FROM вернёт TRUE для всех строк, где значение отличается от указанного, включая NULL.
+Этот запрос вернёт все строки, где executiondate:
+❌ НЕ равен 20.12.2019 (любая другая дата)
+✅ NULL (так как NULL отличается от любой даты)
+
+Запрос выбирает все записи, где дата выполнения не равна 20 декабря 2019 года,
+включая записи с пустой датой (NULL).
+*/
+SELECT *
+FROM request
+WHERE executiondate IS DISTINCT FROM '20.12.2019';
+
+SELECT *
+FROM request
+WHERE executiondate <> '20.12.2019'
+   OR executiondate IS NULL;
+
+
+/*
+Пример SQL-запроса с логическими операторами
+Например, требуется извлечь все данные об оплатах, которые были произведены
+после 13 июня 2021 г. и значения которых превышают 120.
+Одновременно с этимвывести все данные об оплатах, которые были сделаны до 2020 г.
+абонентом с лицевым счетом '005488'.
+Для решения данной задачи в любой из рассматриваемых СУБД можно использовать запрос
+*/
+
+
+SELECT *
+FROM paysumma
+WHERE (paydate > '13.06.2021' AND paysum > 120)
+   OR (paydate < '01.01.2020' AND accountcd = '005488');
+
+
+SELECT accountcd, SUBSTRING(fio, 1, 3) AS "Fio3"
+FROM abonent;
+
+SELECT accountcd, SUBSTR(fio, 1, 3) AS "Fio3"
+FROM abonent;
+
+
+SELECT accountcd,
+       SUBSTR(fio, 1, 3)          AS "Fio3",
+       REVERSE(SUBSTR(fio, 1, 3)) AS "Fio3_reversed"
+FROM abonent;
+
+SELECT accountcd,
+       SUBSTR(fio, 1, 3) AS "Fio3",
+       REVERSE(fio)      AS "Fio_reversed"
+FROM abonent;
+
+
+SELECT LEFT(accountcd, 4) AS accountcd_first_4,
+       accountcd
+FROM abonent;
+
+
+SELECT OVERLAY('PostgreXXX' PLACING 'SQL' FROM 8 FOR 3);
+
+SELECT SUBSTRING(accountcd FROM 3 FOR 1) AS account_prefix,
+       accountcd
+FROM abonent;
+
+SELECT REPLACE(failurenm, 'плиты', 'газовой плиты') AS replace_failurenm,
+       failurenm
+FROM disrepair;
+
+SELECT TRIM(LEADING '0' FROM accountcd) AS trim_accountcd,
+       accountcd
+FROM abonent;
+
+SELECT streetcd,
+       TRIM(TRAILING 'УЛИЦА' FROM streetnm) AS "Str_Name",
+       streetnm
+FROM street;
+
+SELECT streetcd,
+       TRIM(REPLACE(streetnm, 'УЛИЦА', '')) AS "Str_Name",
+       streetnm
+FROM street;
+
+SELECT streetcd,
+       LTRIM(streetnm) AS "LTRIM_Name",
+       RTRIM(streetnm) AS "RTRIM_Name",
+       streetnm
+FROM street;
+
+
+SELECT accountcd,
+       RPAD(fio, 20, '*'),
+       LPAD(fio, 20, '*')
+FROM abonent;
+
+SELECT CASE
+           WHEN LENGTH(fio) < 20 THEN RPAD(fio, 20, '*')
+           ELSE fio
+           END AS fio_padded
+FROM abonent;
+
+SELECT accountcd,
+       fio,
+       LENGTH(fio) AS fio_length
+FROM abonent;
+
+
+SELECT accountcd                                        AS "AccountCDRyazan",
+       CONCAT(fio, ' имеет телефон ', '8-4912-', phone) AS "ФИО+телефон"
+FROM abonent;
+
+
+SELECT accountcd      AS "AccountCDRyazan",
+       REPEAT(fio, 2) AS "ФИО+телефон"
+FROM abonent;
+
+SELECT streetnm,
+       INITCAP(streetnm)
+FROM street;
+
+SELECT streetnm,
+       LOWER(streetnm)
+FROM street;
+
+SELECT streetnm,
+       UPPER(streetnm)
+FROM street;
+
+SELECT CHR(12354);
+
+
+SELECT CHR(82);
+
+
+SELECT accountcd, fio
+FROM abonent
+WHERE POSITION('у' IN fio) = 2;
+
+SELECT servicenm, CHAR_LENGTH(servicenm), BIT_LENGTH(servicenm)
+FROM services;
+
+/*Если значения F1 и F2 совпадают, это означает, что в строке не было лишних
+  пробелов в начале или конце (или тип VARCHAR автоматически их отбросил при сохранении).
+  Если бы пробелы были, TRIM() удалил бы их, и F2 было бы меньше F1.
+*/
+SELECT failurenm               AS "FailureNM",
+       LENGTH(failurenm)       AS f1,
+       LENGTH(TRIM(failurenm)) AS f2
+FROM disrepair
+LIMIT 3;
+
+
+SELECT fio,
+       'у',
+       LENGTH(fio) - LENGTH(REPLACE(fio, 'у', '')) AS count_u
+FROM abonent;
+
+SELECT fio,
+       'у',
+       (CHAR_LENGTH(fio) - CHAR_LENGTH(REPLACE(fio, 'у', ''))) / CHAR_LENGTH('у') AS count_u
+FROM abonent;
+
+SELECT fio,
+       'у',
+       (SELECT COUNT(*) FROM REGEXP_MATCHES(fio, 'у', 'g')) AS count_u
+FROM abonent;
+
+
+SELECT requestcd,
+       EXTRACT(DAY FROM incomingdate)     AS "IncomingDay",
+       EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth",
+       EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear",
+       EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
+FROM request
+WHERE EXTRACT(YEAR FROM incomingdate) IS DISTINCT FROM 2021;
+
+SELECT requestcd,
+       EXTRACT(DAY FROM incomingdate)     AS "IncomingDay_DAY",
+       EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth_MONTH",
+       EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear_YEAR",
+       EXTRACT(DAY FROM incomingdate)     AS "IncomingDay_EXTRACT",
+       EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth_EXTRACT",
+       TO_CHAR(incomingdate, 'Month')     AS "IncomingMonth_TO_CHAR",
+       EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear_EXTRACT",
+       EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
+FROM request;
+
+
+/*cos²(x) + sin²(x) = 1*/
+SELECT POWER(COS(PI()), 2) + POWER(SIN(PI()), 2) AS result;
+-- Получить число Пи
+SELECT PI();
+-- Результат: 3.141592653589793
+
+-- Получить синус 90 градусов (в радианах!)
+SELECT SIN(RADIANS(90));
+-- Результат: 1
+
+-- Округление чисел
+SELECT ROUND(123.456, 2);
+-- Результат: 123.46
+
+-- Генерация случайного числа от 0 до 1
+SELECT RANDOM(); -- Результат: 0.123456789
+
+SELECT paysum,
+       paydate,
+       CEIL(paysum)  AS "вверх",
+       FLOOR(paysum) AS "вниз",
+       ROUND(paysum) AS "ближайшее"
+FROM paysumma;
+
+
+SELECT s.*,
+       CURRENT_TIMESTAMP
+FROM services s;
+
+
+SELECT incomingdate,
+       incomingdate + INTERVAL '14 days' AS "Exec_Limit"
+FROM request
+WHERE failurecd = 1;
+
+SELECT incomingdate,
+       incomingdate + 14 * INTERVAL '1 day' AS "Exec_Limit"
+FROM request
+WHERE failurecd = 1;
+
+SELECT incomingdate,
+       incomingdate + INTERVAL '14 days'  AS "плюс_14_дней",
+       incomingdate + INTERVAL '3 months' AS "плюс_3_месяца",
+       incomingdate + INTERVAL '1 year'   AS "плюс_1_год",
+       incomingdate - INTERVAL '7 days'   AS "минус_7_дней"
+FROM request
+WHERE failurecd = 1;
+
+
+SELECT incomingdate, -- тип TIMESTAMP
+       incomingdate + INTERVAL '2 hours'    AS "плюс_2_часа",
+       incomingdate + INTERVAL '30 minutes' AS "плюс_30_минут",
+       incomingdate + INTERVAL '45 seconds' AS "плюс_45_секунд"
+FROM request
+WHERE failurecd = 1;
+
+SELECT incomingdate,
+       incomingdate + INTERVAL '1 year 2 months 14 days' AS "сложный_интервал"
+FROM request
+WHERE failurecd = 1;
+
+SELECT incomingdate,
+       incomingdate + MAKE_INTERVAL(days => 14) AS "Exec_Limit"
+FROM request
+WHERE failurecd = 1;
+
+
+SELECT requestcd,
+       incomingdate,
+       executiondate,
+       EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP)) / 3600 AS "Hours",
+       EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP))        AS "Seconds"
+FROM request
+WHERE accountcd = '115705';
+
+
+SELECT incomingdate,
+       DATE_TRUNC('YEAR', incomingdate)  AS "Начало_года",
+       DATE_TRUNC('MONTH', incomingdate) AS "Начало_месяца",
+       DATE_TRUNC('DAY', incomingdate)   AS "Начало_дня",
+       DATE_TRUNC('HOUR', incomingdate)  AS "Начало_часа"
+FROM request;
+
+
+SELECT DISTINCT nachisl_month,
+                nachisl_year,
+                TO_DATE('1.' || nachisl_month || '.' || nachisl_year, 'DD.MM.YYYY') AS "FirstDay"
+FROM nachislsumma
+WHERE servicecd = 2;
+
+
+SELECT DISTINCT nachisl_month,
+                nachisl_year,
+                MAKE_DATE(nachisl_year, nachisl_month, 1) AS "FirstDay"
+FROM nachislsumma
+WHERE servicecd = 2;
+
+
+SELECT DISTINCT nachisl_month,
+                nachisl_year,
+                CAST('1.' || nachisl_month || '.' || nachisl_year AS DATE) AS "FirstDay"
+FROM nachislsumma
+WHERE servicecd = 2;
+
+
+SELECT accountcd,
+       (CAST(accountcd AS INTEGER) + 2) AS new_acc,
+       fio
+FROM abonent;
+
+SELECT nachisl_sum,
+       nachisl_factcd,
+       CAST(nachisl_sum AS INTEGER) AS "RoundSum"
+FROM nachislsumma
+WHERE accountcd = '115705';
+
+
+SELECT CURRENT_DATE                             AS "Сегодня",
+       TO_CHAR(CURRENT_DATE, 'D')               AS "Номер_дня_недели_1-7",
+       TO_CHAR(CURRENT_DATE, 'DAY')             AS "День_недели_верхний",
+       TO_CHAR(CURRENT_DATE, 'Day')             AS "День_недели_с_заглавной",
+       TO_CHAR(CURRENT_DATE, 'Q')               AS "Квартал",
+       TO_CHAR(CURRENT_DATE, 'DD.MM.YYYY')      AS "Дата_в_формате",
+       TO_CHAR(CURRENT_DATE, 'FMDD Month YYYY') AS "Дата_с_названием_месяца";
+
+SELECT AVG(DISTINCT paysum),
+       AVG(paysum)
+FROM paysumma;
+
+
+SELECT AVG(executiondate - incomingdate) FILTER (WHERE executiondate IS NOT NULL)
+FROM request;
+
+SELECT AVG(
+               CASE
+                   WHEN executiondate IS NOT NULL
+                       THEN executiondate - incomingdate
+                   ELSE NULL
+                   END
+       ) AS avg_days
+FROM request;
+
+
+SELECT AVG(executiondate - incomingdate) AS avg_days
+FROM request
+WHERE executiondate IS NOT NULL;
+
+
+
+SELECT AVG(paysum) FILTER (WHERE servicecd = 1) AS avg_service_1,
+       SUM(paysum) FILTER (WHERE servicecd = 2) AS sum_service_2
+FROM paysumma;
+
+SELECT SUM(nachisl_sum)
+FROM nachislsumma;
+
+
+SELECT MAX(paysum), MIN(paysum)
+FROM paysumma;
+
+SELECT COUNT(*)
+FROM abonent;
+
+SELECT COUNT(phone)
+FROM abonent;
+
+SELECT COUNT(distinct phone)
+FROM abonent;
+
+SELECT
+    COUNT(DISTINCT AccountCD) AS "Число абонентов с заявками",
+    COUNT(*) AS "Всего заявок",
+    COUNT(ExecutionDate) AS "из них выполнено",
+    COUNT(RequestCD) FILTER (WHERE Executed) AS "погашено"
+FROM Request;
+
+
+SELECT
+    GREATEST(10, 20, 30) AS max_value,   -- 30
+    LEAST(10, 20, 30) AS min_value;       -- 10
+
+/*Смысл запроса
+Для каждой ремонтной заявки (Request) с исполнителем ExecutorCD = 1 запрос выводит:
+Номер заявки (RequestCD)
+Дату выполнения (ExecutionDate), но если она раньше 1 января 2020 года,
+то вместо неё выводится 1 января 2020 года
+*/
+SELECT requestcd,
+       GREATEST(executiondate, DATE '2020-01-01') AS "MAXVALUE"
+FROM request
+WHERE executorcd = 1;
+
+
+SELECT STRING_AGG(ServiceNM, ',') AS "Список услуг"
+FROM Services;
+
+
+SELECT
+    ServiceCD,
+    STRING_AGG(ServiceNM, ',') AS "Список услуг"
+FROM Services
+GROUP BY ServiceCD;
+
+SELECT STRING_AGG(DISTINCT ServiceNM, ',') AS "Список услуг"
+FROM Services;
