@@ -780,20 +780,195 @@ FROM paysumma
 WHERE paysum BETWEEN 530 AND 600;
 
 
-SELECT
-    CASE
-        WHEN :Email ~* '^[A-Z0-9._%-]+@[A-Z0-9._%-]+\.[A-Z]{2,}$' THEN 'Есть'
-        ELSE 'Нет'
-        END AS email_valid;
+SELECT CASE
+           WHEN :Email ~* '^[A-Z0-9._%-]+@[A-Z0-9._%-]+\.[A-Z]{2,}$' THEN 'Есть'
+           ELSE 'Нет'
+           END AS email_valid;
 
 
 SELECT paydate,
-       CASE
-           WHEN EXTRACT(DOW FROM paydate) NOT IN (0, 6) THEN 'Рабочий день'
+       CASE -- Начало внешнего CASE
+           WHEN EXTRACT(DOW FROM paydate) NOT IN (0, 6)
+               THEN 'Рабочий день'
            ELSE
-               CASE
-                   WHEN EXTRACT(DOW FROM paydate) = 0 THEN 'Воскресенье'
+               CASE -- Начало внутреннего CASE
+                   WHEN EXTRACT(DOW FROM paydate) = 0
+                       THEN 'Воскресенье'
                    ELSE 'Суббота'
-                   END
-           END AS day_type
+                END -- КОНЕЦ внутреннего CASE
+        END AS day_type -- КОНЕЦ внешнего CASE
 FROM paysumma;
+
+
+SELECT COUNT(*)                                               AS "Всего заявок",
+       SUM(CASE WHEN executiondate IS NULL THEN 1 ELSE 0 END) AS "невыполненных",
+       SUM(CASE WHEN NOT executed THEN 1 ELSE 0 END)          AS "непогашенных"
+FROM request;
+
+SELECT phone
+FROM abonent
+WHERE phone = '556893';
+
+SELECT NULLIF(Phone, Phone)
+FROM Abonent;
+
+SELECT COALESCE(phone, 'Нет телефона')
+FROM abonent;
+
+SELECT NULLIF(phone, '556893') AS phone
+FROM abonent;
+
+/*Запрос находит заявки, которые либо ещё не закрыты, либо были закрыты в тот же день,
+  когда поступили — то есть "нештатные" с точки зрения нормального цикла выполнения.
+*/
+SELECT *
+FROM Request
+WHERE NULLIF(ExecutionDate, IncomingDate) IS NULL;
+
+
+
+SELECT accountcd, servicecd, paysum
+FROM paysumma
+WHERE servicecd =
+      CASE
+          WHEN accountcd::INTEGER = 136169 THEN 1
+          WHEN accountcd::INTEGER = 136160 THEN 3
+          WHEN accountcd::INTEGER = 80270 THEN 4
+          ELSE 2
+          END;
+
+SELECT nachisl_year, SUM(nachisl_sum), round(AVG(nachisl_sum),2) as avg, MIN(nachisl_sum), MAX(nachisl_sum)
+FROM nachislsumma
+GROUP BY nachisl_year;
+
+
+SELECT
+    nachisl_sum AS "Summa_550",
+    COUNT(*)
+FROM nachislsumma
+WHERE nachisl_sum  > 530 AND nachisl_sum  < 550
+GROUP BY "Summa_550";
+
+SELECT
+    AccountCD,
+    COUNT(*) || ' - с максимальной суммой ' || MAX(PaySum) AS "Pay_Count"
+FROM PaySumma
+GROUP BY AccountCD;
+
+
+SELECT
+    AccountCD,
+    PayYear,
+    MIN(PaySum)
+FROM PaySumma
+WHERE PayYear IN (2019, 2020)
+GROUP BY AccountCD, PayYear
+ORDER BY AccountCD, PayYear
+    FETCH NEXT 10 ROWS ONLY;
+
+
+
+SELECT *
+FROM Abonent
+where accountcd LIKE '%080%' ---3
+union all
+SELECT *
+FROM Abonent
+where accountcd LIKE '%443%'; ---2
+
+SELECT
+    ('Начало счета ' || SUBSTRING(AccountCD FROM 1 FOR 3)) AS "Acc_3",
+    COUNT(*)
+FROM Abonent
+GROUP BY "Acc_3";
+
+
+SELECT
+    'В среднем начислено ' ||
+    (CASE
+         WHEN nachisl_year < 2020 THEN 'до 2020 года'
+         ELSE 'после 2019 года'
+        END) AS "God",
+    AVG(nachisl_sum) AS "Average_Sum"
+FROM nachislsumma
+GROUP BY "God";
+
+
+SELECT servicecd,
+       MAX(MAX(paysum)) OVER (partition by servicecd) AS max_avg_paysum,
+       MIN(MIN(paysum)) OVER (partition by servicecd) AS min_avg_paysum
+FROM paysumma
+GROUP BY servicecd;
+
+
+SELECT
+    AccountCD,
+    ServiceCD,
+    PayYear,
+    SUM(PaySum)
+FROM PaySumma
+GROUP BY ROLLUP (AccountCD, ServiceCD, PayYear);
+
+SELECT
+    CASE
+        WHEN GROUPING(AccountCD) = 1 AND GROUPING(ServiceCD) = 1 AND GROUPING(PayYear) = 1
+            THEN 'ВСЕГО ПО БАЗЕ'
+        WHEN GROUPING(AccountCD) = 1 THEN 'ИТОГО ПО ВСЕМ АБОНЕНТАМ'
+        WHEN GROUPING(ServiceCD) = 1 THEN 'ИТОГО ПО ВСЕМ УСЛУГАМ'
+        ELSE AccountCD
+        END AS "Абонент",
+
+    CASE
+        WHEN GROUPING(ServiceCD) = 1 AND GROUPING(PayYear) = 1 AND GROUPING(AccountCD) = 0
+            THEN 'ВСЕ УСЛУГИ ЗА ВСЕ ГОДЫ'
+        WHEN GROUPING(ServiceCD) = 1 THEN 'ВСЕ УСЛУГИ'
+        ELSE ServiceCD::TEXT
+        END AS "Услуга",
+
+    CASE
+        WHEN GROUPING(PayYear) = 1 THEN 'ВСЕ ГОДЫ'
+        ELSE PayYear::TEXT
+        END AS "Год",
+
+    SUM(PaySum) AS "Сумма"
+FROM PaySumma
+GROUP BY ROLLUP (AccountCD, ServiceCD, PayYear)
+ORDER BY AccountCD, ServiceCD, PayYear;
+
+
+SELECT accountcd,
+       COUNT(*),
+       MIN(incomingdate)
+FROM request
+GROUP BY accountcd
+HAVING COUNT(*) > 2;
+
+/*Для каждого абонента (AccountCD) и услуги (ServiceCD):
+  1. Группируем платежи
+  2. Вычисляем MAX(PaySum) для каждой группы
+  3. Проверяем условия через HAVING:
+     - Есть ли у этого абонента платёж по услуге 2 больше 600?
+     - ИЛИ есть ли платёж по услуге 4 больше 300?
+  4. Если ДА → выводим ВСЕ группы этого абонента
+  Группировка по (AccountCD, ServiceCD)
+Группа 1: (136169, 1)
+
+PaySum	CASE WHEN ServiceCD = 2 THEN PaySum ELSE NULL END
+525.32	NULL
+MAX() →	NULL
+Группа 2: (136169, 2)
+
+PaySum	CASE WHEN ServiceCD = 2 THEN PaySum ELSE NULL END
+620.00	620.00
+658.70	658.70
+MAX() →	658.70
+
+
+  */
+SELECT accountcd,
+       servicecd,
+       MAX(paysum)
+FROM paysumma p
+GROUP BY p.accountcd, p.servicecd
+HAVING (MAX(CASE WHEN servicecd = 2 THEN p.paysum ELSE NULL END) > 600
+    OR MAX(CASE WHEN servicecd = 4 THEN p.paysum ELSE NULL END) > 300);
