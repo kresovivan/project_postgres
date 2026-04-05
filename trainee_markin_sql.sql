@@ -963,8 +963,8 @@ PaySum	CASE WHEN ServiceCD = 2 THEN PaySum ELSE NULL END
 658.70	658.70
 MAX() →	658.70
 
+*/
 
-  */
 SELECT accountcd,
        servicecd,
        MAX(paysum)
@@ -972,3 +972,17 @@ FROM paysumma p
 GROUP BY p.accountcd, p.servicecd
 HAVING (MAX(CASE WHEN servicecd = 2 THEN p.paysum ELSE NULL END) > 600
     OR MAX(CASE WHEN servicecd = 4 THEN p.paysum ELSE NULL END) > 300);
+
+
+SELECT MAX(IncomingDate)
+FROM Request
+HAVING MAX(IncomingDate) > '31.08.2019';
+
+
+SELECT
+    ServiceCD,
+    COUNT(ServiceCD),
+    AVG(PaySum)
+FROM PaySumma
+GROUP BY ServiceCD
+ORDER BY COUNT(ServiceCD), AVG(PaySum);
