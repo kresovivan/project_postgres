@@ -754,3 +754,46 @@ GROUP BY ServiceCD;
 
 SELECT STRING_AGG(DISTINCT ServiceNM, ',') AS "Список услуг"
 FROM Services;
+
+
+SELECT
+    RequestCD,
+    ('Номер л/с абонента ' || AccountCD) AS "Ab_Info",
+    ('Код неисправности ' || FailureCD) AS "Failure",
+    CASE
+        WHEN Executed = FALSE THEN 'Не погашена'
+        ELSE 'Погашена'
+        END AS "CASE"
+FROM Request
+WHERE AccountCD = '115705';
+
+
+SELECT pay_factcd,
+       accountcd,
+       paysum,
+       CASE
+           WHEN paydate < '2019-01-01'                        THEN 'Давно'
+           WHEN paydate BETWEEN '2019-01-01' AND '2020-12-31' THEN 'Не очень давно'
+           ELSE 'Недавно'
+           END AS "Oplata"
+FROM paysumma
+WHERE paysum BETWEEN 530 AND 600;
+
+
+SELECT
+    CASE
+        WHEN :Email ~* '^[A-Z0-9._%-]+@[A-Z0-9._%-]+\.[A-Z]{2,}$' THEN 'Есть'
+        ELSE 'Нет'
+        END AS email_valid;
+
+
+SELECT paydate,
+       CASE
+           WHEN EXTRACT(DOW FROM paydate) NOT IN (0, 6) THEN 'Рабочий день'
+           ELSE
+               CASE
+                   WHEN EXTRACT(DOW FROM paydate) = 0 THEN 'Воскресенье'
+                   ELSE 'Суббота'
+                   END
+           END AS day_type
+FROM paysumma;
