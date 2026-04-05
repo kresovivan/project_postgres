@@ -985,4 +985,58 @@ SELECT
     AVG(PaySum)
 FROM PaySumma
 GROUP BY ServiceCD
-ORDER BY COUNT(ServiceCD), AVG(PaySum);
+ORDER BY COUNT(ServiceCD) DESC , AVG(PaySum);
+
+
+SELECT
+    RequestCD,
+    ExecutionDate,
+    AccountCD
+FROM Request
+WHERE (AccountCD LIKE '08%') OR (AccountCD LIKE '11%')
+ORDER BY ExecutionDate DESC NULLS FIRST;
+
+
+SELECT
+    AccountCD,
+    ServiceCD,
+    PaySum
+FROM PaySumma
+ORDER BY
+    CASE ServiceCD
+        WHEN 3 THEN 1      -- Услуга 3 первая
+        WHEN 1 THEN 2      -- Потом услуга 1
+        WHEN 2 THEN 3      -- Потом услуга 2
+        WHEN 4 THEN 4      -- Потом услуга 4
+        ELSE 5
+        END ;
+
+
+SELECT
+    RequestCD,
+    ExecutionDate,
+    Executed,
+    AccountCD
+FROM Request
+ORDER BY
+    CASE
+        WHEN Executed = FALSE AND ExecutionDate IS NULL THEN 1  -- Не выполнена
+        WHEN Executed = FALSE AND ExecutionDate IS NOT NULL THEN 2 -- Выполнена, но не погашена
+        WHEN Executed = TRUE THEN 3  -- Выполнена и погашена
+        ELSE 4
+        END;
+
+
+SELECT
+    AccountCD,
+    ServiceCD,
+    PaySum,
+    PayDate
+FROM PaySumma
+ORDER BY
+    CASE
+        WHEN ServiceCD = 1 THEN PaySum::TEXT
+        WHEN ServiceCD = 2 THEN PayDate::TEXT
+        WHEN ServiceCD = 3 THEN accountcd::TEXT
+        ELSE PaySum::TEXT
+        END;
