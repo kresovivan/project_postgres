@@ -349,413 +349,650 @@ order by fio;
 
 
 
-SELECT ROW_NUMBER() OVER () AS "номер",
-       fio
+-- ============================================================================
+-- РАЗДЕЛ 1: ОКОННЫЕ ФУНКЦИИ (WINDOW FUNCTIONS)
+-- ============================================================================
+
+-- ROW_NUMBER() - присваивает уникальный порядковый номер каждой строке
+-- OVER () - без PARTITION BY нумерует все строки подряд
+-- Результат: 1, 2, 3, 4, 5... для всех записей таблицы
+SELECT
+            ROW_NUMBER() OVER () AS "номер",  -- Порядковый номер строки в результате
+            fio                                  -- ФИО абонента
 FROM abonent
-WHERE 1 = 1;
+WHERE 1 = 1;  -- Всегда истинно, используется для динамического формирования WHERE
 
-
-SELECT ROW_NUMBER() OVER () AS "номер",
-       fio
+-- Аналогичный запрос, но с условием, которое всегда ложно для пустой строки
+-- WHERE '' IS NOT NULL всегда TRUE, так как пустая строка ≠ NULL
+SELECT
+            ROW_NUMBER() OVER () AS "номер",
+            fio
 FROM abonent
-WHERE '' IS NOT NULL;
+WHERE '' IS NOT NULL;  -- Вернёт все строки (пустая строка существует)
 
-/*Чем отличается от обычного <> или !=?
-Обычное сравнение executiondate <> '20.12.2019' не вернёт строки, где executiondate IS NULL,
-потому что результат сравнения с NULL — это NULL, а не TRUE.
-IS DISTINCT FROM вернёт TRUE для всех строк, где значение отличается от указанного, включая NULL.
-Этот запрос вернёт все строки, где executiondate:
-❌ НЕ равен 20.12.2019 (любая другая дата)
-✅ NULL (так как NULL отличается от любой даты)
 
-Запрос выбирает все записи, где дата выполнения не равна 20 декабря 2019 года,
-включая записи с пустой датой (NULL).
+-- ============================================================================
+-- РАЗДЕЛ 2: РАБОТА С NULL И СРАВНЕНИЯ
+-- ============================================================================
+
+/*
+IS DISTINCT FROM vs <> (не равно)
+=====================================
+Проблема обычного <> :
+  - NULL <> 'значение' возвращает NULL (неизвестно), а не TRUE
+  - Строки с NULL не попадают в выборку
+
+Решение IS DISTINCT FROM:
+  - NULL IS DISTINCT FROM 'значение' возвращает TRUE
+  - NULL IS DISTINCT FROM NULL возвращает FALSE
+  - Работает как "не равно, учитывая NULL"
 */
 SELECT *
 FROM request
 WHERE executiondate IS DISTINCT FROM '20.12.2019';
+-- Вернёт: все даты кроме 20.12.2019 + все NULL значения
 
+-- Эквивалентная запись через OR (более длинная)
 SELECT *
 FROM request
-WHERE executiondate <> '20.12.2019'
-   OR executiondate IS NULL;
+WHERE executiondate <> '20.12.2019'   -- Все даты кроме указанной
+   OR executiondate IS NULL;           -- Плюс все NULL
 
+
+-- ============================================================================
+-- РАЗДЕЛ 3: ЛОГИЧЕСКИЕ ОПЕРАТОРЫ (AND, OR)
+-- ============================================================================
 
 /*
-Пример SQL-запроса с логическими операторами
-Например, требуется извлечь все данные об оплатах, которые были произведены
-после 13 июня 2021 г. и значения которых превышают 120.
-Одновременно с этимвывести все данные об оплатах, которые были сделаны до 2020 г.
-абонентом с лицевым счетом '005488'.
-Для решения данной задачи в любой из рассматриваемых СУБД можно использовать запрос
+Запрос с комбинированными условиями:
+Требуется найти:
+1. Платежи после 13.06.2021 И сумма > 120
+ИЛИ
+2. Платежи до 2020 года И конкретный лицевой счет
 */
-
-
 SELECT *
 FROM paysumma
-WHERE (paydate > '13.06.2021' AND paysum > 120)
-   OR (paydate < '01.01.2020' AND accountcd = '005488');
+WHERE (paydate > '13.06.2021' AND paysum > 120)     -- Условие 1 (оба должны выполняться)
+   OR                                                 -- ИЛИ
+    (paydate < '01.01.2020' AND accountcd = '005488'); -- Условие 2 (оба должны выполняться)
 
 
-SELECT accountcd, SUBSTRING(fio, 1, 3) AS "Fio3"
+-- ============================================================================
+-- РАЗДЕЛ 4: РАБОТА СО СТРОКАМИ - ИЗВЛЕЧЕНИЕ ЧАСТИ
+-- ============================================================================
+
+-- SUBSTRING / SUBSTR - извлекает подстроку
+-- Синтаксис: SUBSTR(строка, начало, длина)
+-- Нумерация символов начинается с 1 (не с 0!)
+SELECT
+    accountcd,
+    SUBSTRING(fio, 1, 3) AS "Fio3"  -- Первые 3 символа ФИО
 FROM abonent;
 
-SELECT accountcd, SUBSTR(fio, 1, 3) AS "Fio3"
+-- SUBSTR - альтернативный синтаксис (работает в PostgreSQL для совместимости)
+SELECT
+    accountcd,
+    SUBSTR(fio, 1, 3) AS "Fio3"  -- То же самое, что SUBSTRING
+FROM abonent;
+
+-- Комбинация SUBSTR + REVERSE
+SELECT
+    accountcd,
+    SUBSTR(fio, 1, 3) AS "Fio3",           -- Первые 3 символа
+    REVERSE(SUBSTR(fio, 1, 3)) AS "Fio3_reversed"  -- Они же в обратном порядке
+FROM abonent;
+
+-- REVERSE всей строки
+SELECT
+    accountcd,
+    SUBSTR(fio, 1, 3) AS "Fio3",
+    REVERSE(fio) AS "Fio_reversed"  -- Всё ФИО задом наперёд
+FROM abonent;
+
+-- LEFT - первые N символов строки
+SELECT
+    LEFT(accountcd, 4) AS accountcd_first_4,  -- Первые 4 символа лицевого счета
+    accountcd
 FROM abonent;
 
 
-SELECT accountcd,
-       SUBSTR(fio, 1, 3)          AS "Fio3",
-       REVERSE(SUBSTR(fio, 1, 3)) AS "Fio3_reversed"
-FROM abonent;
+-- ============================================================================
+-- РАЗДЕЛ 5: РАБОТА СО СТРОКАМИ - ЗАМЕНА И МОДИФИКАЦИЯ
+-- ============================================================================
 
-SELECT accountcd,
-       SUBSTR(fio, 1, 3) AS "Fio3",
-       REVERSE(fio)      AS "Fio_reversed"
-FROM abonent;
-
-
-SELECT LEFT(accountcd, 4) AS accountcd_first_4,
-       accountcd
-FROM abonent;
-
-
+-- OVERLAY - замена части строки по позиции
+-- Синтаксис: OVERLAY(строка PLACING 'новая' FROM позиция FOR длина)
 SELECT OVERLAY('PostgreXXX' PLACING 'SQL' FROM 8 FOR 3);
+-- Результат: 'PostgreSQL' (заменили XXX на SQL начиная с 8-й позиции)
 
-SELECT SUBSTRING(accountcd FROM 3 FOR 1) AS account_prefix,
-       accountcd
+-- SUBSTRING с синтаксисом SQL-standard
+SELECT
+    SUBSTRING(accountcd FROM 3 FOR 1) AS account_prefix,  -- 3-й символ
+    accountcd
 FROM abonent;
 
-SELECT REPLACE(failurenm, 'плиты', 'газовой плиты') AS replace_failurenm,
-       failurenm
+-- REPLACE - замена подстроки на другую
+SELECT
+    REPLACE(failurenm, 'плиты', 'газовой плиты') AS replace_failurenm,
+    failurenm
 FROM disrepair;
+-- Пример: "ремонт плиты" → "ремонт газовой плиты"
 
-SELECT TRIM(LEADING '0' FROM accountcd) AS trim_accountcd,
-       accountcd
+
+-- ============================================================================
+-- РАЗДЕЛ 6: ОБРЕЗКА ПРОБЕЛОВ И СИМВОЛОВ (TRIM)
+-- ============================================================================
+
+-- TRIM(LEADING ...) - удаляет символы в НАЧАЛЕ строки
+SELECT
+    TRIM(LEADING '0' FROM accountcd) AS trim_accountcd,  -- Удалить ведущие нули
+    accountcd
 FROM abonent;
+-- Пример: '00123' → '123'
 
-SELECT streetcd,
-       TRIM(TRAILING 'УЛИЦА' FROM streetnm) AS "Str_Name",
-       streetnm
+-- TRIM(TRAILING ...) - удаляет символы в КОНЦЕ строки
+SELECT
+    streetcd,
+    TRIM(TRAILING 'УЛИЦА' FROM streetnm) AS "Str_Name",  -- Удалить "УЛИЦА" в конце
+    streetnm
+FROM street;
+-- Пример: 'Ленина УЛИЦА' → 'Ленина '
+
+-- Альтернатива: сначала REPLACE, потом TRIM пробелов
+SELECT
+    streetcd,
+    TRIM(REPLACE(streetnm, 'УЛИЦА', '')) AS "Str_Name",  -- Удалить "УЛИЦА" везде + пробелы
+    streetnm
+FROM street;
+-- Пример: 'Ленина УЛИЦА' → 'Ленина'
+
+-- LTRIM / RTRIM - упрощённые версии TRIM
+SELECT
+    streetcd,
+    LTRIM(streetnm) AS "LTRIM_Name",   -- Пробелы слева (Leading)
+    RTRIM(streetnm) AS "RTRIM_Name",   -- Пробелы справа (Trailing)
+    streetnm
 FROM street;
 
-SELECT streetcd,
-       TRIM(REPLACE(streetnm, 'УЛИЦА', '')) AS "Str_Name",
-       streetnm
-FROM street;
 
-SELECT streetcd,
-       LTRIM(streetnm) AS "LTRIM_Name",
-       RTRIM(streetnm) AS "RTRIM_Name",
-       streetnm
-FROM street;
+-- ============================================================================
+-- РАЗДЕЛ 7: ВЫРАВНИВАНИЕ СТРОК (PADDING)
+-- ============================================================================
 
-
-SELECT accountcd,
-       RPAD(fio, 20, '*'),
-       LPAD(fio, 20, '*')
+-- RPAD - выравнивание вправо (добавляет символы справа до нужной длины)
+-- LPAD - выравнивание влево (добавляет символы слева до нужной длины)
+SELECT
+    accountcd,
+    RPAD(fio, 20, '*') AS fio_right_padded,   -- ФИО + звёздочки справа до 20 символов
+    LPAD(fio, 20, '*') AS fio_left_padded     -- Звёздочки слева + ФИО до 20 символов
 FROM abonent;
+-- Пример: 'Иванов' → 'Иванов**************' (RPAD) или '**************Иванов' (LPAD)
 
-SELECT CASE
-           WHEN LENGTH(fio) < 20 THEN RPAD(fio, 20, '*')
-           ELSE fio
-           END AS fio_padded
-FROM abonent;
-
-SELECT accountcd,
-       fio,
-       LENGTH(fio) AS fio_length
+-- Безопасное выравнивание (только если строка короче 20 символов)
+SELECT
+    CASE
+        WHEN LENGTH(fio) < 20 THEN RPAD(fio, 20, '*')  -- Добавляем звёзды только если нужно
+        ELSE fio                                        -- Иначе оставляем как есть
+        END AS fio_padded
 FROM abonent;
 
 
-SELECT accountcd                                        AS "AccountCDRyazan",
-       CONCAT(fio, ' имеет телефон ', '8-4912-', phone) AS "ФИО+телефон"
+-- ============================================================================
+-- РАЗДЕЛ 8: ДЛИНА СТРОКИ
+-- ============================================================================
+
+-- LENGTH - количество символов в строке
+SELECT
+    accountcd,
+    fio,
+    LENGTH(fio) AS fio_length  -- Длина ФИО в символах
 FROM abonent;
 
-
-SELECT accountcd      AS "AccountCDRyazan",
-       REPEAT(fio, 2) AS "ФИО+телефон"
+-- CONCAT - сцепление строк (аналог ||)
+SELECT
+    accountcd AS "AccountCDRyazan",
+    CONCAT(fio, ' имеет телефон ', '8-4912-', phone) AS "ФИО+телефон"
 FROM abonent;
+-- Пример: 'Иванов имеет телефон 8-4912-555666'
 
-SELECT streetnm,
-       INITCAP(streetnm)
+-- REPEAT - повторение строки N раз
+SELECT
+    accountcd AS "AccountCDRyazan",
+    REPEAT(fio, 2) AS "ФИО_повтор"  -- ФИО повторяется 2 раза
+FROM abonent;
+-- Пример: 'Иванов' → 'ИвановИванов'
+
+
+-- ============================================================================
+-- РАЗДЕЛ 9: РЕГИСТР СИМВОЛОВ
+-- ============================================================================
+
+-- INITCAP - первая буква каждого слова заглавная, остальные строчные
+SELECT
+    streetnm,
+    INITCAP(streetnm) AS streetnm_capitalized
 FROM street;
+-- Пример: 'лЕНИНА уЛИЦА' → 'Ленина Улица'
 
-SELECT streetnm,
-       LOWER(streetnm)
+-- LOWER - все буквы в нижний регистр
+SELECT
+    streetnm,
+    LOWER(streetnm) AS streetnm_lower
 FROM street;
+-- Пример: 'ЛЕНИНА' → 'ленина'
 
-SELECT streetnm,
-       UPPER(streetnm)
+-- UPPER - все буквы в верхний регистр
+SELECT
+    streetnm,
+    UPPER(streetnm) AS streetnm_upper
 FROM street;
-
-SELECT CHR(12354);
-
-
-SELECT CHR(82);
+-- Пример: 'ленина' → 'ЛЕНИНА'
 
 
-SELECT accountcd, fio
+-- ============================================================================
+-- РАЗДЕЛ 10: КОДЫ СИМВОЛОВ (ASCII/Unicode)
+-- ============================================================================
+
+-- CHR - символ по его Unicode коду
+SELECT CHR(12354);  -- Символ Unicode с кодом 12354 (японская хирагана)
+SELECT CHR(82);     -- Символ с кодом 82 (латинская 'R')
+
+
+-- ============================================================================
+-- РАЗДЕЛ 11: ПОЗИЦИЯ ПОДСТРОКИ
+-- ============================================================================
+
+-- POSITION - позиция подстроки в строке (нумерация с 1)
+SELECT
+    accountcd,
+    fio
 FROM abonent
-WHERE POSITION('у' IN fio) = 2;
+WHERE POSITION('у' IN fio) = 2;  -- Вторая буква в ФИО = 'у'
+-- Пример: 'Кузнецов' → позиция 'у' = 2 ✅
 
-SELECT servicenm, CHAR_LENGTH(servicenm), BIT_LENGTH(servicenm)
+
+-- ============================================================================
+-- РАЗДЕЛ 12: ДЛИНА СТРОКИ В СИМВОЛАХ И БАЙТАХ
+-- ============================================================================
+
+SELECT
+    servicenm,
+    CHAR_LENGTH(servicenm) AS char_len,   -- Длина в символах (для UTF-8 = символы)
+    BIT_LENGTH(servicenm) AS bit_len      -- Длина в битах (символ * 8 для ASCII)
 FROM services;
+-- Для кириллицы в UTF-8: CHAR_LENGTH = 5, BIT_LENGTH может быть больше
 
-/*Если значения F1 и F2 совпадают, это означает, что в строке не было лишних
-  пробелов в начале или конце (или тип VARCHAR автоматически их отбросил при сохранении).
-  Если бы пробелы были, TRIM() удалил бы их, и F2 было бы меньше F1.
+
+-- ============================================================================
+-- РАЗДЕЛ 13: ПРОВЕРКА НА ЛИШНИЕ ПРОБЕЛЫ
+-- ============================================================================
+
+/*
+Сравнение длины строки до и после TRIM:
+- Если F1 = F2 → пробелов не было
+- Если F1 > F2 → были лишние пробелы (TRIM их удалил)
 */
-SELECT failurenm               AS "FailureNM",
-       LENGTH(failurenm)       AS f1,
-       LENGTH(TRIM(failurenm)) AS f2
+SELECT
+    failurenm AS "FailureNM",
+    LENGTH(failurenm) AS f1,              -- Длина до обрезки
+    LENGTH(TRIM(failurenm)) AS f2         -- Длина после обрезки пробелов
 FROM disrepair
 LIMIT 3;
 
 
-SELECT fio,
-       'у',
-       LENGTH(fio) - LENGTH(REPLACE(fio, 'у', '')) AS count_u
+-- ============================================================================
+-- РАЗДЕЛ 14: ПОДСЧЁТ ВХОЖДЕНИЙ СИМВОЛА В СТРОКУ
+-- ============================================================================
+
+-- Способ 1: Разница длин (работает для одиночных символов)
+SELECT
+    fio,
+    'у',
+    LENGTH(fio) - LENGTH(REPLACE(fio, 'у', '')) AS count_u  -- Сколько раз удалили 'у'
 FROM abonent;
 
-SELECT fio,
-       'у',
-       (CHAR_LENGTH(fio) - CHAR_LENGTH(REPLACE(fio, 'у', ''))) / CHAR_LENGTH('у') AS count_u
+-- Способ 2: Деление на длину искомой подстроки (универсальный)
+SELECT
+    fio,
+    'у',
+    (CHAR_LENGTH(fio) - CHAR_LENGTH(REPLACE(fio, 'у', ''))) / CHAR_LENGTH('у') AS count_u
 FROM abonent;
 
-SELECT fio,
-       'у',
-       (SELECT COUNT(*) FROM REGEXP_MATCHES(fio, 'у', 'g')) AS count_u
+-- Способ 3: Регулярные выражения (самый мощный)
+SELECT
+    fio,
+    'у',
+    (SELECT COUNT(*) FROM REGEXP_MATCHES(fio, 'у', 'g')) AS count_u  -- 'g' = все совпадения
 FROM abonent;
 
 
-SELECT requestcd,
-       EXTRACT(DAY FROM incomingdate)     AS "IncomingDay",
-       EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth",
-       EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear",
-       EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
+-- ============================================================================
+-- РАЗДЕЛ 15: РАБОТА С ДАТАМИ - EXTRACT
+-- ============================================================================
+
+-- EXTRACT - извлечение части даты (день, месяц, год, квартал)
+SELECT
+    requestcd,
+    EXTRACT(DAY FROM incomingdate) AS "IncomingDay",      -- День месяца (1-31)
+    EXTRACT(MONTH FROM incomingdate) AS "IncomingMonth",  -- Месяц (1-12)
+    EXTRACT(YEAR FROM incomingdate) AS "IncomingYear",    -- Год (4 цифры)
+    EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter" -- Квартал (1-4)
 FROM request
-WHERE EXTRACT(YEAR FROM incomingdate) IS DISTINCT FROM 2021;
+WHERE EXTRACT(YEAR FROM incomingdate) IS DISTINCT FROM 2021;  -- Все годы кроме 2021
 
-SELECT requestcd,
-       EXTRACT(DAY FROM incomingdate)     AS "IncomingDay_DAY",
-       EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth_MONTH",
-       EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear_YEAR",
-       EXTRACT(DAY FROM incomingdate)     AS "IncomingDay_EXTRACT",
-       EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth_EXTRACT",
-       TO_CHAR(incomingdate, 'Month')     AS "IncomingMonth_TO_CHAR",
-       EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear_EXTRACT",
-       EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
+-- Разные способы форматирования даты
+SELECT
+    requestcd,
+    EXTRACT(DAY FROM incomingdate) AS "IncomingDay_DAY",
+    EXTRACT(MONTH FROM incomingdate) AS "IncomingMonth_MONTH",
+    EXTRACT(YEAR FROM incomingdate) AS "IncomingYear_YEAR",
+    TO_CHAR(incomingdate, 'Month') AS "IncomingMonth_TO_CHAR",  -- Название месяца (январь)
+    EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
 FROM request;
 
 
-/*cos²(x) + sin²(x) = 1*/
+-- ============================================================================
+-- РАЗДЕЛ 16: МАТЕМАТИЧЕСКИЕ ФУНКЦИИ
+-- ============================================================================
+
+-- Проверка тригонометрического тождества: cos²(x) + sin²(x) = 1
 SELECT POWER(COS(PI()), 2) + POWER(SIN(PI()), 2) AS result;
--- Получить число Пи
-SELECT PI();
--- Результат: 3.141592653589793
+-- Результат: ~1 (может быть 0.999... из-за погрешности float)
 
--- Получить синус 90 градусов (в радианах!)
-SELECT SIN(RADIANS(90));
--- Результат: 1
+-- Константа Пи
+SELECT PI();  -- 3.141592653589793
 
--- Округление чисел
-SELECT ROUND(123.456, 2);
--- Результат: 123.46
+-- Синус угла (в PostgreSQL тригонометрия работает с РАДИАНАМИ!)
+SELECT SIN(RADIANS(90));  -- 90 градусов → радианы → синус = 1
 
--- Генерация случайного числа от 0 до 1
-SELECT RANDOM(); -- Результат: 0.123456789
+-- Округление до N знаков после запятой
+SELECT ROUND(123.456, 2);  -- 123.46
 
-SELECT paysum,
-       paydate,
-       CEIL(paysum)  AS "вверх",
-       FLOOR(paysum) AS "вниз",
-       ROUND(paysum) AS "ближайшее"
+-- Случайное число от 0 до 1
+SELECT RANDOM();  -- Например: 0.123456789
+
+-- Округление сумм платежей
+SELECT
+    paysum,
+    paydate,
+    CEIL(paysum) AS "вверх",      -- Округление ВВЕРХ до целого (123.1 → 124)
+    FLOOR(paysum) AS "вниз",      -- Округление ВНИЗ до целого (123.9 → 123)
+    ROUND(paysum) AS "ближайшее"  -- Округление до ближайшего целого (123.5 → 124)
 FROM paysumma;
 
 
-SELECT s.*,
-       CURRENT_TIMESTAMP
+-- ============================================================================
+-- РАЗДЕЛ 17: ТЕКУЩЕЕ ВРЕМЯ
+-- ============================================================================
+
+-- CURRENT_TIMESTAMP - текущая дата и время с часовым поясом
+SELECT
+    s.*,
+    CURRENT_TIMESTAMP AS "когда_выполнен_запрос"
 FROM services s;
 
 
-SELECT incomingdate,
-       incomingdate + INTERVAL '14 days' AS "Exec_Limit"
+-- ============================================================================
+-- РАЗДЕЛ 18: ИНТЕРВАЛЫ ВРЕМЕНИ (INTERVAL)
+-- ============================================================================
+
+-- Добавление дней к дате
+SELECT
+    incomingdate,
+    incomingdate + INTERVAL '14 days' AS "Exec_Limit"  -- Дата + 14 дней
 FROM request
 WHERE failurecd = 1;
 
-SELECT incomingdate,
-       incomingdate + 14 * INTERVAL '1 day' AS "Exec_Limit"
+-- Альтернативный синтаксис (умножение интервала)
+SELECT
+    incomingdate,
+    incomingdate + 14 * INTERVAL '1 day' AS "Exec_Limit"  -- То же самое
 FROM request
 WHERE failurecd = 1;
 
-SELECT incomingdate,
-       incomingdate + INTERVAL '14 days'  AS "плюс_14_дней",
-       incomingdate + INTERVAL '3 months' AS "плюс_3_месяца",
-       incomingdate + INTERVAL '1 year'   AS "плюс_1_год",
-       incomingdate - INTERVAL '7 days'   AS "минус_7_дней"
+-- Разные интервалы
+SELECT
+    incomingdate,
+    incomingdate + INTERVAL '14 days' AS "плюс_14_дней",
+    incomingdate + INTERVAL '3 months' AS "плюс_3_месяца",
+    incomingdate + INTERVAL '1 year' AS "плюс_1_год",
+    incomingdate - INTERVAL '7 days' AS "минус_7_дней"  -- Вычитание интервала
+FROM request
+WHERE failurecd = 1;
+
+-- Интервалы с временем (часы, минуты, секунды)
+SELECT
+    incomingdate,
+    incomingdate + INTERVAL '2 hours' AS "плюс_2_часа",
+    incomingdate + INTERVAL '30 minutes' AS "плюс_30_минут",
+    incomingdate + INTERVAL '45 seconds' AS "плюс_45_секунд"
+FROM request
+WHERE failurecd = 1;
+
+-- Сложный интервал (годы + месяцы + дни)
+SELECT
+    incomingdate,
+    incomingdate + INTERVAL '1 year 2 months 14 days' AS "сложный_интервал"
+FROM request
+WHERE failurecd = 1;
+
+-- MAKE_INTERVAL - программное создание интервала
+SELECT
+    incomingdate,
+    incomingdate + MAKE_INTERVAL(days => 14) AS "Exec_Limit"  -- Именованные параметры
 FROM request
 WHERE failurecd = 1;
 
 
-SELECT incomingdate, -- тип TIMESTAMP
-       incomingdate + INTERVAL '2 hours'    AS "плюс_2_часа",
-       incomingdate + INTERVAL '30 minutes' AS "плюс_30_минут",
-       incomingdate + INTERVAL '45 seconds' AS "плюс_45_секунд"
-FROM request
-WHERE failurecd = 1;
+-- ============================================================================
+-- РАЗДЕЛ 19: РАЗНИЦА МЕЖДУ ДАТАМИ
+-- ============================================================================
 
-SELECT incomingdate,
-       incomingdate + INTERVAL '1 year 2 months 14 days' AS "сложный_интервал"
-FROM request
-WHERE failurecd = 1;
-
-SELECT incomingdate,
-       incomingdate + MAKE_INTERVAL(days => 14) AS "Exec_Limit"
-FROM request
-WHERE failurecd = 1;
-
-
-SELECT requestcd,
-       incomingdate,
-       executiondate,
-       EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP)) / 3600 AS "Hours",
-       EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP))        AS "Seconds"
+-- EXTRACT(EPOCH FROM ...) - разница в секундах
+SELECT
+    requestcd,
+    incomingdate,
+    executiondate,
+    EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP)) / 3600 AS "Hours",  -- В часах
+    EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP)) AS "Seconds"       -- В секундах
 FROM request
 WHERE accountcd = '115705';
+-- EPOCH = количество секунд между двумя датами
 
 
-SELECT incomingdate,
-       DATE_TRUNC('YEAR', incomingdate)  AS "Начало_года",
-       DATE_TRUNC('MONTH', incomingdate) AS "Начало_месяца",
-       DATE_TRUNC('DAY', incomingdate)   AS "Начало_дня",
-       DATE_TRUNC('HOUR', incomingdate)  AS "Начало_часа"
+-- ============================================================================
+-- РАЗДЕЛ 20: УСЕЧЕНИЕ ДАТЫ (DATE_TRUNC)
+-- ============================================================================
+
+-- DATE_TRUNC - округление даты до указанной точности (до начала периода)
+SELECT
+    incomingdate,
+    DATE_TRUNC('YEAR', incomingdate) AS "Начало_года",   -- 2024-01-01 00:00:00
+    DATE_TRUNC('MONTH', incomingdate) AS "Начало_месяца", -- 2024-06-01 00:00:00
+    DATE_TRUNC('DAY', incomingdate) AS "Начало_дня",     -- 2024-06-15 00:00:00
+    DATE_TRUNC('HOUR', incomingdate) AS "Начало_часа"    -- 2024-06-15 14:00:00
 FROM request;
 
 
-SELECT DISTINCT nachisl_month,
-                nachisl_year,
-                TO_DATE('1.' || nachisl_month || '.' || nachisl_year, 'DD.MM.YYYY') AS "FirstDay"
+-- ============================================================================
+-- РАЗДЕЛ 21: СОЗДАНИЕ ДАТЫ ИЗ ЧАСТЕЙ
+-- ============================================================================
+
+-- Способ 1: Конкатенация + TO_DATE
+SELECT DISTINCT
+    nachisl_month,
+    nachisl_year,
+    TO_DATE('1.' || nachisl_month || '.' || nachisl_year, 'DD.MM.YYYY') AS "FirstDay"
+FROM nachislsumma
+WHERE servicecd = 2;
+
+-- Способ 2: MAKE_DATE (рекомендуется!)
+SELECT DISTINCT
+    nachisl_month,
+    nachisl_year,
+    MAKE_DATE(nachisl_year, nachisl_month, 1) AS "FirstDay"  -- Безопаснее и быстрее
+FROM nachislsumma
+WHERE servicecd = 2;
+
+-- Способ 3: CAST строки в DATE
+SELECT DISTINCT
+    nachisl_month,
+    nachisl_year,
+    CAST('1.' || nachisl_month || '.' || nachisl_year AS DATE) AS "FirstDay"
 FROM nachislsumma
 WHERE servicecd = 2;
 
 
-SELECT DISTINCT nachisl_month,
-                nachisl_year,
-                MAKE_DATE(nachisl_year, nachisl_month, 1) AS "FirstDay"
-FROM nachislsumma
-WHERE servicecd = 2;
+-- ============================================================================
+-- РАЗДЕЛ 22: ПРЕОБРАЗОВАНИЕ ТИПОВ (CAST)
+-- ============================================================================
 
-
-SELECT DISTINCT nachisl_month,
-                nachisl_year,
-                CAST('1.' || nachisl_month || '.' || nachisl_year AS DATE) AS "FirstDay"
-FROM nachislsumma
-WHERE servicecd = 2;
-
-
-SELECT accountcd,
-       (CAST(accountcd AS INTEGER) + 2) AS new_acc,
-       fio
+-- CAST строки в INTEGER для арифметики
+SELECT
+    accountcd,
+    (CAST(accountcd AS INTEGER) + 2) AS new_acc,  -- '123' → 123 → 125
+    fio
 FROM abonent;
 
-SELECT nachisl_sum,
-       nachisl_factcd,
-       CAST(nachisl_sum AS INTEGER) AS "RoundSum"
+-- CAST суммы в целое число (отбрасывает дробную часть)
+SELECT
+    nachisl_sum,
+    nachisl_factcd,
+    CAST(nachisl_sum AS INTEGER) AS "RoundSum"  -- 550.75 → 550
 FROM nachislsumma
 WHERE accountcd = '115705';
 
 
-SELECT CURRENT_DATE                             AS "Сегодня",
-       TO_CHAR(CURRENT_DATE, 'D')               AS "Номер_дня_недели_1-7",
-       TO_CHAR(CURRENT_DATE, 'DAY')             AS "День_недели_верхний",
-       TO_CHAR(CURRENT_DATE, 'Day')             AS "День_недели_с_заглавной",
-       TO_CHAR(CURRENT_DATE, 'Q')               AS "Квартал",
-       TO_CHAR(CURRENT_DATE, 'DD.MM.YYYY')      AS "Дата_в_формате",
-       TO_CHAR(CURRENT_DATE, 'FMDD Month YYYY') AS "Дата_с_названием_месяца";
+-- ============================================================================
+-- РАЗДЕЛ 23: ФОРМАТИРОВАНИЕ ДАТЫ (TO_CHAR)
+-- ============================================================================
 
-SELECT AVG(DISTINCT paysum),
-       AVG(paysum)
+SELECT
+            CURRENT_DATE AS "Сегодня",
+            TO_CHAR(CURRENT_DATE, 'D') AS "Номер_дня_недели_1-7",    -- 1-7 (зависит от NLS)
+            TO_CHAR(CURRENT_DATE, 'DAY') AS "День_недели_верхний",   -- ПОНЕДЕЛЬНИК (заглавные)
+            TO_CHAR(CURRENT_DATE, 'Day') AS "День_недели_с_заглавной", -- Понедельник (первая заглавная)
+            TO_CHAR(CURRENT_DATE, 'Q') AS "Квартал",                 -- 1-4
+            TO_CHAR(CURRENT_DATE, 'DD.MM.YYYY') AS "Дата_в_формате", -- 15.06.2024
+            TO_CHAR(CURRENT_DATE, 'FMDD Month YYYY') AS "Дата_с_названием_месяца" -- 15 Июнь 2024
+-- FM = убрать лишние пробелы (Fill Mode)
+FROM request;
+
+
+-- ============================================================================
+-- РАЗДЕЛ 24: АГРЕГАТНЫЕ ФУНКЦИИ
+-- ============================================================================
+
+-- AVG с DISTINCT - среднее только по уникальным значениям
+SELECT
+    AVG(DISTINCT paysum) AS avg_unique,  -- Среднее уникальных сумм
+    AVG(paysum) AS avg_all               -- Среднее всех сумм (включая повторы)
 FROM paysumma;
 
-
-SELECT AVG(executiondate - incomingdate) FILTER (WHERE executiondate IS NOT NULL)
+-- FILTER - фильтрация внутри агрегатной функции (современный синтаксис)
+SELECT
+            AVG(executiondate - incomingdate) FILTER (WHERE executiondate IS NOT NULL) AS avg_days
 FROM request;
 
-SELECT AVG(
-               CASE
-                   WHEN executiondate IS NOT NULL
-                       THEN executiondate - incomingdate
-                   ELSE NULL
-                   END
-       ) AS avg_days
+-- Эквивалент через CASE (старый способ)
+SELECT
+    AVG(
+            CASE
+                WHEN executiondate IS NOT NULL THEN executiondate - incomingdate
+                ELSE NULL  -- NULL игнорируется в AVG
+                END
+    ) AS avg_days
 FROM request;
 
-
-SELECT AVG(executiondate - incomingdate) AS avg_days
+-- Эквивалент через WHERE (самый простой)
+SELECT
+    AVG(executiondate - incomingdate) AS avg_days
 FROM request
 WHERE executiondate IS NOT NULL;
 
-
-
-SELECT AVG(paysum) FILTER (WHERE servicecd = 1) AS avg_service_1,
-       SUM(paysum) FILTER (WHERE servicecd = 2) AS sum_service_2
+-- FILTER для разных условий в одном запросе
+SELECT
+            AVG(paysum) FILTER (WHERE servicecd = 1) AS avg_service_1,  -- Среднее по услуге 1
+            SUM(paysum) FILTER (WHERE servicecd = 2) AS sum_service_2   -- Сумма по услуге 2
 FROM paysumma;
 
-SELECT SUM(nachisl_sum)
+-- SUM - сумма всех значений
+SELECT SUM(nachisl_sum) AS total_sum
 FROM nachislsumma;
 
-
-SELECT MAX(paysum), MIN(paysum)
+-- MAX / MIN - максимальное и минимальное значение
+SELECT
+    MAX(paysum) AS max_payment,
+    MIN(paysum) AS min_payment
 FROM paysumma;
 
-SELECT COUNT(*)
+-- COUNT(*) - количество всех строк (включая NULL)
+SELECT COUNT(*) AS total_rows
 FROM abonent;
 
-SELECT COUNT(phone)
+-- COUNT(column) - количество НЕ NULL значений
+SELECT COUNT(phone) AS phones_filled  -- Не считает NULL
 FROM abonent;
 
-SELECT COUNT(distinct phone)
+-- COUNT(DISTINCT column) - количество уникальных НЕ NULL значений
+SELECT COUNT(DISTINCT phone) AS unique_phones
 FROM abonent;
 
+-- Комбинированный COUNT для отчёта
 SELECT
-    COUNT(DISTINCT AccountCD) AS "Число абонентов с заявками",
-    COUNT(*) AS "Всего заявок",
-    COUNT(ExecutionDate) AS "из них выполнено",
-    COUNT(RequestCD) FILTER (WHERE Executed) AS "погашено"
+    COUNT(DISTINCT AccountCD) AS "Число абонентов с заявками",  -- Уникальные абоненты
+    COUNT(*) AS "Всего заявок",                                  -- Все строки
+    COUNT(ExecutionDate) AS "из них выполнено",                  -- Только где есть дата
+    COUNT(RequestCD) FILTER (WHERE Executed) AS "погашено"       -- Только выполненные
 FROM Request;
 
 
-SELECT
-    GREATEST(10, 20, 30) AS max_value,   -- 30
-    LEAST(10, 20, 30) AS min_value;       -- 10
+-- ============================================================================
+-- РАЗДЕЛ 25: GREATEST / LEAST
+-- ============================================================================
 
-/*Смысл запроса
-Для каждой ремонтной заявки (Request) с исполнителем ExecutorCD = 1 запрос выводит:
-Номер заявки (RequestCD)
-Дату выполнения (ExecutionDate), но если она раньше 1 января 2020 года,
-то вместо неё выводится 1 января 2020 года
-*/
-SELECT requestcd,
-       GREATEST(executiondate, DATE '2020-01-01') AS "MAXVALUE"
+-- GREATEST - максимальное значение из списка
+-- LEAST - минимальное значение из списка
+SELECT
+    GREATEST(10, 20, 30) AS max_value,  -- 30
+    LEAST(10, 20, 30) AS min_value;     -- 10
+
+-- Применение к датам: заменить старые даты на минимальную границу
+SELECT
+    requestcd,
+    GREATEST(executiondate, DATE '2020-01-01') AS "MAXVALUE"
+-- Если executiondate < 2020-01-01, вернёт '2020-01-01'
 FROM request
 WHERE executorcd = 1;
 
 
-SELECT STRING_AGG(ServiceNM, ',') AS "Список услуг"
+-- ============================================================================
+-- РАЗДЕЛ 26: STRING_AGG - ОБЪЕДИНЕНИЕ СТРОК
+-- ============================================================================
+
+-- STRING_AGG - конкатенация строк с разделителем (аналог GROUP_CONCAT в MySQL)
+SELECT
+    STRING_AGG(ServiceNM, ',') AS "Список услуг"  -- Через запятую
 FROM Services;
 
-
+-- С группировкой
 SELECT
     ServiceCD,
     STRING_AGG(ServiceNM, ',') AS "Список услуг"
 FROM Services
 GROUP BY ServiceCD;
 
-SELECT STRING_AGG(DISTINCT ServiceNM, ',') AS "Список услуг"
+-- Только уникальные значения
+SELECT
+    STRING_AGG(DISTINCT ServiceNM, ',') AS "Список услуг"  -- Без повторов
 FROM Services;
 
 
+-- ============================================================================
+-- РАЗДЕЛ 27: CASE - УСЛОВНАЯ ЛОГИКА
+-- ============================================================================
+
+-- Простой CASE с конкатенацией
 SELECT
     RequestCD,
     ('Номер л/с абонента ' || AccountCD) AS "Ab_Info",
@@ -763,71 +1000,85 @@ SELECT
     CASE
         WHEN Executed = FALSE THEN 'Не погашена'
         ELSE 'Погашена'
-        END AS "CASE"
+        END AS "Status"
 FROM Request
 WHERE AccountCD = '115705';
 
-
-SELECT pay_factcd,
-       accountcd,
-       paysum,
-       CASE
-           WHEN paydate < '2019-01-01'                        THEN 'Давно'
-           WHEN paydate BETWEEN '2019-01-01' AND '2020-12-31' THEN 'Не очень давно'
-           ELSE 'Недавно'
-           END AS "Oplata"
+-- CASE с диапазонами дат
+SELECT
+    pay_factcd,
+    accountcd,
+    paysum,
+    CASE
+        WHEN paydate < '2019-01-01' THEN 'Давно'
+        WHEN paydate BETWEEN '2019-01-01' AND '2020-12-31' THEN 'Не очень давно'
+        ELSE 'Недавно'
+        END AS "Oplata"
 FROM paysumma
 WHERE paysum BETWEEN 530 AND 600;
 
+-- CASE с регулярным выражением (валидация email)
+-- ~* = регистронезависимое совпадение с regex
+SELECT
+    CASE
+        WHEN :Email ~* '^[A-Z0-9._%-]+@[A-Z0-9._%-]+\.[A-Z]{2,}$' THEN 'Есть'
+        ELSE 'Нет'
+        END AS email_valid;
 
-SELECT CASE
-           WHEN :Email ~* '^[A-Z0-9._%-]+@[A-Z0-9._%-]+\.[A-Z]{2,}$' THEN 'Есть'
-           ELSE 'Нет'
-           END AS email_valid;
-
-
-SELECT paydate,
-       CASE -- Начало внешнего CASE
-           WHEN EXTRACT(DOW FROM paydate) NOT IN (0, 6)
-               THEN 'Рабочий день'
-           ELSE
-               CASE -- Начало внутреннего CASE
-                   WHEN EXTRACT(DOW FROM paydate) = 0
-                       THEN 'Воскресенье'
-                   ELSE 'Суббота'
-                END -- КОНЕЦ внутреннего CASE
-        END AS day_type -- КОНЕЦ внешнего CASE
+-- Вложенный CASE
+SELECT
+    paydate,
+    CASE
+        WHEN EXTRACT(DOW FROM paydate) NOT IN (0, 6) THEN 'Рабочий день'  -- DOW: 0=Вс, 6=Сб
+        ELSE
+            CASE
+                WHEN EXTRACT(DOW FROM paydate) = 0 THEN 'Воскресенье'
+                ELSE 'Суббота'
+                END
+        END AS day_type
 FROM paysumma;
 
-
-SELECT COUNT(*)                                               AS "Всего заявок",
-       SUM(CASE WHEN executiondate IS NULL THEN 1 ELSE 0 END) AS "невыполненных",
-       SUM(CASE WHEN NOT executed THEN 1 ELSE 0 END)          AS "непогашенных"
+-- CASE внутри SUM для подсчёта условий
+SELECT
+    COUNT(*) AS "Всего заявок",
+    SUM(CASE WHEN executiondate IS NULL THEN 1 ELSE 0 END) AS "невыполненных",
+    SUM(CASE WHEN NOT executed THEN 1 ELSE 0 END) AS "непогашенных"
 FROM request;
 
-SELECT phone
-FROM abonent
-WHERE phone = '556893';
 
-SELECT NULLIF(Phone, Phone)
-FROM Abonent;
+-- ============================================================================
+-- РАЗДЕЛ 28: NULLIF и COALESCE
+-- ============================================================================
 
-SELECT COALESCE(phone, 'Нет телефона')
+-- NULLIF - возвращает NULL, если значения равны
+SELECT NULLIF(Phone, Phone) FROM Abonent;  -- Всегда NULL (значение = самому себе)
+
+-- COALESCE - возвращает первое НЕ NULL значение
+SELECT COALESCE(phone, 'Нет телефона') AS phone_with_default
 FROM abonent;
+-- Если phone = NULL, вернёт 'Нет телефона'
 
+-- NULLIF для исключения конкретных значений
 SELECT NULLIF(phone, '556893') AS phone
 FROM abonent;
+-- Если phone = '556893', вернёт NULL
 
-/*Запрос находит заявки, которые либо ещё не закрыты, либо были закрыты в тот же день,
-  когда поступили — то есть "нештатные" с точки зрения нормального цикла выполнения.
-*/
+-- Практическое применение: найти заявки, где ExecutionDate = IncomingDate
 SELECT *
 FROM Request
 WHERE NULLIF(ExecutionDate, IncomingDate) IS NULL;
+-- Если даты равны → NULLIF вернёт NULL → IS NULL = TRUE
+-- Это заявки, выполненные в день поступления (или NULL = NULL)
 
 
+-- ============================================================================
+-- РАЗДЕЛ 29: CASE В WHERE
+-- ============================================================================
 
-SELECT accountcd, servicecd, paysum
+SELECT
+    accountcd,
+    servicecd,
+    paysum
 FROM paysumma
 WHERE servicecd =
       CASE
@@ -836,26 +1087,39 @@ WHERE servicecd =
           WHEN accountcd::INTEGER = 80270 THEN 4
           ELSE 2
           END;
+-- Динамический выбор servicecd в зависимости от accountcd
 
-SELECT nachisl_year, SUM(nachisl_sum), round(AVG(nachisl_sum),2) as avg, MIN(nachisl_sum), MAX(nachisl_sum)
+
+-- ============================================================================
+-- РАЗДЕЛ 30: GROUP BY И АГРЕГАЦИЯ
+-- ============================================================================
+
+-- Базовая группировка с агрегатами
+SELECT
+    nachisl_year,
+    SUM(nachisl_sum) AS total,
+    ROUND(AVG(nachisl_sum), 2) AS avg,
+    MIN(nachisl_sum) AS min_val,
+    MAX(nachisl_sum) AS max_val
 FROM nachislsumma
 GROUP BY nachisl_year;
 
-
+-- Группировка по алиасу (не все СУБД поддерживают)
 SELECT
     nachisl_sum AS "Summa_550",
     COUNT(*)
 FROM nachislsumma
-WHERE nachisl_sum  > 530 AND nachisl_sum  < 550
-GROUP BY "Summa_550";
+WHERE nachisl_sum > 530 AND nachisl_sum < 550
+GROUP BY "Summa_550";  -- Группировка по уникальным суммам
 
+-- Конкатенация с агрегатами
 SELECT
     AccountCD,
-    COUNT(*) || ' - с максимальной суммой ' || MAX(PaySum) AS "Pay_Count"
+    COUNT(*) || ' - с максимальной суммой ' || MAX(PaySum) AS "Pay_Info"
 FROM PaySumma
 GROUP BY AccountCD;
 
-
+-- LIMIT с GROUP BY
 SELECT
     AccountCD,
     PayYear,
@@ -864,43 +1128,68 @@ FROM PaySumma
 WHERE PayYear IN (2019, 2020)
 GROUP BY AccountCD, PayYear
 ORDER BY AccountCD, PayYear
-    FETCH NEXT 10 ROWS ONLY;
+    FETCH NEXT 10 ROWS ONLY;  -- Только первые 10 строк (современный синтаксис)
 
 
+-- ============================================================================
+-- РАЗДЕЛ 31: UNION ALL
+-- ============================================================================
 
+-- Объединение результатов двух запросов (с дубликатами)
 SELECT *
 FROM Abonent
-where accountcd LIKE '%080%' ---3
-union all
+WHERE accountcd LIKE '%080%'  -- 3 строки
+UNION ALL
 SELECT *
 FROM Abonent
-where accountcd LIKE '%443%'; ---2
+WHERE accountcd LIKE '%443%'; -- 2 строки
+-- Итого: 5 строк (если бы UNION - удалило бы дубликаты)
+
+
+-- ============================================================================
+-- РАЗДЕЛ 32: ГРУППИРОВКА ПО ЧАСТИ ЗНАЧЕНИЯ
+-- ============================================================================
 
 SELECT
     ('Начало счета ' || SUBSTRING(AccountCD FROM 1 FOR 3)) AS "Acc_3",
     COUNT(*)
 FROM Abonent
-GROUP BY "Acc_3";
+GROUP BY "Acc_3";  -- Группировка по первым 3 цифрам счёта
 
+
+-- ============================================================================
+-- РАЗДЕЛ 33: ГРУППИРОВКА ПО УСЛОВИЮ (CASE в GROUP BY)
+-- ============================================================================
 
 SELECT
     'В среднем начислено ' ||
     (CASE
          WHEN nachisl_year < 2020 THEN 'до 2020 года'
          ELSE 'после 2019 года'
-        END) AS "God",
+        END) AS "Period",
     AVG(nachisl_sum) AS "Average_Sum"
 FROM nachislsumma
-GROUP BY "God";
+GROUP BY "Period";  -- Группировка по вычисляемому полю
 
 
-SELECT servicecd,
-       MAX(MAX(paysum)) OVER (partition by servicecd) AS max_avg_paysum,
-       MIN(MIN(paysum)) OVER (partition by servicecd) AS min_avg_paysum
+-- ============================================================================
+-- РАЗДЕЛ 34: ВЛОЖЕННЫЕ АГРЕГАТЫ С ОКОННЫМИ ФУНКЦИЯМИ
+-- ============================================================================
+
+SELECT
+    servicecd,
+    MAX(MAX(paysum)) OVER (PARTITION BY servicecd) AS max_avg_paysum,
+    MIN(MIN(paysum)) OVER (PARTITION BY servicecd) AS min_avg_paysum
 FROM paysumma
 GROUP BY servicecd;
+-- Сначала GROUP BY, потом оконная функция по результатам группировки
 
 
+-- ============================================================================
+-- РАЗДЕЛ 35: ROLLUP - ИЕРАРХИЧЕСКАЯ АГРЕГАЦИЯ
+-- ============================================================================
+
+-- ROLLUP создаёт промежуточные итоги по уровням иерархии
 SELECT
     AccountCD,
     ServiceCD,
@@ -908,95 +1197,101 @@ SELECT
     SUM(PaySum)
 FROM PaySumma
 GROUP BY ROLLUP (AccountCD, ServiceCD, PayYear);
+-- Создаёт группы: (Account, Service, Year) → (Account, Service) → (Account) → (ВСЕГО)
 
+-- ROLLUP с интерпретацией уровней через GROUPING
 SELECT
     CASE
         WHEN GROUPING(AccountCD) = 1 AND GROUPING(ServiceCD) = 1 AND GROUPING(PayYear) = 1
-            THEN 'ВСЕГО ПО БАЗЕ'
+                                     THEN 'ВСЕГО ПО БАЗЕ'
         WHEN GROUPING(AccountCD) = 1 THEN 'ИТОГО ПО ВСЕМ АБОНЕНТАМ'
         WHEN GROUPING(ServiceCD) = 1 THEN 'ИТОГО ПО ВСЕМ УСЛУГАМ'
-        ELSE AccountCD
+        ELSE AccountCD::TEXT
         END AS "Абонент",
-
     CASE
         WHEN GROUPING(ServiceCD) = 1 AND GROUPING(PayYear) = 1 AND GROUPING(AccountCD) = 0
-            THEN 'ВСЕ УСЛУГИ ЗА ВСЕ ГОДЫ'
+                                     THEN 'ВСЕ УСЛУГИ ЗА ВСЕ ГОДЫ'
         WHEN GROUPING(ServiceCD) = 1 THEN 'ВСЕ УСЛУГИ'
         ELSE ServiceCD::TEXT
         END AS "Услуга",
-
     CASE
         WHEN GROUPING(PayYear) = 1 THEN 'ВСЕ ГОДЫ'
         ELSE PayYear::TEXT
         END AS "Год",
-
     SUM(PaySum) AS "Сумма"
 FROM PaySumma
 GROUP BY ROLLUP (AccountCD, ServiceCD, PayYear)
 ORDER BY AccountCD, ServiceCD, PayYear;
+-- GROUPING() = 1 означает, что эта колонка агрегирована (NULL от ROLLUP)
 
 
-SELECT accountcd,
-       COUNT(*),
-       MIN(incomingdate)
+-- ============================================================================
+-- РАЗДЕЛ 36: HAVING - ФИЛЬТР ПОСЛЕ ГРУППИРОВКИ
+-- ============================================================================
+
+-- HAVING фильтрует результаты GROUP BY (WHERE фильтрует до группировки)
+SELECT
+    accountcd,
+    COUNT(*) AS request_count,
+    MIN(incomingdate) AS first_request
 FROM request
 GROUP BY accountcd
-HAVING COUNT(*) > 2;
+HAVING COUNT(*) > 2;  -- Только абоненты с более чем 2 заявками
 
-/*Для каждого абонента (AccountCD) и услуги (ServiceCD):
-  1. Группируем платежи
-  2. Вычисляем MAX(PaySum) для каждой группы
-  3. Проверяем условия через HAVING:
-     - Есть ли у этого абонента платёж по услуге 2 больше 600?
-     - ИЛИ есть ли платёж по услуге 4 больше 300?
-  4. Если ДА → выводим ВСЕ группы этого абонента
-  Группировка по (AccountCD, ServiceCD)
-Группа 1: (136169, 1)
-
-PaySum	CASE WHEN ServiceCD = 2 THEN PaySum ELSE NULL END
-525.32	NULL
-MAX() →	NULL
-Группа 2: (136169, 2)
-
-PaySum	CASE WHEN ServiceCD = 2 THEN PaySum ELSE NULL END
-620.00	620.00
-658.70	658.70
-MAX() →	658.70
-
-*/
-
-SELECT accountcd,
-       servicecd,
-       MAX(paysum)
+-- Сложное условие в HAVING через CASE
+SELECT
+    accountcd,
+    servicecd,
+    MAX(paysum) AS max_payment
 FROM paysumma p
 GROUP BY p.accountcd, p.servicecd
-HAVING (MAX(CASE WHEN servicecd = 2 THEN p.paysum ELSE NULL END) > 600
-    OR MAX(CASE WHEN servicecd = 4 THEN p.paysum ELSE NULL END) > 300);
+HAVING (
+           MAX(CASE WHEN servicecd = 2 THEN p.paysum ELSE NULL END) > 600  -- Услуга 2 > 600
+               OR
+           MAX(CASE WHEN servicecd = 4 THEN p.paysum ELSE NULL END) > 300  -- Услуга 4 > 300
+           );
 
-
-SELECT MAX(IncomingDate)
+-- HAVING с агрегатом без GROUP BY (вся таблица = 1 группа)
+SELECT
+    MAX(IncomingDate) AS max_date
 FROM Request
-HAVING MAX(IncomingDate) > '31.08.2019';
+HAVING MAX(IncomingDate) > '31.08.2019';  -- Фильтр по результату агрегации
 
+
+-- ============================================================================
+-- РАЗДЕЛ 37: ORDER BY С АГРЕГАТАМИ
+-- ============================================================================
 
 SELECT
     ServiceCD,
-    COUNT(ServiceCD),
-    AVG(PaySum)
+    COUNT(ServiceCD) AS service_count,
+    AVG(PaySum) AS avg_payment
 FROM PaySumma
 GROUP BY ServiceCD
-ORDER BY COUNT(ServiceCD) DESC , AVG(PaySum);
+ORDER BY
+    COUNT(ServiceCD) DESC,  -- Сначала по количеству (убывание)
+    AVG(PaySum);            -- Потом по средней сумме (возрастание)
 
 
+-- ============================================================================
+-- РАЗДЕЛ 38: ORDER BY С NULL
+-- ============================================================================
+
+-- NULLS FIRST / NULLS LAST - управление позицией NULL в сортировке
 SELECT
     RequestCD,
     ExecutionDate,
     AccountCD
 FROM Request
 WHERE (AccountCD LIKE '08%') OR (AccountCD LIKE '11%')
-ORDER BY ExecutionDate DESC NULLS FIRST;
+ORDER BY ExecutionDate DESC NULLS FIRST;  -- NULL будут первыми при DESC
 
 
+-- ============================================================================
+-- РАЗДЕЛ 39: ORDER BY С CASE (КАСТОМНАЯ СОРТИРОВКА)
+-- ============================================================================
+
+-- Приоритет услуг: 3 → 1 → 2 → 4 → остальные
 SELECT
     AccountCD,
     ServiceCD,
@@ -1004,14 +1299,14 @@ SELECT
 FROM PaySumma
 ORDER BY
     CASE ServiceCD
-        WHEN 3 THEN 1      -- Услуга 3 первая
-        WHEN 1 THEN 2      -- Потом услуга 1
-        WHEN 2 THEN 3      -- Потом услуга 2
-        WHEN 4 THEN 4      -- Потом услуга 4
-        ELSE 5
-        END ;
+        WHEN 3 THEN 1      -- Услуга 3 первая (код сортировки = 1)
+        WHEN 1 THEN 2      -- Услуга 1 вторая
+        WHEN 2 THEN 3      -- Услуга 2 третья
+        WHEN 4 THEN 4      -- Услуга 4 четвёртая
+        ELSE 5             -- Остальные последние
+        END;
 
-
+-- Сортировка по статусу выполнения
 SELECT
     RequestCD,
     ExecutionDate,
@@ -1020,13 +1315,13 @@ SELECT
 FROM Request
 ORDER BY
     CASE
-        WHEN Executed = FALSE AND ExecutionDate IS NULL THEN 1  -- Не выполнена
-        WHEN Executed = FALSE AND ExecutionDate IS NOT NULL THEN 2 -- Выполнена, но не погашена
-        WHEN Executed = TRUE THEN 3  -- Выполнена и погашена
+        WHEN Executed = FALSE AND ExecutionDate IS NULL THEN 1   -- Не выполнена
+        WHEN Executed = FALSE AND ExecutionDate IS NOT NULL THEN 2 -- Выполнена, не погашена
+        WHEN Executed = TRUE THEN 3                               -- Выполнена и погашена
         ELSE 4
         END;
 
-
+-- Сортировка по разным типам данных в зависимости от условия
 SELECT
     AccountCD,
     ServiceCD,
@@ -1035,8 +1330,9 @@ SELECT
 FROM PaySumma
 ORDER BY
     CASE
-        WHEN ServiceCD = 1 THEN PaySum::TEXT
-        WHEN ServiceCD = 2 THEN PayDate::TEXT
-        WHEN ServiceCD = 3 THEN accountcd::TEXT
+        WHEN ServiceCD = 1 THEN PaySum::TEXT      -- Услуга 1: сортировка по сумме
+        WHEN ServiceCD = 2 THEN PayDate::TEXT     -- Услуга 2: сортировка по дате
+        WHEN ServiceCD = 3 THEN AccountCD::TEXT   -- Услуга 3: сортировка по счёту
         ELSE PaySum::TEXT
         END;
+-- Все ветви CASE должны возвращать один тип данных (приводим к TEXT)
