@@ -1,1686 +1,1045 @@
--- Создание схемы trainee_markin
-CREATE SCHEMA IF NOT EXISTS trainee_markin;
+/******************************************************************************/
+/*** Create DataBase ***/
+/******************************************************************************/
+CREATE DATABASE "abonent" WITH OWNER "postgres" ENCODING 'UTF8';
 
--- Переключение на созданную схему
-SET search_path TO trainee_markin;
 
--- =====================================================
--- Таблица Street
--- =====================================================
-CREATE TABLE IF NOT EXISTS street
-(
-    streetcd INTEGER PRIMARY KEY,
-    streetnm VARCHAR(100) NOT NULL
+DO $$
+    DECLARE
+        tables_to_drop TEXT[] := ARRAY[
+            'street',
+            'services',
+            'disrepair',
+            'executor',
+            'abonent',
+            'nachislsumma',
+            'paysumma',
+            'request'
+            ];
+        seqs_to_drop TEXT[] := ARRAY[
+            'gen_street',
+            'gen_services',
+            'gen_disrepair',
+            'gen_executor',
+            'gen_nachislsumma',
+            'gen_paysumma',
+            'gen_request'
+            ];
+        t TEXT;
+    BEGIN
+        FOREACH t IN ARRAY tables_to_drop LOOP
+                EXECUTE format('DROP TABLE IF EXISTS %s CASCADE', t);
+            END LOOP;
+        FOREACH t IN ARRAY seqs_to_drop LOOP
+                EXECUTE format('DROP SEQUENCE IF EXISTS %s CASCADE', t);
+            END LOOP;
+    END;
+$$;
+
+CREATE SCHEMA IF NOT EXISTS abonent;
+/******************************************************************************/
+/*** Domains ***/
+/******************************************************************************/
+CREATE DOMAIN Currency AS
+    NUMERIC(15,2);
+CREATE DOMAIN Pkfield AS
+    INTEGER -- NOT NULL;
+CREATE DOMAIN Tmonth AS
+    SMALLINT
+    CHECK (VALUE BETWEEN 1 AND 12);
+CREATE DOMAIN Tyear AS
+    SMALLINT
+    CHECK (VALUE BETWEEN 1990 AND 2100);
+/******************************************************************************/
+/*** Generators ***/
+/******************************************************************************/
+CREATE SEQUENCE Gen_disrepair START WITH 13 INCREMENT BY 1;
+CREATE SEQUENCE Gen_executor START WITH 7 INCREMENT BY 1;
+CREATE SEQUENCE Gen_nachislsumma START WITH 80 INCREMENT BY 1;
+CREATE SEQUENCE Gen_paysumma START WITH 79 INCREMENT BY 1;
+CREATE SEQUENCE Gen_request START WITH 24 INCREMENT BY 1;
+CREATE SEQUENCE Gen_services START WITH 5 INCREMENT BY 1;
+CREATE SEQUENCE Gen_street START WITH 9 INCREMENT BY 1;
+/******************************************************************************/
+/*** Tables ***/
+/******************************************************************************/
+CREATE TABLE Abonent (
+                         Accountid VARCHAR(6),
+                         Streetid SMALLINT,
+                         Houseno SMALLINT,
+                         Flatno SMALLINT,
+                         Fio VARCHAR(20),
+                         Phone VARCHAR(15)
 );
-
-INSERT INTO street (streetcd, streetnm)
-VALUES (1, 'ЦИОЛКОВСКОГО УЛИЦА'),
-       (2, 'НОВАЯ УЛИЦА'),
-       (3, 'ВОЙКОВ ПЕРЕУЛОК'),
-       (4, 'ТАТАРСКАЯ УЛИЦА'),
-       (5, 'ГАГАРИНА УЛИЦА'),
-       (6, 'МОСКОВСКАЯ УЛИЦА'),
-       (7, 'КУТУЗОВА УЛИЦА'),
-       (8, 'МОСКОВСКОЕ ШОССЕ');
-
--- =====================================================
--- Таблица Abonent
--- =====================================================
-CREATE TABLE IF NOT EXISTS abonent
-(
-    accountcd VARCHAR(10) PRIMARY KEY,
-    streetcd INTEGER NOT NULL,
-    houseno VARCHAR(10) NOT NULL,
-    flatno VARCHAR(10),
-    fio VARCHAR(100) NOT NULL,
-    phone VARCHAR(20),
-    FOREIGN KEY (streetcd) REFERENCES street (streetcd)
+CREATE TABLE Disrepair (
+                           Failureid PKFIELD,
+                           Failurenm VARCHAR(50)
 );
-
-INSERT INTO abonent (accountcd, streetcd, houseno, flatno, fio, phone)
-VALUES ('005488', 3, '4', '1', 'Аксенов С. А.', '556893'),
-       ('015527', 3, '1', '65', 'Конюхов В. С.', '761699'),
-       ('080047', 8, '39', '36', 'Шубина Т. П.', '257842'),
-       ('080270', 6, '35', '6', 'Тимошкина Н. Г.', '321002'),
-       ('080613', 8, '35', '11', 'Лукашина Р. М.', '254417'),
-       ('115705', 3, '1', '82', 'Мищенко Е. В.', '769975'),
-       ('126112', 4, '7', '11', 'Маркова В. П.', '683301'),
-       ('136159', 7, '39', '1', 'Свирина З. А.', NULL),
-       ('136160', 4, '9', '15', 'Шмаков С. В.', NULL),
-       ('136169', 4, '7', '13', 'Денисова Е. К.', '680305'),
-       ('443069', 4, '51', '55', 'Стародубцев Е. В.', '683014'),
-       ('443690', 7, '5', '1', 'Тулупова М. И.', '214833');
-
--- =====================================================
--- Таблица Services
--- =====================================================
-CREATE TABLE IF NOT EXISTS services
-(
-    servicecd INTEGER PRIMARY KEY,
-    servicenm VARCHAR(100) NOT NULL
+CREATE TABLE Executor (
+                          Executorid  PKFIELD,
+                          FIO VARCHAR(20)
 );
-
-INSERT INTO services (servicecd, servicenm)
-VALUES (1, 'Газоснабжение'),
-       (2, 'Электроснабжение'),
-       (3, 'Теплоснабжение'),
-       (4, 'Водоснабжение');
-
--- =====================================================
--- Таблица Disrepair
--- =====================================================
-CREATE TABLE IF NOT EXISTS disrepair
-(
-    failurecd INTEGER PRIMARY KEY,
-    failurenm VARCHAR(200) NOT NULL
+CREATE TABLE Nachislsumma (
+                              Nachislfactid PKFIELD,
+                              Accountid VARCHAR(6) NOT NULL,
+                              Serviceid PKFIELD NOT NULL,
+                              Nachislsum CURRENCY,
+                              Nachislmonth TMONTH,
+                              Nachislyear TYEAR
 );
-
-INSERT INTO disrepair (failurecd, failurenm)
-VALUES (1, 'Засорилась водогрейная колонка'),
-       (2, 'Не горит АГВ'),
-       (3, 'Течет из водогрейной колонки'),
-       (4, 'Неисправна печная горелка'),
-       (5, 'Неисправен газовый счетчик'),
-       (6, 'Плохое поступление газа на горелку плиты'),
-       (7, 'Туго поворачивается пробка крана плиты'),
-       (8, 'При закрытии краника горелка плиты не гаснет'),
-       (12, 'Неизвестна');
-
--- =====================================================
--- Таблица NachislSumma
--- =====================================================
-CREATE TABLE IF NOT EXISTS nachislsumma
-(
-    nachisl_factcd INTEGER PRIMARY KEY,
-    accountcd VARCHAR(10) NOT NULL,
-    servicecd INTEGER NOT NULL,
-    nachisl_sum NUMERIC(10, 2) NOT NULL,
-    nachisl_month INTEGER NOT NULL,
-    nachisl_year INTEGER NOT NULL,
-    FOREIGN KEY (accountcd) REFERENCES abonent (accountcd),
-    FOREIGN KEY (servicecd) REFERENCES services (servicecd)
+CREATE TABLE Paysumma (
+                          Payfactid PKFIELD,
+                          Accountid VARCHAR(6) NOT NULL,
+                          Serviceid PKFIELD NOT NULL,
+                          Paysum CURRENCY,
+                          Paydate DATE,
+                          Paymonth TMONTH,
+                          Payyear TYEAR
 );
-
-INSERT INTO nachislsumma (nachisl_factcd, accountcd, servicecd, nachisl_sum, nachisl_month, nachisl_year)
-VALUES (1, '136160', 2, 656.00, 1, 2021),
-       (2, '005488', 2, 646.00, 12, 2018),
-       (3, '005488', 2, 656.00, 4, 2021),
-       (4, '115705', 2, 640.00, 1, 2018),
-       (5, '115705', 2, 850.00, 9, 2019),
-       (6, '136160', 1, 518.30, 1, 2020),
-       (7, '080047', 2, 680.00, 10, 2020),
-       (8, '080047', 2, 680.00, 10, 2019),
-       (9, '080270', 2, 646.00, 12, 2019),
-       (10, '080613', 2, 656.00, 6, 2019),
-       (11, '115705', 2, 850.00, 9, 2018),
-       (12, '115705', 2, 658.70, 8, 2019),
-       (13, '136160', 2, 620.00, 5, 2019),
-       (15, '136169', 2, 620.00, 5, 2019),
-       (16, '136169', 2, 658.70, 11, 2019),
-       (17, '443069', 2, 680.00, 9, 2019),
-       (18, '443069', 2, 638.50, 8, 2019),
-       (19, '005488', 2, 658.70, 12, 2019),
-       (20, '015527', 1, 528.32, 7, 2020),
-       (21, '080047', 1, 519.56, 3, 2020),
-       (22, '080613', 1, 510.60, 9, 2020),
-       (23, '443069', 1, 538.28, 12, 2020),
-       (24, '015527', 1, 538.32, 4, 2021),
-       (25, '115705', 1, 537.15, 10, 2021),
-       (26, '080613', 1, 512.60, 8, 2018),
-       (27, '136169', 1, 525.32, 1, 2021),
-       (28, '080270', 1, 557.10, 2, 2020),
-       (29, '136159', 1, 508.30, 8, 2021),
-       (30, '005488', 1, 562.13, 4, 2018),
-       (31, '115705', 1, 537.80, 5, 2019),
-       (32, '443690', 1, 517.80, 6, 2020),
-       (33, '080047', 1, 522.56, 5, 2021),
-       (34, '126112', 1, 515.30, 8, 2018),
-       (35, '080047', 1, 532.56, 9, 2019),
-       (36, '080613', 1, 512.60, 4, 2020),
-       (37, '115705', 1, 537.15, 11, 2021),
-       (38, '080270', 1, 558.10, 12, 2018),
-       (39, '136169', 1, 528.32, 1, 2019),
-       (40, '015527', 1, 518.32, 2, 2020),
-       (41, '443690', 1, 521.67, 3, 2021),
-       (42, '080613', 1, 522.86, 4, 2018),
-       (43, '080270', 1, 560.10, 5, 2019),
-       (44, '136169', 1, 528.32, 2, 2020),
-       (45, '080047', 1, 522.20, 7, 2021),
-       (46, '126112', 1, 525.30, 8, 2019),
-       (47, '443069', 1, 538.32, 9, 2019),
-       (48, '136159', 1, 508.30, 10, 2020),
-       (49, '115705', 1, 537.15, 6, 2021),
-       (50, '136160', 1, 518.30, 12, 2018),
-       (51, '005488', 3, 2279.80, 5, 2020),
-       (52, '005488', 3, 2266.70, 2, 2021),
-       (53, '015527', 3, 2343.36, 11, 2021),
-       (54, '080047', 3, 2271.60, 2, 2021),
-       (55, '080270', 3, 2278.25, 11, 2021),
-       (56, '080613', 3, 2254.40, 7, 2019),
-       (57, '080613', 3, 2258.80, 2, 2021),
-       (58, '080613', 3, 2239.33, 5, 2021),
-       (59, '126112', 3, 2179.90, 4, 2020),
-       (60, '136159', 3, 2180.13, 9, 2021),
-       (61, '136160', 3, 2238.80, 3, 2018),
-       (62, '136160', 3, 2237.38, 3, 2019),
-       (63, '136169', 3, 2349.19, 6, 2020),
-       (64, '136169', 3, 2346.18, 7, 2020),
-       (65, '443690', 3, 2290.33, 3, 2021),
-       (66, '015527', 4, 280.10, 7, 2020),
-       (67, '015527', 4, 311.30, 10, 2021),
-       (68, '080270', 4, 144.34, 3, 2019),
-       (69, '080270', 4, 253.43, 6, 2020),
-       (70, '080270', 4, 154.60, 4, 2021),
-       (71, '115705', 4, 253.85, 1, 2020),
-       (72, '126112', 4, 135.50, 6, 2020),
-       (73, '136159', 4, 49.38, 4, 2019),
-       (74, '136159', 4, 118.88, 6, 2020),
-       (75, '136169', 4, 228.44, 10, 2021),
-       (76, '443069', 4, 166.69, 5, 2020),
-       (77, '443069', 4, 144.45, 10, 2021),
-       (78, '443069', 4, 180.88, 8, 2019),
-       (79, '443069', 4, 200.13, 9, 2020);
-
--- =====================================================
--- Таблица PaySumma
--- =====================================================
-CREATE TABLE IF NOT EXISTS paysumma
-(
-    pay_factcd INTEGER PRIMARY KEY,
-    accountcd VARCHAR(10) NOT NULL,
-    servicecd INTEGER NOT NULL,
-    paysum NUMERIC(10, 2) NOT NULL,
-    paydate DATE NOT NULL,
-    paymonth INTEGER NOT NULL,
-    payyear INTEGER NOT NULL,
-    FOREIGN KEY (accountcd) REFERENCES abonent (accountcd),
-    FOREIGN KEY (servicecd) REFERENCES services (servicecd)
+CREATE TABLE Request (
+                         Requestid PKFIELD,
+                         Accountid VARCHAR(6) NOT NULL,
+                         Executorid INTEGER,
+                         Failureid INTEGER NOT NULL,
+                         Incomingdate DATE DEFAULT CURRENT_DATE NOT NULL,
+                         Executiondate DATE,
+                         Executed BOOLEAN DEFAULT FALSE NOT NULL
 );
-
-INSERT INTO paysumma (pay_factcd, accountcd, servicecd, paysum, paydate, paymonth, payyear)
-VALUES (1, '005488', 2, 658.70, '2020-01-08', 12, 2019),
-       (2, '005488', 2, 640.00, '2019-01-06', 12, 2018),
-       (3, '005488', 2, 656.00, '2021-05-06', 4, 2021),
-       (4, '115705', 2, 640.00, '2018-02-10', 1, 2018),
-       (5, '115705', 2, 850.00, '2019-10-03', 9, 2019),
-       (6, '136160', 2, 620.00, '2019-06-13', 5, 2019),
-       (7, '136160', 2, 656.00, '2021-02-12', 1, 2021),
-       (8, '136169', 2, 620.00, '2019-06-22', 5, 2019),
-       (9, '080047', 2, 680.00, '2020-11-26', 10, 2020),
-       (10, '080047', 2, 680.00, '2019-11-21', 10, 2019),
-       (11, '080270', 2, 630.00, '2020-01-03', 12, 2019),
-       (12, '080613', 2, 658.50, '2019-07-19', 6, 2019),
-       (13, '115705', 2, 850.00, '2018-10-06', 9, 2018),
-       (14, '115705', 2, 658.70, '2019-09-04', 8, 2019),
-       (15, '136169', 2, 658.70, '2019-12-01', 11, 2019),
-       (16, '443069', 2, 680.00, '2019-10-03', 9, 2019),
-       (17, '443069', 2, 638.50, '2019-09-13', 8, 2019),
-       (18, '136160', 1, 518.00, '2020-02-05', 1, 2020),
-       (19, '015527', 1, 530.00, '2020-08-03', 7, 2020),
-       (20, '080047', 1, 519.56, '2020-04-02', 3, 2020),
-       (21, '080613', 1, 511.00, '2020-10-03', 9, 2020),
-       (22, '443069', 1, 538.28, '2021-02-04', 12, 2020),
-       (23, '015527', 1, 540.00, '2021-05-07', 4, 2021),
-       (24, '115705', 1, 537.15, '2021-11-04', 10, 2021),
-       (25, '080613', 1, 512.00, '2018-09-20', 8, 2018),
-       (26, '136169', 1, 525.32, '2021-02-03', 1, 2021),
-       (27, '080270', 1, 560.00, '2020-03-05', 2, 2020),
-       (28, '136159', 1, 508.30, '2021-09-10', 8, 2021),
-       (29, '005488', 1, 565.00, '2018-05-03', 4, 2018),
-       (30, '115705', 1, 537.80, '2019-07-12', 5, 2019),
-       (31, '443690', 1, 517.80, '2020-07-04', 6, 2020),
-       (32, '080047', 1, 522.56, '2021-06-05', 5, 2021),
-       (33, '126112', 1, 515.30, '2018-09-06', 8, 2018),
-       (34, '080047', 1, 532.56, '2019-10-06', 9, 2019),
-       (35, '080613', 1, 512.60, '2020-05-05', 4, 2020),
-       (36, '115705', 1, 537.15, '2021-12-05', 11, 2021),
-       (37, '080270', 1, 558.10, '2019-01-03', 12, 2018),
-       (38, '136169', 1, 528.32, '2019-02-03', 1, 2019),
-       (39, '015527', 1, 518.32, '2020-03-03', 2, 2020),
-       (40, '443690', 1, 521.67, '2021-04-03', 3, 2021),
-       (41, '080613', 1, 522.86, '2018-05-05', 4, 2018),
-       (42, '080270', 1, 560.10, '2019-06-05', 5, 2019),
-       (43, '136169', 1, 528.32, '2020-03-03', 2, 2020),
-       (44, '080047', 1, 522.20, '2021-08-05', 7, 2021),
-       (45, '126112', 1, 525.30, '2019-09-06', 8, 2019),
-       (46, '443069', 1, 538.32, '2019-10-04', 9, 2019),
-       (47, '136159', 1, 508.30, '2020-11-05', 10, 2020),
-       (48, '115705', 1, 537.15, '2021-07-05', 6, 2021),
-       (49, '136160', 1, 518.30, '2019-01-04', 12, 2018),
-       (50, '005488', 3, 2279.80, '2020-06-05', 5, 2020),
-       (51, '005488', 3, 2266.70, '2021-03-05', 2, 2021),
-       (52, '015527', 3, 2343.36, '2021-12-05', 11, 2021),
-       (53, '080047', 3, 2271.60, '2021-03-06', 2, 2021),
-       (54, '080270', 3, 2278.25, '2021-12-06', 11, 2021),
-       (55, '080613', 3, 2254.40, '2019-08-07', 7, 2019),
-       (56, '080613', 3, 2258.80, '2021-03-05', 2, 2021),
-       (57, '080613', 3, 2239.33, '2021-06-05', 5, 2021),
-       (58, '126112', 3, 2179.90, '2020-05-05', 4, 2020),
-       (59, '136159', 3, 2180.13, '2021-10-06', 9, 2021),
-       (60, '136160', 3, 2238.80, '2018-04-05', 3, 2018),
-       (61, '136160', 3, 2237.38, '2019-04-05', 3, 2019),
-       (62, '136169', 3, 2349.19, '2020-07-14', 6, 2020),
-       (63, '136169', 3, 2346.18, '2020-08-13', 7, 2020),
-       (64, '443690', 3, 2295.00, '2021-04-09', 3, 2021),
-       (65, '015527', 4, 280.10, '2020-08-08', 7, 2020),
-       (66, '015527', 4, 311.30, '2021-11-03', 10, 2021),
-       (67, '080270', 4, 144.50, '2019-04-18', 3, 2019),
-       (68, '080270', 4, 150.00, '2020-07-14', 6, 2020),
-       (69, '080270', 4, 160.00, '2021-05-12', 4, 2021),
-       (70, '115705', 4, 253.85, '2020-02-02', 1, 2020),
-       (71, '126112', 4, 135.50, '2020-07-12', 6, 2020),
-       (72, '136159', 4, 49.38, '2019-05-18', 4, 2019),
-       (73, '136159', 4, 120.00, '2020-07-09', 6, 2020),
-       (74, '136169', 4, 228.44, '2021-11-26', 10, 2021),
-       (75, '443069', 4, 166.69, '2020-06-03', 5, 2020),
-       (76, '443069', 4, 144.45, '2021-11-16', 10, 2021),
-       (77, '443690', 4, 185.00, '2019-09-05', 8, 2019);
-
--- =====================================================
--- Таблица Request
--- =====================================================
-CREATE TABLE IF NOT EXISTS request
-(
-    requestcd INTEGER PRIMARY KEY,
-    accountcd VARCHAR(10) NOT NULL,
-    executorcd INTEGER,
-    failurecd INTEGER NOT NULL,
-    incomingdate DATE NOT NULL,
-    executiondate DATE,
-    executed BOOLEAN NOT NULL,
-    FOREIGN KEY (accountcd) REFERENCES abonent (accountcd),
-    FOREIGN KEY (failurecd) REFERENCES disrepair (failurecd)
+CREATE TABLE Services (
+                          Serviceid PKFIELD,
+                          Servicenm VARCHAR(30)
 );
+CREATE TABLE Street (
+                        Streetid SMALLINT,
+                        Streetnm VARCHAR(30)
+);
+INSERT INTO Street (Streetid, Streetnm) VALUES (1, 'ЦИОЛКОВСКОГО УЛИЦА');
+INSERT INTO Street (Streetid, Streetnm) VALUES (2, 'НОВАЯ УЛИЦА');
+INSERT INTO Street (Streetid, Streetnm) VALUES (3, 'ВОЙКОВ ПЕРЕУЛОК');
+INSERT INTO Street (Streetid, Streetnm) VALUES (4, 'ТАТАРСКАЯ УЛИЦА');
+INSERT INTO Street (Streetid, Streetnm) VALUES (5, 'ГАГАРИНА УЛИЦА');
+INSERT INTO Street (Streetid, Streetnm) VALUES (6, 'МОСКОВСКАЯ УЛИЦА');
+INSERT INTO Street (Streetid, Streetnm) VALUES (7, 'КУТУЗОВА УЛИЦА');
+INSERT INTO Street (Streetid, Streetnm) VALUES (8, 'МОСКОВСКОЕ ШОССЕ');
 
-INSERT INTO request (requestcd, accountcd, executorcd, failurecd, incomingdate, executiondate, executed)
-VALUES (1, '005488', 1, 1, '2019-12-17', '2019-12-20', TRUE),
-       (2, '115705', 3, 1, '2019-08-07', '2019-08-12', TRUE),
-       (3, '015527', 1, 12, '2020-02-28', '2020-03-08', FALSE),
-       (5, '080270', 4, 1, '2019-12-31', NULL, FALSE),
-       (6, '080613', 1, 6, '2019-06-16', '2019-06-24', TRUE),
-       (7, '080047', 3, 2, '2020-10-20', '2020-10-24', TRUE),
-       (9, '136169', 2, 1, '2019-11-06', '2019-11-08', TRUE),
-       (10, '136159', 3, 12, '2019-04-01', '2019-04-03', FALSE),
-       (11, '136160', 1, 6, '2021-01-12', '2021-01-12', TRUE),
-       (12, '443069', 5, 2, '2019-08-08', '2019-08-10', TRUE),
-       (13, '005488', 5, 8, '2018-09-04', '2018-12-05', TRUE),
-       (14, '005488', 4, 6, '2021-04-04', '2021-04-13', TRUE),
-       (15, '115705', 4, 5, '2018-09-20', '2018-09-23', TRUE),
-       (16, '115705', NULL, 3, '2019-12-28', NULL, FALSE),
-       (17, '115705', 1, 5, '2019-08-15', '2019-09-06', TRUE),
-       (18, '115705', 2, 3, '2020-12-28', '2021-01-04', TRUE),
-       (19, '080270', 4, 8, '2019-12-17', '2019-12-27', TRUE),
-       (20, '080047', 3, 2, '2019-10-11', '2019-10-11', TRUE),
-       (21, '443069', 1, 2, '2019-09-13', '2019-09-14', TRUE),
-       (22, '136160', 1, 7, '2019-05-18', '2019-05-25', TRUE),
-       (23, '136169', 5, 7, '2019-05-07', '2019-05-08', TRUE);
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('005488', 3, 4, 1, 'Аксенов С. А.', '556893');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('115705', 3, 1, 82, 'Мищенко Е. В.', '769975');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('015527', 3, 1, 65, 'Конюхов В. С.', '761699');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('443690', 7, 5, 1, 'Тулупова М. И.', '214833');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('136159', 7, 39, 1, 'Свирина З. А.', NULL);
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('443069', 4, 51, 55, 'Стародубцев Е. В.', '683014');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('136160', 4, 9, 15, 'Шмаков С. В.', NULL);
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('126112', 4, 7, 11, 'Маркова В. П.', '683301');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('136169', 4, 7, 13, 'Денисова Е. К.', '680305');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('080613', 8, 35, 11, 'Лукашина Р. М.', '254417');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('080047', 8, 39, 36, 'Шубина Т. П.', '257842');
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, FIO, Phone) VALUES ('080270', 6, 35, 6, 'Тимошкина Н. Г.', '321002');
+
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (1, 'Засорилась водогрейная колонка');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (2, 'Не горит АГВ');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (3, 'Течет из водогрейной колонки');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (4, 'Неисправна печная горелка');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (5, 'Неисправен газовый счетчик');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (6, 'Плохое поступление газа на горелку плиты');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (7, 'Туго поворачивается пробка крана плиты');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (8, 'При закрытии краника горелка плиты не гаснет');
+INSERT INTO Disrepair (Failureid, Failurenm) VALUES (12, 'Неизвестна');
+
+INSERT INTO Executor (Executorid , FIO) VALUES (1, 'Стародубцев Е. М.');
+INSERT INTO Executor (Executorid , FIO) VALUES (2, 'Булгаков Т. И.');
+INSERT INTO Executor (Executorid , FIO) VALUES (3, 'Шубин В. Г.');
+INSERT INTO Executor (Executorid , FIO) VALUES (4, 'Шлюков М. К.');
+INSERT INTO Executor (Executorid , FIO) VALUES (5, 'Школьников С. М.');
+INSERT INTO Executor (Executorid , FIO) VALUES (6, 'Степанов А. В.');
+
+INSERT INTO Services (Serviceid, Servicenm) VALUES (1, 'Газоснабжение');
+INSERT INTO Services (Serviceid, Servicenm) VALUES (2, 'Электроснабжение');
+INSERT INTO Services (Serviceid, Servicenm) VALUES (3, 'Теплоснабжение');
+INSERT INTO Services (Serviceid, Servicenm) VALUES (4, 'Водоснабжение');
+
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (1, '136160', 2, 656, 1, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (2, '005488', 2, 646, 12, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (3, '005488', 2, 656, 4, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (4, '115705', 2, 640, 1, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (5, '115705', 2, 850, 9, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (6, '136160', 1, 518.3, 1, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (7, '080047', 2, 680, 10, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (8, '080047', 2, 680, 10, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (9, '080270', 2, 646, 12, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (10, '080613', 2, 656, 6, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (11, '115705', 2, 850, 9, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (12, '115705', 2, 658.7, 8, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (13, '136160', 2, 620, 5, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (15, '136169', 2, 620, 5, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (16, '136169', 2, 658.7, 11, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (17, '443069', 2, 680, 9, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (18, '443069', 2, 638.5, 8, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (19, '005488', 2, 658.7, 12, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (20, '015527', 1, 528.32, 7, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (21, '080047', 1, 519.56, 3, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (22, '080613', 1, 510.6, 9, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (23, '443069', 1, 538.28, 12, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (24, '015527', 1, 538.32, 4, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (25, '115705', 1, 537.15, 10, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (26, '080613', 1, 512.6, 8, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (27, '136169', 1, 525.32, 1, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (28, '080270', 1, 557.1, 2, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (29, '136159', 1, 508.3, 8, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (30, '005488', 1, 562.13, 4, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (31, '115705', 1, 537.8, 5, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (32, '443690', 1, 517.8, 6, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (33, '080047', 1, 522.56, 5, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (34, '126112', 1, 515.3, 8, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (35, '080047', 1, 532.56, 9, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (36, '080613', 1, 512.6, 4, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (37, '115705', 1, 537.15, 11, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (38, '080270', 1, 558.1, 12, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (39, '136169', 1, 528.32, 1, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (40, '015527', 1, 518.32, 2, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (41, '443690', 1, 521.67, 3, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (42, '080613', 1, 522.86, 4, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (43, '080270', 1, 560.1, 5, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (44, '136169', 1, 528.32, 2, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (45, '080047', 1, 522.2, 7, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (46, '126112', 1, 525.3, 8, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (47, '443069', 1, 538.32, 9, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (48, '136159', 1, 508.3, 10, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (49, '115705', 1, 537.15, 6, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (50, '136160', 1, 518.3, 12, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (51, '005488', 3, 2279.8, 5, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (52, '005488', 3, 2266.7, 2, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (53, '015527', 3, 2343.36, 11, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (54, '080047', 3, 2271.6, 2, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (55, '080270', 3, 2278.25, 11, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (56, '080613', 3, 2254.4, 7, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (57, '080613', 3, 2258.8, 2, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (58, '080613', 3, 2239.33, 5, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (59, '126112', 3, 2179.9, 4, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (60, '136159', 3, 2180.13, 9, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (61, '136160', 3, 2238.8, 3, 2022);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (62, '136160', 3, 2237.38, 3, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (63, '136169', 3, 2349.19, 6, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (64, '136169', 3, 2346.18, 7, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (65, '443690', 3, 2290.33, 3, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (66, '015527', 4, 280.1, 7, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (67, '015527', 4, 311.3, 10, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (68, '080270', 4, 144.34, 3, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (69, '080270', 4, 153.43, 6, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (70, '080270', 4, 154.6, 4, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (71, '115705', 4, 253.85, 1, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (72, '126112', 4, 135.5, 6, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (73, '136159', 4, 49.38, 4, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (74, '136159', 4, 118.88, 6, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (75, '136169', 4, 228.44, 10, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (76, '443069', 4, 166.69, 5, 2024);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (77, '443069', 4, 144.45, 10, 2025);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (78, '443690', 4, 180.88, 8, 2023);
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum, Nachislmonth, Nachislyear) VALUES (79, '443690', 4, 200.13, 9, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (1, '005488', 2, 658.7, '2024-01-08', 12, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (2, '005488', 2, 640, '2023-01-06', 12, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (3, '005488', 2, 656, '2025-05-06', 4, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (4, '115705', 2, 640, '2022-02-10', 1, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (5, '115705', 2, 850, '2023-10-03', 9, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (6, '136160', 2, 620, '2023-06-13', 5, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (7, '136160', 2, 656, '2025-02-12', 1, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (8, '136169', 2, 620, '2023-06-22', 5, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (9, '080047', 2, 680, '2024-11-26', 10, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (10, '080047', 2, 680, '2023-11-21', 10, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (11, '080270', 2, 630, '2024-01-03', 12, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (12, '080613', 2, 658.5, '2023-07-19', 6, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (13, '115705', 2, 850, '2022-10-06', 9, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (14, '115705', 2, 658.7, '2023-09-04', 8, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (15, '136169', 2, 658.7, '2023-12-01', 11, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (16, '443069', 2, 680, '2023-10-03', 9, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (17, '443069', 2, 638.5, '2023-09-13', 8, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (18, '136160', 1, 518, '2024-02-05', 1, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (19, '015527', 1, 530, '2024-08-03', 7, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (20, '080047', 1, 519.56, '2024-04-02', 3, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (21, '080613', 1, 511, '2024-10-03', 9, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (22, '443069', 1, 538.28, '2025-02-04', 12, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (23, '015527', 1, 540, '2025-05-07', 4, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (24, '115705', 1, 537.15, '2025-11-04', 10, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (25, '080613', 1, 512, '2022-09-20', 8, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (26, '136169', 1, 525.32, '2025-02-03', 1, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (27, '080270', 1, 560, '2024-03-05', 2, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (28, '136159', 1, 508.3, '2025-09-10', 8, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (29, '005488', 1, 565, '2022-05-03', 4, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (30, '115705', 1, 537.8, '2023-07-12', 5, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (31, '443690', 1, 520, '2024-07-10', 6, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (32, '080047', 1, 522.56, '2025-06-25', 5, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (33, '126112', 1, 515.3, '2022-09-08', 8, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (34, '080047', 1, 532.56, '2023-10-18', 9, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (35, '080613', 1, 512.6, '2024-05-22', 4, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (36, '115705', 1, 537.15, '2025-12-23', 11, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (37, '080270', 1, 558.1, '2023-01-07', 12, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (38, '136169', 1, 528.32, '2023-02-08', 1, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (39, '015527', 1, 520, '2024-03-18', 2, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (40, '443690', 1, 519.47, '2025-04-10', 3, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (41, '080613', 1, 522.86, '2022-05-04', 4, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (42, '080270', 1, 560, '2023-06-07', 5, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (43, '136169', 1, 528.32, '2024-03-05', 2, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (44, '080047', 1, 522.2, '2025-08-10', 7, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (45, '126112', 1, 525.3, '2023-09-10', 8, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (46, '443069', 1, 538.32, '2023-10-09', 9, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (47, '136159', 1, 508.3, '2024-11-14', 10, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (48, '115705', 1, 537.15, '2025-08-10', 6, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (49, '136160', 1, 516, '2023-01-07', 12, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (50, '005488', 3, 2280, '2024-06-10', 5, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (51, '005488', 3, 2260, '2025-03-11', 2, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (52, '015527', 3, 2345, '2025-12-15', 11, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (53, '080047', 3, 2271.6, '2025-03-12', 2, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (54, '080270', 3, 2278, '2025-12-06', 11, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (55, '080613', 3, 2254.4, '2023-08-10', 7, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (56, '080613', 3, 2258.8, '2025-03-08', 2, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (57, '080613', 3, 2239.35, '2025-06-11', 5, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (58, '126112', 3, 2179.9, '2024-05-01', 4, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (59, '136159', 3, 2180.13, '2025-10-21', 9, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (60, '136160', 3, 2240, '2022-04-04', 3, 2022);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (61, '136160', 3, 2200, '2023-04-06', 3, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (62, '136169', 3, 2349.19, '2024-07-14', 6, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (63, '136169', 3, 2346.18, '2024-08-13', 7, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (64, '443690', 3, 2295, '2025-04-09', 3, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (65, '015527', 4, 280.1, '2024-08-08', 7, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (66, '015527', 4, 311.3, '2025-11-03', 10, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (67, '080270', 4, 144.5, '2023-04-18', 3, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (68, '080270', 4, 150, '2024-07-14', 6, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (69, '080270', 4, 160, '2025-05-12', 4, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (70, '115705', 4, 253.85, '2024-02-02', 1, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (71, '126112', 4, 135.5, '2024-07-12', 6, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (72, '136159', 4, 49.38, '2023-05-18', 4, 2023);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (73, '136159', 4, 120, '2024-07-09', 6, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (74, '136169', 4, 228.44, '2025-11-26', 10, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (75, '443069', 4, 166.69, '2024-06-03', 5, 2024);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (76, '443069', 4, 144.45, '2025-11-16', 10, 2025);
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear) VALUES (77, '443690', 4, 185, '2023-09-05', 8, 2023);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (1, '005488', 1, 1, '2023-12-17', '2023-12-20', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (2, '115705', 3, 1, '2023-08-07', '2023-08-12', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (3, '015527', 1, 12, '2024-02-28', '2024-03-08', FALSE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (5, '080270', 4, 1, '2023-12-31', NULL, FALSE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (6, '080613', 1, 6, '2023-06-16', '2023-06-24', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (7, '080047', 3, 2, '2024-10-20', '2024-10-24', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (9, '136169', 2, 1, '2023-11-06', '2023-11-08', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (10, '136159', 3, 12, '2023-04-01', '2023-04-03', FALSE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (11, '136160', 1, 6, '2025-01-12', '2025-01-12', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (12, '443069', 5, 2, '2023-08-08', '2023-08-10', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (13, '005488', 5, 8, '2022-09-04', '2022-12-05', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (14, '005488', 4, 6, '2025-04-04', '2025-04-13', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (15, '115705', 4, 5, '2022-09-20', '2022-09-23', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (16, '115705', NULL, 3, '2023-12-28', NULL, FALSE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (17, '115705', 1, 5, '2023-08-15', '2023-09-06', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (18, '115705', 2, 3, '2024-12-28', '2025-01-04', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (19, '080270', 4, 8, '2023-12-17', '2023-12-27', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (20, '080047', 3, 2, '2023-10-11', '2023-10-11', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (21, '443069', 1, 2, '2023-09-13', '2023-09-14', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (22, '136160', 1, 7, '2023-05-18', '2023-05-25', TRUE);
+INSERT INTO Request (Requestid, Accountid, Executorid , Failureid, Incomingdate, Executiondate, Executed) VALUES (23, '136169', 5, 7, '2023-05-07', '2023-05-08', TRUE);
+/******************************************************************************/
+/*** Primary keys ***/
+/******************************************************************************/
+ALTER TABLE Abonent ADD PRIMARY KEY (Accountid);
+ALTER TABLE Disrepair ADD PRIMARY KEY (Failureid);
+ALTER TABLE Executor ADD PRIMARY KEY (Executorid );
+ALTER TABLE Nachislsumma ADD PRIMARY KEY (Nachislfactid);
+ALTER TABLE Paysumma ADD PRIMARY KEY (Payfactid);
+ALTER TABLE Request ADD PRIMARY KEY (Requestid);
+ALTER TABLE Services ADD PRIMARY KEY (Serviceid);
+ALTER TABLE Street ADD PRIMARY KEY (Streetid);
+/******************************************************************************/
+/*** Foreign keys ***/
+/******************************************************************************/
+ALTER TABLE Abonent ADD FOREIGN KEY (Streetid) REFERENCES Street (Streetid) ON UPDATE CASCADE;
+ALTER TABLE Nachislsumma ADD FOREIGN KEY (Accountid) REFERENCES Abonent (Accountid) ON UPDATE CASCADE;
+ALTER TABLE Nachislsumma ADD FOREIGN KEY (Serviceid) REFERENCES Services (Serviceid) ON UPDATE CASCADE;
+ALTER TABLE Paysumma ADD FOREIGN KEY (Accountid) REFERENCES Abonent (Accountid) ON UPDATE CASCADE;
+ALTER TABLE Paysumma ADD FOREIGN KEY (Serviceid) REFERENCES Services (Serviceid) ON UPDATE CASCADE;
+ALTER TABLE Request ADD FOREIGN KEY (Accountid) REFERENCES Abonent (Accountid)  ON UPDATE CASCADE;
+ALTER TABLE Request ADD FOREIGN KEY (Executorid ) REFERENCES Executor (Executorid ) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE Request ADD FOREIGN KEY (Failureid) REFERENCES Disrepair (Failureid) ON UPDATE CASCADE;
 
 
--- =====================================================
--- Проверка всех таблиц
--- =====================================================
-SELECT 'Street' AS table_name, COUNT(*) AS record_count
+/*Имена столбцов*/
+SELECT fio, accountid, phone
+FROM abonent;
+
+/*Константы*/
+SELECT 'номер телефона', phone
+FROM abonent;
+
+/*Выражения (мет. операции, функции, логические операции,
+  конкатенация), вычисляемые производные столбцы
+  Длина псевдонима не должна превышать 63 байта, русская буква
+  до 2 байт
+*/
+select accountid as "AccountIdRyazan",
+       (Fio || 'имеет телефон ' || '9-4912-' || Phone) "ФИО+Телефон"
+    from abonent;
+
+SELECT accountid,
+       paysum,
+       15 * paysum + 20      "15 * Paysum + 20",
+       15 * (paysum + 20) AS "15 * (Paysum + 20)"
+FROM paysumma;
+
+/*Математические операции в Postgresql могут применяться и к
+  столбцами с типами данных DATE или INTERVAL*/
+
+SELECT requestid,
+       executiondate - incomingdate AS      "Дней",
+       (executiondate - incomingdate) / 7.0 "Недель"
+FROM request;
+
+/*Количество выводимых строк
+  начиная с 3 строки*/
+
+SELECT *
 FROM street
-UNION ALL
-SELECT 'Abonent', COUNT(*)
-FROM abonent
-UNION ALL
-SELECT 'Services', COUNT(*)
-FROM services
-UNION ALL
-SELECT 'Disrepair', COUNT(*)
-FROM disrepair
-UNION ALL
-SELECT 'NachislSumma', COUNT(*)
-FROM nachislsumma
-UNION ALL
-SELECT 'PaySumma', COUNT(*)
-FROM paysumma
-UNION ALL
-SELECT 'Request', COUNT(*)
-FROM request
-ORDER BY table_name;
+LIMIT 4 OFFSET 2;
+
+/*Вывести 4 строки, начиная со второй строки*/
 
 select *
 from abonent
-where phone is null
-order by fio;
+offset 1 rows fetch next 4 rows only;
+
+/*Выборка из таблицы 50 процентов строк случайным образом*/
+
+SELECT *
+FROM paysumma
+         TABLESAMPLE bernoulli(50.0);
+
+/*Удалить повторяющиеся строки в таблице.
+  Вывести идентификаторы улиц, на которых проживают абоненты*/
+
+select distinct streetid
+    from abonent;
+
+/*При выполнении запрос с distinct обрабатываемые неопределенные
+  значения считаются равными друг другу
+  Запрос ниже 11 строк и только одна будет содержать null*/
+
+SELECT DISTINCT phone
+FROM abonent;
+
+/*Нежелательно использовать distinct если изначально не ожидается
+  избыточности данных
+  Запрос демонстрирует проблему того что все ФИО абонентов различны,
+  при этом использование distinct сократит количество реальных абонентов*/
+
+  select distinct fio
+  from abonent;
+
+/*В Postgresql опция distinct on
+Группирует строки по выражению в скобках (здесь accountid)
+Для каждой группы возвращает первую строку в порядке сортировки
+Если сортировка не указана — порядок строк не определён (может быть любым)*/
+
+SELECT DISTINCT ON (accountid) accountid, paydate, paysum
+FROM paysumma;
+
+/*Для вывода кобинаций нескольких столбцов можно обмернут
+  выражение из них в distinct
+  Следующий запрос возвращает список уникальных комбиннаций
+  Streetid/Houseno
 
 
--- #####################################################################
--- 1. Нумерация строк с помощью ROW_NUMBER()
--- #####################################################################
-
--- Ключевое слово SELECT начинает запрос и указывает, какие данные нужно вывести.
-SELECT
-    -- ROW_NUMBER() OVER () - оконная функция, которая присваивает каждой строке
-    -- уникальный порядковый номер в пределах всего набора строк (без сортировки и группировки).
-    -- AS "номер" - задаёт имя столбца в результате (псевдоним).
-    ROW_NUMBER() OVER () AS "номер",
-    -- fio - столбец из таблицы abonent, содержащий фамилию и инициалы абонента.
-    fio
--- FROM - указывает таблицу, из которой выбираются данные.
-FROM
-    abonent
--- WHERE 1=1 - условие, которое всегда истинно. Используется как заглушка,
--- чтобы можно было легко добавлять другие условия через AND.
-WHERE
-    1 = 1;
-
--- Аналогичный запрос, но с другим вечно истинным условием.
-SELECT
-            ROW_NUMBER() OVER () AS "номер",
-            fio
-FROM
-    abonent
--- '' IS NOT NULL - пустая строка не равна NULL, поэтому условие всегда истинно.
--- Такой приём иногда используется в генераторах кода для удобного добавления фильтров.
-WHERE
-    '' IS NOT NULL;
-
--- #####################################################################
--- 2. NULL-безопасное сравнение: IS DISTINCT FROM
--- #####################################################################
-
-/*
-   Обычное сравнение executiondate <> '20.12.2019' не вернёт строки, где executiondate IS NULL,
-   потому что результат сравнения с NULL — это NULL, а не TRUE.
-   IS DISTINCT FROM вернёт TRUE для всех строк, где значение отличается от указанного, включая NULL.
-   Этот запрос вернёт все строки, где executiondate:
-   ❌ НЕ равен 20.12.2019 (любая другая дата)
-   ✅ NULL (так как NULL отличается от любой даты)
-
-   Запрос выбирает все записи, где дата выполнения не равна 20 декабря 2019 года,
-   включая записи с пустой датой (NULL).
+  Группировка и выбор
+DISTINCT ON группирует строки по вычисленному ключу
+Каждая уникальная комбинация (streetid, houseno) — это одна группа
+Без ORDER BY выбирается первая случайная строка из каждой группы
+Выводятся: accountid, streetid, houseno
+Проблема без умножения.
+Если бы было просто streetid + houseno:
+streetid	houseno	streetid + houseno
+3	4	7
+4	3	7
+❌ Коллизия! Разные улицы с разными номерами дают одинаковый ключ.
+С умножением на 100
+streetid	houseno	streetid * 100 + houseno
+3	4	304
+4	3	403
 */
 
--- SELECT * - выбирает все столбцы из таблицы request.
-SELECT
-    *
--- FROM - указывает таблицу, из которой выбираются данные.
-FROM
-    request
--- WHERE - задаёт условие фильтрации строк.
--- IS DISTINCT FROM - оператор NULL-безопасного сравнения.
--- executiondate - столбец с датой выполнения заявки.
--- '20.12.2019' - строковая константа, которая будет преобразована в дату.
-WHERE
-    executiondate IS DISTINCT FROM '20.12.2019';
+SELECT DISTINCT ON (streetid * 100 + houseno) accountid,
+                                              streetid,
+                                              houseno
+FROM abonent;
 
--- Альтернативный способ получить тот же результат без IS DISTINCT FROM.
-SELECT
-    *
-FROM
-    request
--- executiondate <> '20.12.2019' - обычное сравнение (не работает с NULL).
--- OR executiondate IS NULL - добавляем явную проверку на NULL.
-WHERE
-    executiondate <> '20.12.2019'
-   OR executiondate IS NULL;
+SELECT DISTINCT ON (streetid, houseno) accountid,
+                                       streetid,
+                                       houseno
+FROM abonent;
 
--- #####################################################################
--- 3. Логические операторы AND и OR в WHERE
--- #####################################################################
-
-/*
-   Пример SQL-запроса с логическими операторами.
-   Требуется извлечь все данные об оплатах, которые были произведены
-   после 13 июня 2021 г. и значения которых превышают 120.
-   Одновременно с этим вывести все данные об оплатах, которые были сделаны до 2020 г.
-   абонентом с лицевым счетом '005488'.
+/*Псевдонимы таблицы
+  Имена псевдонимов таблиц и столбцов в рамках одного
+  запроса и подзапроса должны быть уникалыными
 */
 
--- SELECT * - выбираем все столбцы из paysumma.
-SELECT
-    *
-FROM
-    paysumma
--- WHERE - задаёт сложное условие, объединяя AND и OR.
--- paydate > '13.06.2021' - оплата после 13 июня 2021 года.
--- AND paysum > 120 - и сумма больше 120.
--- OR - логическое "ИЛИ" между двумя основными условиями.
--- paydate < '01.01.2020' - оплата до 2020 года.
--- AND accountcd = '005488' - и абонент с лицевым счётом '005488'.
-WHERE
-    (paydate > '13.06.2021' AND paysum > 120)
-   OR (paydate < '01.01.2020' AND accountcd = '005488');
+SELECT a.accountid, a.fio, a.phone
+FROM abonent a;
 
--- #####################################################################
--- 4. Строковые функции: SUBSTRING, SUBSTR, REVERSE, LEFT, OVERLAY
--- #####################################################################
+SELECT a.*
+from abonent a;
 
--- SUBSTRING(строка, начальная_позиция, длина) - извлекает подстроку.
--- Здесь берём первые 3 символа из fio.
--- AS "Fio3" - называем результат "Fio3".
-SELECT
-    accountcd,
-    SUBSTRING(fio, 1, 3) AS "Fio3"
-FROM
-    abonent;
-
--- SUBSTR - нестандартный синоним SUBSTRING (работает в PostgreSQL).
-SELECT
-    accountcd,
-    SUBSTR(fio, 1, 3) AS "Fio3"
-FROM
-    abonent;
-
--- REVERSE(строка) - переворачивает строку задом наперёд.
-SELECT
-    accountcd,
-    SUBSTR(fio, 1, 3)          AS "Fio3",
-    -- REVERSE применяется к результату SUBSTR.
-    REVERSE(SUBSTR(fio, 1, 3)) AS "Fio3_reversed"
-FROM
-    abonent;
-
--- REVERSE всей строки fio.
-SELECT
-    accountcd,
-    SUBSTR(fio, 1, 3) AS "Fio3",
-    REVERSE(fio)      AS "Fio_reversed"
-FROM
-    abonent;
-
--- LEFT(строка, количество) - первые N символов (синтаксический сахар).
-SELECT
-    LEFT(accountcd, 4) AS accountcd_first_4,
-    accountcd
-FROM
-    abonent;
-
--- OVERLAY - заменяет часть строки.
--- 'PostgreXXX' - исходная строка.
--- PLACING 'SQL' - чем заменяем.
--- FROM 8 - с какой позиции начинаем замену (1-индексация).
--- FOR 3 - сколько символов заменяем.
--- Результат: 'PostgreSQL'.
-SELECT
-    OVERLAY('PostgreXXX' PLACING 'SQL' FROM 8 FOR 3);
-
--- SUBSTRING с синтаксисом FROM ... FOR ...
--- FROM 3 - начиная с 3-й позиции.
--- FOR 1 - длиной 1 символ.
-SELECT
-    SUBSTRING(accountcd FROM 3 FOR 1) AS account_prefix,
-    accountcd
-FROM
-    abonent;
-
--- #####################################################################
--- 5. REPLACE - замена подстроки
--- #####################################################################
-
--- REPLACE(строка, что_ищем, на_что_меняем) - заменяет все вхождения.
--- Здесь 'плиты' заменяется на 'газовой плиты' в столбце failurenm.
--- AS replace_failurenm - псевдоним для результата.
-SELECT
-    REPLACE(failurenm, 'плиты', 'газовой плиты') AS replace_failurenm,
-    failurenm
-FROM
-    disrepair;
-
--- #####################################################################
--- 6. TRIM, LTRIM, RTRIM - удаление пробелов и символов
--- #####################################################################
-
--- TRIM(LEADING '0' FROM accountcd) - удаляет все ведущие нули.
--- Это полезно для нормализации номеров счетов.
-SELECT
-    TRIM(LEADING '0' FROM accountcd) AS trim_accountcd,
-    accountcd
-FROM
-    abonent;
-
--- TRIM(TRAILING ...) - удаляет символы только с конца строки.
--- ВНИМАНИЕ: удаляются отдельные символы из набора 'У','Л','И','Ц','А',
--- а не слово "УЛИЦА" целиком.
-SELECT
-    streetcd,
-    TRIM(TRAILING 'УЛИЦА' FROM streetnm) AS "Str_Name",
-    streetnm
-FROM
-    street;
-
--- Правильный способ удалить слово "УЛИЦА": сначала REPLACE, потом TRIM.
--- REPLACE(streetnm, 'УЛИЦА', '') - удаляет слово "УЛИЦА".
--- TRIM(...) - удаляет лишние пробелы в начале и конце.
-SELECT
-    streetcd,
-    TRIM(REPLACE(streetnm, 'УЛИЦА', '')) AS "Str_Name",
-    streetnm
-FROM
-    street;
-
--- LTRIM - удаляет пробелы слева (leading).
--- RTRIM - удаляет пробелы справа (trailing).
-SELECT
-    streetcd,
-    LTRIM(streetnm) AS "LTRIM_Name",
-    RTRIM(streetnm) AS "RTRIM_Name",
-    streetnm
-FROM
-    street;
-
--- #####################################################################
--- 7. RPAD / LPAD - дополнение строки до нужной длины
--- #####################################################################
-
--- RPAD(fio, 20, '*') - дополняет строку fio справа символами '*'
--- до общей длины 20 символов.
--- LPAD(fio, 20, '*') - дополняет строку fio слева символами '*'.
-SELECT
-    accountcd,
-    RPAD(fio, 20, '*'),
-    LPAD(fio, 20, '*')
-FROM
-    abonent;
-
--- CASE - условное выражение.
--- WHEN LENGTH(fio) < 20 - если длина фамилии меньше 20.
--- THEN RPAD(fio, 20, '*') - дополняем её до 20 звёздочками.
--- ELSE fio - иначе оставляем как есть.
--- END AS fio_padded - завершаем CASE и даём имя столбцу.
-SELECT
-    CASE
-        WHEN LENGTH(fio) < 20 THEN RPAD(fio, 20, '*')
-        ELSE fio
-        END AS fio_padded
-FROM
-    abonent;
-
--- #####################################################################
--- 8. LENGTH - длина строки в символах
--- #####################################################################
-
--- LENGTH(fio) - возвращает количество символов в строке fio.
-SELECT
-    accountcd,
-    fio,
-    LENGTH(fio) AS fio_length
-FROM
-    abonent;
-
--- #####################################################################
--- 9. CONCAT - NULL-безопасное объединение строк
--- #####################################################################
-
--- CONCAT(fio, ' имеет телефон ', '8-4912-', phone) - объединяет строки.
--- Отличие от оператора ||: CONCAT игнорирует NULL, не превращая всю строку в NULL.
-SELECT
-    accountcd AS "AccountCDRyazan",
-    CONCAT(fio, ' имеет телефон ', '8-4912-', phone) AS "ФИО+телефон"
-FROM
-    abonent;
-
--- #####################################################################
--- 10. REPEAT - повторение строки
--- #####################################################################
-
--- REPEAT(fio, 2) - повторяет строку fio дважды.
--- Аналог REPLICATE в MS SQL Server.
-SELECT
-    accountcd      AS "AccountCDRyazan",
-    REPEAT(fio, 2) AS "ФИО+телефон"
-FROM
-    abonent;
-
--- #####################################################################
--- 11. Функции изменения регистра: INITCAP, LOWER, UPPER
--- #####################################################################
-
--- INITCAP - преобразует первую букву каждого слова в заглавную,
--- остальные в строчные.
-SELECT
-    streetnm,
-    INITCAP(streetnm)
-FROM
-    street;
-
--- LOWER - преобразует все буквы в строчные (нижний регистр).
-SELECT
-    streetnm,
-    LOWER(streetnm)
-FROM
-    street;
-
--- UPPER - преобразует все буквы в заглавные (верхний регистр).
-SELECT
-    streetnm,
-    UPPER(streetnm)
-FROM
-    street;
-
--- #####################################################################
--- 12. CHR - символ по коду Unicode
--- #####################################################################
-
--- CHR(12354) - возвращает символ с кодом 12354 в Unicode.
--- Это японская хирагана 'あ'.
-SELECT
-    CHR(12354);
-
--- CHR(82) - код 82 соответствует латинской букве 'R'.
-SELECT
-    CHR(82);
-
--- #####################################################################
--- 13. POSITION - поиск подстроки
--- #####################################################################
-
--- POSITION('у' IN fio) - ищет первое вхождение буквы 'у' в строке fio.
--- Возвращает позицию (начиная с 1) или 0, если не найдено.
--- WHERE POSITION(...) = 2 - оставляет только строки, где 'у' на второй позиции.
-SELECT
-    accountcd,
-    fio
-FROM
-    abonent
-WHERE
-    POSITION('у' IN fio) = 2;
-
--- #####################################################################
--- 14. CHAR_LENGTH / BIT_LENGTH - длина в символах и битах
--- #####################################################################
-
--- CHAR_LENGTH - количество символов в строке.
--- BIT_LENGTH - количество бит (в UTF-8: кириллица по 16 бит = 2 байта).
-SELECT
-    servicenm,
-    CHAR_LENGTH(servicenm),
-    BIT_LENGTH(servicenm)
-FROM
-    services;
-
--- #####################################################################
--- 15. Проверка наличия лишних пробелов через TRIM
--- #####################################################################
-
-/*
-   Если значения F1 и F2 совпадают, это означает, что в строке не было лишних
-   пробелов в начале или конце (или тип VARCHAR автоматически их отбросил).
-   Если бы пробелы были, TRIM() удалил бы их, и F2 было бы меньше F1.
+/*В качестве исходной таблицы в Postgresql может использоваться
+  инструкция values
 */
 
--- LENGTH(failurenm) - исходная длина (F1).
--- LENGTH(TRIM(failurenm)) - длина после удаления пробелов (F2).
--- LIMIT 3 - ограничиваем вывод тремя строками.
-SELECT
-    failurenm               AS "FailureNM",
-    LENGTH(failurenm)       AS f1,
-    LENGTH(TRIM(failurenm)) AS f2
-FROM
-    disrepair
-LIMIT 3;
+select
+R.*
+    from (
+        values
+                ('X', 50)
+               ,('Y', 60)
+               ,('X', 60)
+               ,('Y', 80)
 
--- #####################################################################
--- 16. Подсчёт количества вхождений символа
--- #####################################################################
+         ) As R(a,b);
 
--- Способ 1: через REPLACE (удаляем символ, смотрим разницу длин).
--- LENGTH(fio) - исходная длина.
--- LENGTH(REPLACE(fio, 'у', '')) - длина после удаления всех 'у'.
--- Разница = количество удалённых символов 'у'.
-SELECT
-    fio,
-    'у',
-    LENGTH(fio) - LENGTH(REPLACE(fio, 'у', '')) AS count_u
-FROM
-    abonent;
+/*В СУБД Postgresql поддерживается запрос, содержащий только
+  функцию select */
 
--- Способ 2: с использованием CHAR_LENGTH (аналог LENGTH).
-SELECT
-    fio,
-    'у',
-    (CHAR_LENGTH(fio) - CHAR_LENGTH(REPLACE(fio, 'у', ''))) / CHAR_LENGTH('у') AS count_u
-FROM
-    abonent;
+  select 27+5*2-10
 
--- Способ 3: через регулярные выражения (самый гибкий).
--- REGEXP_MATCHES(fio, 'у', 'g') - находит все вхождения 'у' (флаг 'g' = global).
--- COUNT(*) - считает количество найденных совпадений.
--- Подзапрос в SELECT (скалярный) - выполняется для каждой строки.
-SELECT
-    fio,
-    'у',
-    (SELECT COUNT(*) FROM REGEXP_MATCHES(fio, 'у', 'g')) AS count_u
-FROM
-    abonent;
 
--- #####################################################################
--- 17. EXTRACT - извлечение частей даты
--- #####################################################################
+/*Запросы, возвращающие текущие дату и время, могут быть такими*/
 
--- EXTRACT(DAY FROM incomingdate) - число месяца (1-31).
--- EXTRACT(MONTH FROM incomingdate) - номер месяца (1-12).
--- EXTRACT(YEAR FROM incomingdate) - год.
--- EXTRACT(QUARTER FROM incomingdate) - номер квартала (1-4).
--- WHERE EXTRACT(YEAR FROM incomingdate) IS DISTINCT FROM 2021 -
---    отбираем строки, где год не равен 2021 (включая NULL).
-SELECT
-    requestcd,
-    EXTRACT(DAY FROM incomingdate)     AS "IncomingDay",
-    EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth",
-    EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear",
-    EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
-FROM
-    request
-WHERE
-    EXTRACT(YEAR FROM incomingdate) IS DISTINCT FROM 2021;
+select current_timestamp; --текущие дата и время, часовой пояс
+select localtimestamp; --текущие дата и время
+select (current_date - '2026-01-01') -- число дней между датами
 
--- Расширенный пример с TO_CHAR для названия месяца.
--- TO_CHAR(incomingdate, 'Month') - полное название месяца (с пробелами).
-SELECT
-    requestcd,
-    EXTRACT(DAY FROM incomingdate)     AS "IncomingDay_DAY",
-    EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth_MONTH",
-    EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear_YEAR",
-    EXTRACT(DAY FROM incomingdate)     AS "IncomingDay_EXTRACT",
-    EXTRACT(MONTH FROM incomingdate)   AS "IncomingMonth_EXTRACT",
-    TO_CHAR(incomingdate, 'Month')     AS "IncomingMonth_TO_CHAR",
-    EXTRACT(YEAR FROM incomingdate)    AS "IncomingYear_EXTRACT",
-    EXTRACT(QUARTER FROM incomingdate) AS "IncomingQuarter"
-FROM
-    request;
+select distinct localtimestamp
+from abonent;
 
--- #####################################################################
--- 18. Математические функции
--- #####################################################################
-
--- PI() - число π (3.141592653589793).
--- COS(PI()) = -1, SIN(PI()) = 0.
--- POWER(x, y) - x в степени y.
--- cos²(π) + sin²(π) = (-1)² + 0² = 1.
-SELECT
-    POWER(COS(PI()), 2) + POWER(SIN(PI()), 2) AS result;
-
--- PI() - возвращает число π.
-SELECT
-    PI();
-
--- SIN(RADIANS(90)) - синус 90 градусов.
--- RADIANS(градусы) - переводит градусы в радианы (SIN работает с радианами).
-SELECT
-    SIN(RADIANS(90));
-
--- ROUND(число, количество_знаков) - округление до указанной точности.
-SELECT
-    ROUND(123.456, 2);
-
--- RANDOM() - генерирует случайное число в диапазоне [0, 1).
-SELECT
-    RANDOM();
-
--- CEIL - округление вверх (к ближайшему большему целому).
--- FLOOR - округление вниз (к ближайшему меньшему целому).
--- ROUND - округление к ближайшему целому (банковское правило: 0.5 к чётному).
-SELECT
-    paysum,
-    paydate,
-    CEIL(paysum)  AS "вверх",
-    FLOOR(paysum) AS "вниз",
-    ROUND(paysum) AS "ближайшее"
-FROM
-    paysumma;
-
--- #####################################################################
--- 19. CURRENT_TIMESTAMP - текущие дата и время
--- #####################################################################
-
--- s.* - все столбцы из таблицы services.
--- CURRENT_TIMESTAMP - добавляет столбец с текущей датой и временем (с часовым поясом).
-SELECT
-    s.*,
-    CURRENT_TIMESTAMP
-FROM
-    services s;
-
--- #####################################################################
--- 20. Арифметика с датами (INTERVAL)
--- #####################################################################
-
--- incomingdate + INTERVAL '14 days' - прибавляет 14 дней к дате.
-SELECT
-    incomingdate,
-    incomingdate + INTERVAL '14 days' AS "Exec_Limit"
-FROM
-    request
-WHERE
-    failurecd = 1;
-
--- 14 * INTERVAL '1 day' - умножение интервала на число.
-SELECT
-    incomingdate,
-    incomingdate + 14 * INTERVAL '1 day' AS "Exec_Limit"
-FROM
-    request
-WHERE
-    failurecd = 1;
-
--- Различные интервалы: дни, месяцы, годы.
--- Вычитание: incomingdate - INTERVAL '7 days'.
-SELECT
-    incomingdate,
-    incomingdate + INTERVAL '14 days'  AS "плюс_14_дней",
-    incomingdate + INTERVAL '3 months' AS "плюс_3_месяца",
-    incomingdate + INTERVAL '1 year'   AS "плюс_1_год",
-    incomingdate - INTERVAL '7 days'   AS "минус_7_дней"
-FROM
-    request
-WHERE
-    failurecd = 1;
-
--- Интервалы с временем (часы, минуты, секунды).
--- Для DATE результатом будет TIMESTAMP (дата + время).
-SELECT
-    incomingdate,
-    incomingdate + INTERVAL '2 hours'    AS "плюс_2_часа",
-    incomingdate + INTERVAL '30 minutes' AS "плюс_30_минут",
-    incomingdate + INTERVAL '45 seconds' AS "плюс_45_секунд"
-FROM
-    request
-WHERE
-    failurecd = 1;
-
--- Составной интервал: 1 год + 2 месяца + 14 дней.
-SELECT
-    incomingdate,
-    incomingdate + INTERVAL '1 year 2 months 14 days' AS "сложный_интервал"
-FROM
-    request
-WHERE
-    failurecd = 1;
-
--- MAKE_INTERVAL - создаёт интервал из компонентов.
--- days => 14 - именованный аргумент (синтаксис PostgreSQL 9.4+).
-SELECT
-    incomingdate,
-    incomingdate + MAKE_INTERVAL(days => 14) AS "Exec_Limit"
-FROM
-    request
-WHERE
-    failurecd = 1;
-
--- #####################################################################
--- 21. EXTRACT(EPOCH FROM ...) - разница в секундах
--- #####################################################################
-
--- executiondate::TIMESTAMP - приведение DATE к TIMESTAMP.
--- incomingdate::TIMESTAMP - приведение DATE к TIMESTAMP.
--- Вычитание TIMESTAMP даёт INTERVAL.
--- EXTRACT(EPOCH FROM interval) - возвращает количество секунд в интервале.
--- /3600 - переводим секунды в часы.
-SELECT
-    requestcd,
-    incomingdate,
-    executiondate,
-    EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP)) / 3600 AS "Hours",
-    EXTRACT(EPOCH FROM (executiondate::TIMESTAMP - incomingdate::TIMESTAMP))        AS "Seconds"
-FROM
-    request
-WHERE
-    accountcd = '115705';
-
--- #####################################################################
--- 22. DATE_TRUNC - обрезание даты до начала периода
--- #####################################################################
-
--- DATE_TRUNC('YEAR', incomingdate) - начало года (1 января, время 00:00:00).
--- DATE_TRUNC('MONTH', incomingdate) - начало месяца (1 число, время 00:00:00).
--- DATE_TRUNC('DAY', incomingdate) - начало дня (00:00:00).
--- DATE_TRUNC('HOUR', incomingdate) - начало часа (00 минут, 00 секунд).
-SELECT
-    incomingdate,
-    DATE_TRUNC('YEAR', incomingdate)  AS "Начало_года",
-    DATE_TRUNC('MONTH', incomingdate) AS "Начало_месяца",
-    DATE_TRUNC('DAY', incomingdate)   AS "Начало_дня",
-    DATE_TRUNC('HOUR', incomingdate)  AS "Начало_часа"
-FROM
-    request;
-
--- #####################################################################
--- 23. TO_DATE / MAKE_DATE / CAST - создание даты из частей
--- #####################################################################
-
--- DISTINCT - убирает дубликаты строк.
--- '1.' || nachisl_month || '.' || nachisl_year - конкатенация строк.
--- TO_DATE(..., 'DD.MM.YYYY') - преобразует строку в дату по формату.
-SELECT DISTINCT
-    nachisl_month,
-    nachisl_year,
-    TO_DATE('1.' || nachisl_month || '.' || nachisl_year, 'DD.MM.YYYY') AS "FirstDay"
-FROM
-    nachislsumma
-WHERE
-    servicecd = 2;
-
--- MAKE_DATE(год, месяц, день) - создаёт дату из чисел (без строк).
--- Самый безопасный и быстрый способ.
-SELECT DISTINCT
-    nachisl_month,
-    nachisl_year,
-    MAKE_DATE(nachisl_year, nachisl_month, 1) AS "FirstDay"
-FROM
-    nachislsumma
-WHERE
-    servicecd = 2;
-
--- CAST(... AS DATE) - преобразует строку в дату.
--- Требует, чтобы строка была в формате, понятном PostgreSQL (ISO или текущие настройки).
-SELECT DISTINCT
-    nachisl_month,
-    nachisl_year,
-    CAST('1.' || nachisl_month || '.' || nachisl_year AS DATE) AS "FirstDay"
-FROM
-    nachislsumma
-WHERE
-    servicecd = 2;
-
--- #####################################################################
--- 24. CAST - преобразование типов данных
--- #####################################################################
-
--- CAST(accountcd AS INTEGER) - преобразует строку в число.
--- +2 - прибавляет 2 к числовому значению.
--- ВНИМАНИЕ: если в строке не число, будет ошибка.
-SELECT
-    accountcd,
-    (CAST(accountcd AS INTEGER) + 2) AS new_acc,
-    fio
-FROM
-    abonent;
-
--- CAST(nachisl_sum AS INTEGER) - преобразует NUMERIC в INTEGER.
--- Отбрасывает дробную часть (НЕ округляет!).
-SELECT
-    nachisl_sum,
-    nachisl_factcd,
-    CAST(nachisl_sum AS INTEGER) AS "RoundSum"
-FROM
-    nachislsumma
-WHERE
-    accountcd = '115705';
-
--- #####################################################################
--- 25. TO_CHAR для дат - форматированный вывод
--- #####################################################################
-
--- CURRENT_DATE - текущая дата (без времени).
--- TO_CHAR(CURRENT_DATE, 'D') - номер дня недели (воскресенье=1, суббота=7).
--- TO_CHAR(CURRENT_DATE, 'DAY') - полное название дня недели (верхний регистр).
--- TO_CHAR(CURRENT_DATE, 'Day') - полное название дня недели (первая заглавная).
--- TO_CHAR(CURRENT_DATE, 'Q') - номер квартала.
--- TO_CHAR(CURRENT_DATE, 'DD.MM.YYYY') - день.месяц.год.
--- TO_CHAR(CURRENT_DATE, 'FMDD Month YYYY') - без лишних пробелов (FM = Fill Mode).
-SELECT
-            CURRENT_DATE                             AS "Сегодня",
-            TO_CHAR(CURRENT_DATE, 'D')               AS "Номер_дня_недели_1-7",
-            TO_CHAR(CURRENT_DATE, 'DAY')             AS "День_недели_верхний",
-            TO_CHAR(CURRENT_DATE, 'Day')             AS "День_недели_с_заглавной",
-            TO_CHAR(CURRENT_DATE, 'Q')               AS "Квартал",
-            TO_CHAR(CURRENT_DATE, 'DD.MM.YYYY')      AS "Дата_в_формате",
-            TO_CHAR(CURRENT_DATE, 'FMDD Month YYYY') AS "Дата_с_названием_месяца";
-
--- #####################################################################
--- 26. AVG с DISTINCT и без
--- #####################################################################
-
--- AVG(DISTINCT paysum) - среднее арифметическое уникальных значений.
--- AVG(paysum) - среднее арифметическое всех значений (с дубликатами).
-SELECT
-    AVG(DISTINCT paysum),
-    AVG(paysum)
-FROM
-    paysumma;
-
--- #####################################################################
--- 27. FILTER - условная агрегация
--- #####################################################################
-
--- AVG(...) FILTER (WHERE executiondate IS NOT NULL) - среднее только по строкам,
--- где executiondate не равен NULL.
-SELECT
-            AVG(executiondate - incomingdate) FILTER (WHERE executiondate IS NOT NULL)
-FROM
-    request;
-
--- Альтернатива через CASE (работает во всех СУБД).
--- CASE WHEN условие THEN выражение ELSE NULL END - возвращает значение только
--- для строк, удовлетворяющих условию; для остальных NULL.
-SELECT
-    AVG(
-            CASE
-                WHEN executiondate IS NOT NULL
-                    THEN executiondate - incomingdate
-                ELSE NULL
-                END
-    ) AS avg_days
-FROM
-    request;
-
--- Альтернатива через WHERE в подзапросе (самое простое, но не всегда подходит).
-SELECT
-    AVG(executiondate - incomingdate) AS avg_days
-FROM
-    request
-WHERE
-    executiondate IS NOT NULL;
-
--- Несколько FILTER в одном SELECT.
--- AVG(paysum) FILTER (WHERE servicecd = 1) - среднее для услуги 1.
--- SUM(paysum) FILTER (WHERE servicecd = 2) - сумма для услуги 2.
-SELECT
-            AVG(paysum) FILTER (WHERE servicecd = 1) AS avg_service_1,
-            SUM(paysum) FILTER (WHERE servicecd = 2) AS sum_service_2
-FROM
-    paysumma;
-
--- #####################################################################
--- 28. Агрегатные функции SUM, MAX, MIN, COUNT
--- #####################################################################
-
--- SUM(nachisl_sum) - общая сумма всех начислений.
-SELECT
-    SUM(nachisl_sum)
-FROM
-    nachislsumma;
-
--- MAX(paysum) - максимальный платёж, MIN(paysum) - минимальный.
-SELECT
-    MAX(paysum),
-    MIN(paysum)
-FROM
-    paysumma;
-
--- COUNT(*) - количество всех строк в таблице.
-SELECT
-    COUNT(*)
-FROM
-    abonent;
-
--- COUNT(phone) - количество строк, где phone НЕ равен NULL.
-SELECT
-    COUNT(phone)
-FROM
-    abonent;
-
--- COUNT(DISTINCT phone) - количество уникальных телефонных номеров.
-SELECT
-    COUNT(DISTINCT phone)
-FROM
-    abonent;
-
--- Комбинированный агрегатный запрос.
--- COUNT(DISTINCT AccountCD) - уникальные абоненты с заявками.
--- COUNT(*) - все заявки.
--- COUNT(ExecutionDate) - заявки с заполненной датой выполнения (выполненные).
--- COUNT(RequestCD) FILTER (WHERE Executed) - заявки с флагом Executed = TRUE (погашенные).
-SELECT
-    COUNT(DISTINCT AccountCD) AS "Число абонентов с заявками",
-    COUNT(*) AS "Всего заявок",
-    COUNT(ExecutionDate) AS "из них выполнено",
-    COUNT(RequestCD) FILTER (WHERE Executed) AS "погашено"
-FROM
-    Request;
-
--- #####################################################################
--- 29. GREATEST / LEAST - максимум/минимум из списка
--- #####################################################################
-
--- GREATEST(10, 20, 30) - возвращает максимальное значение (30).
--- LEAST(10, 20, 30) - возвращает минимальное значение (10).
-SELECT
-    GREATEST(10, 20, 30) AS max_value,
-    LEAST(10, 20, 30) AS min_value;
+select distinct localtimestamp
+from street
+limit 1;
 
 /*
-   Смысл запроса:
-   Для каждой ремонтной заявки с исполнителем ExecutorCD = 1 выводим:
-   - номер заявки (RequestCD)
-   - дату выполнения (ExecutionDate), но если она раньше 1 января 2020 года,
-     то вместо неё выводим 1 января 2020 года
+FETCH	ВЗЯТЬ / ИЗВЛЕЧЬ / ВЫБРАТЬ
+NEXT	СЛЕДУЮЩИЕ
+1	    ОДНУ
+ROWS	СТРОК(У)
+ONLY	ТОЛЬКО
+
 */
-SELECT
-    requestcd,
-    GREATEST(executiondate, DATE '2020-01-01') AS "MAXVALUE"
-FROM
-    request
-WHERE
-    executorcd = 1;
+select localtimestamp
+from request
+fetch next 1 rows only;
 
--- #####################################################################
--- 30. STRING_AGG - объединение строк в группе
--- #####################################################################
-
--- STRING_AGG(ServiceNM, ',') - объединяет все названия услуг в одну строку
--- через запятую.
-SELECT
-    STRING_AGG(ServiceNM, ',') AS "Список услуг"
-FROM
-    Services;
-
--- С группировкой по ServiceCD.
--- GROUP BY ServiceCD - группирует строки по коду услуги.
--- STRING_AGG собирает названия внутри каждой группы.
-SELECT
-    ServiceCD,
-    STRING_AGG(ServiceNM, ',') AS "Список услуг"
-FROM
-    Services
-GROUP BY
-    ServiceCD;
-
--- STRING_AGG(DISTINCT ServiceNM, ',') - сначала убирает дубликаты,
--- затем объединяет.
-SELECT
-    STRING_AGG(DISTINCT ServiceNM, ',') AS "Список услуг"
-FROM
-    Services;
-
--- #####################################################################
--- 31. CASE - условное выражение в SELECT
--- #####################################################################
-
--- Простой CASE: проверяет булево поле Executed.
--- || - конкатенация строк.
-SELECT
-    RequestCD,
-    ('Номер л/с абонента ' || AccountCD) AS "Ab_Info",
-    ('Код неисправности ' || FailureCD) AS "Failure",
-    CASE
-        WHEN Executed = FALSE THEN 'Не погашена'
-        ELSE 'Погашена'
-        END AS "CASE"
-FROM
-    Request
-WHERE
-    AccountCD = '115705';
-
--- Поисковый CASE: диапазоны дат.
--- paydate < '2019-01-01' - даты до 2019 года.
--- paydate BETWEEN '2019-01-01' AND '2020-12-31' - 2019-2020 годы.
--- ELSE 'Недавно' - все остальные даты.
--- WHERE paysum BETWEEN 530 AND 600 - фильтр по сумме платежа.
-SELECT
-    pay_factcd,
-    accountcd,
-    paysum,
-    CASE
-        WHEN paydate < '2019-01-01'                        THEN 'Давно'
-        WHEN paydate BETWEEN '2019-01-01' AND '2020-12-31' THEN 'Не очень давно'
-        ELSE 'Недавно'
-        END AS "Oplata"
-FROM
-    paysumma
-WHERE
-    paysum BETWEEN 530 AND 600;
-
--- Валидация email через регулярное выражение.
--- :Email - параметр (переменная) в запросе.
--- ~* - оператор регулярного выражения (регистронезависимый).
--- ^ - начало строки, $ - конец строки.
--- [A-Z0-9._%-]+ - один или более допустимых символов до @.
--- @ - символ @.
--- [A-Z0-9._%-]+ - один или более допустимых символов домена.
--- \. - точка (экранированная).
--- [A-Z]{2,} - две или более заглавные буквы (доменная зона).
-SELECT
-    CASE
-        WHEN :Email ~* '^[A-Z0-9._%-]+@[A-Z0-9._%-]+\.[A-Z]{2,}$' THEN 'Есть'
-        ELSE 'Нет'
-        END AS email_valid;
-
--- Вложенный CASE для классификации дней недели.
--- EXTRACT(DOW FROM paydate) - день недели (0=воскресенье, 6=суббота).
--- Внешний CASE: проверяет, рабочий ли день.
--- Внутренний CASE: определяет, суббота или воскресенье.
-SELECT
-    paydate,
-    CASE
-        WHEN EXTRACT(DOW FROM paydate) NOT IN (0, 6)
-            THEN 'Рабочий день'
-        ELSE
-            CASE
-                WHEN EXTRACT(DOW FROM paydate) = 0 THEN 'Воскресенье'
-                ELSE 'Суббота'
-                END
-        END AS day_type
-FROM
-    paysumma;
-
--- #####################################################################
--- 32. Подсчёт через CASE в SUM
--- #####################################################################
-
--- COUNT(*) - общее количество заявок.
--- SUM(CASE WHEN executiondate IS NULL THEN 1 ELSE 0 END) - считаем NULL.
--- SUM(CASE WHEN NOT executed THEN 1 ELSE 0 END) - считаем строки с executed = FALSE.
-SELECT
-    COUNT(*)                                               AS "Всего заявок",
-    SUM(CASE WHEN executiondate IS NULL THEN 1 ELSE 0 END) AS "невыполненных",
-    SUM(CASE WHEN NOT executed THEN 1 ELSE 0 END)          AS "непогашенных"
-FROM
-    request;
-
--- #####################################################################
--- 33. Простой SELECT с фильтром
--- #####################################################################
-
--- Выбираем абонентов с телефоном '556893'.
-SELECT
-    phone
-FROM
-    abonent
-WHERE
-    phone = '556893';
-
--- #####################################################################
--- 34. NULLIF и COALESCE
--- #####################################################################
-
--- NULLIF(Phone, Phone) - возвращает NULL, если Phone = Phone (всегда).
--- Весь столбец превращается в NULL.
-SELECT
-    NULLIF(Phone, Phone)
-FROM
-    Abonent;
-
--- COALESCE(phone, 'Нет телефона') - если phone NULL, возвращает 'Нет телефона'.
-SELECT
-    COALESCE(phone, 'Нет телефона')
-FROM
-    abonent;
-
--- NULLIF(phone, '556893') - возвращает NULL, если phone = '556893',
--- иначе возвращает phone.
-SELECT
-    NULLIF(phone, '556893') AS phone
-FROM
-    abonent;
-
--- #####################################################################
--- 35. NULLIF в WHERE - поиск "нештатных" заявок
--- #####################################################################
-
-/*
-   Запрос находит заявки, которые либо ещё не закрыты (ExecutionDate IS NULL),
-   либо были закрыты в тот же день, когда поступили (ExecutionDate = IncomingDate).
+/*Postgresql поддерживает булев тип данных, примерами запросов
+  на вывод значений логических выражений могут быть такие
 */
-SELECT
-    *
-FROM
-    Request
-WHERE
-    NULLIF(ExecutionDate, IncomingDate) IS NULL;
 
--- #####################################################################
--- 36. CASE в WHERE с приведением типов
--- #####################################################################
+select
+4 = 2 * 2 AS "Равно", --true
+5 = 2 * 2 AS "Не равно"; --false
 
--- accountcd::INTEGER - приводим VARCHAR к INTEGER.
--- ВНИМАНИЕ: если в accountcd не число, будет ошибка.
-SELECT
-    accountcd,
-    servicecd,
-    paysum
-FROM
-    paysumma
-WHERE
-    servicecd =
-    CASE
-        WHEN accountcd::INTEGER = 136169 THEN 1
-        WHEN accountcd::INTEGER = 136160 THEN 3
-        WHEN accountcd::INTEGER = 80270 THEN 4
-        ELSE 2
-        END;
 
--- #####################################################################
--- 37. GROUP BY с агрегатами
--- #####################################################################
+/*Запрос находит заявки, которые были выполнены в тот же день,
+  когда поступили, и при этом были погашены (executed = true).*/
+SELECT requestid,
+       executiondate,
+       incomingdate,
+       executed,
+       incomingdate = executiondate AND executed AS flag
+FROM request;
 
--- GROUP BY nachisl_year - группировка по году.
--- SUM, AVG, MIN, MAX - агрегатные функции по каждой группе.
--- ROUND(AVG(...),2) - округление среднего до 2 знаков.
-SELECT
-    nachisl_year,
-    SUM(nachisl_sum),
-    ROUND(AVG(nachisl_sum),2) AS avg,
-    MIN(nachisl_sum),
-    MAX(nachisl_sum)
-FROM
-    nachislsumma
-GROUP BY
-    nachisl_year;
+select *
+from request
 
--- #####################################################################
--- 38. GROUP BY с псевдонимом
--- #####################################################################
+/*Секция where при построении запроса очень часто возникает необходимость
+  вывести не все строки из таблицы, а только те, данные которых
+  соответствуют определенному условию. Отобрать нужные строки
+  позволяет фильтрация строк, для которой используется секция
+  where.
+  Таким образом применение where является вторым способом ограничения
+  количества строк помимо использования секции ограничения
+  и смещения строк (FETCH NEXT 10 ROWS ONLY)
 
--- nachisl_sum AS "Summa_550" - даём псевдоним столбцу.
--- GROUP BY "Summa_550" - в PostgreSQL можно использовать псевдоним в GROUP BY.
-SELECT
-    nachisl_sum AS "Summa_550",
-    COUNT(*)
-FROM
-    nachislsumma
-WHERE
-    nachisl_sum > 530 AND nachisl_sum < 550
-GROUP BY
-    "Summa_550";
+  Порядок выполнения секций в запросе select не позволяет использовать
+  в условии поиска секции where псевдонимы возвращаемых элементов.
+  Фильтр where выполняется до секции select и AS , поэтому столбец
+  псевдонима фактически не существует на момент выполнения where.
+*/
 
--- #####################################################################
--- 39. Конкатенация с агрегацией
--- #####################################################################
 
--- COUNT(*) || ' - с максимальной суммой ' || MAX(PaySum) - склеиваем
--- количество и максимальную сумму в одну строку.
-SELECT
-    AccountCD,
-    COUNT(*) || ' - с максимальной суммой ' || MAX(PaySum) AS "Pay_Count"
-FROM
-    PaySumma
-GROUP BY
-    AccountCD;
 
--- #####################################################################
--- 40. FETCH NEXT - ограничение строк
--- #####################################################################
+/*Простое сравнение*/
 
--- GROUP BY AccountCD, PayYear - группировка.
--- ORDER BY AccountCD, PayYear - сортировка.
--- FETCH NEXT 10 ROWS ONLY - первые 10 строк (стандартный SQL).
-SELECT
-    AccountCD,
-    PayYear,
-    MIN(PaySum)
-FROM
-    PaySumma
-WHERE
-    PayYear IN (2019, 2020)
-GROUP BY
-    AccountCD,
-    PayYear
-ORDER BY
-    AccountCD,
-    PayYear
-    FETCH NEXT 10 ROWS ONLY;
+select *
+from request
+where executiondate >= '01.01.2025';
 
--- #####################################################################
--- 41. UNION ALL - объединение результатов
--- #####################################################################
+select *,to_date('01.01.2025', 'DD.MM.YYYY') as todate
+from request
+where executiondate >= to_date('01.01.2025', 'DD.MM.YYYY')
 
--- Первый SELECT: абоненты с '080' в счёте.
--- UNION ALL - объединяет результаты без удаления дубликатов.
--- Второй SELECT: абоненты с '443' в счёте.
-SELECT
-    *
-FROM
-    Abonent
-WHERE
-    accountcd LIKE '%080%'
-UNION ALL
-SELECT
-    *
-FROM
-    Abonent
-WHERE
-    accountcd LIKE '%443%';
+/*Преобразует строку '01.01.2025' в дату 2025-01-01
+Что произошло:
+Функция прочитала строку '01.01.2025'
+По формату 'DD.MM.YYYY' поняла:
+DD = день = 01
+MM = месяц = 01
+YYYY = год = 2025
+Собрала это в дату 2025-01-01
 
--- #####################################################################
--- 42. Группировка по вычисляемому выражению
--- #####################################################################
 
--- SUBSTRING(AccountCD FROM 1 FOR 3) - первые 3 символа счёта.
--- Конкатенируем с текстом 'Начало счета '.
--- GROUP BY "Acc_3" - группируем по псевдониму.
-SELECT
-    ('Начало счета ' || SUBSTRING(AccountCD FROM 1 FOR 3)) AS "Acc_3",
-    COUNT(*)
-FROM
-    Abonent
-GROUP BY
-    "Acc_3";
+Следует отметить что строки с неопределенной датой не выводятся
+*/
+select *,to_date('01.01.2025', 'DD.MM.YYYY') as todate
+from request
+where executiondate >= to_date('01.01.2025', 'DD.MM.YYYY')
 
--- #####################################################################
--- 43. CASE в агрегации для категоризации
--- #####################################################################
 
--- CASE WHEN nachisl_year < 2020 THEN 'до 2020 года' ELSE 'после 2019 года' END -
---    разбивает годы на два периода.
--- Конкатенируем с текстом 'В среднем начислено '.
--- GROUP BY "God" - группируем по полученной строке-периоду.
-SELECT
-    'В среднем начислено ' ||
-    (CASE
-         WHEN nachisl_year < 2020 THEN 'до 2020 года'
-         ELSE 'после 2019 года'
-        END) AS "God",
-    AVG(nachisl_sum) AS "Average_Sum"
-FROM
-    nachislsumma
-GROUP BY
-    "God";
+SELECT *
+FROM request
+WHERE executiondate >= '20250101';
 
--- #####################################################################
--- 44. Оконные функции MAX/MIN OVER (сложный случай)
--- #####################################################################
+/*Сравнение строк, учитывающее их расположение в алфавитном порядке
+  Здесь строки сравниваются посимвольно, используя лексикографический
+  порядок*/
 
--- Этот запрос пытается использовать MAX(MAX(paysum)) OVER() -
--- но это синтаксически неверно (вложенные агрегаты).
--- Правильный подход: сначала подзапрос, потом оконная функция.
-SELECT
-    servicecd,
-    MAX(MAX(paysum)) OVER (PARTITION BY servicecd) AS max_avg_paysum,
-    MIN(MIN(paysum)) OVER (PARTITION BY servicecd) AS min_avg_paysum
-FROM
-    paysumma
-GROUP BY
-    servicecd;
+SELECT *
+FROM services
+WHERE servicenm < 'Услуга';
 
--- #####################################################################
--- 45. ROLLUP - многоуровневые итоги
--- #####################################################################
+/*Также при сравнении строк нужно учитывать регистр
+  Например в таблице street названия всех улиц указаны в верхнем
+  регистре. Если попытаться сопоставить нижний регистр, результаты
+  будут отличаться.
+*/
 
--- ROLLUP (AccountCD, ServiceCD, PayYear) создаёт 4 уровня:
---   (AccountCD, ServiceCD, PayYear) - детальные
---   (AccountCD, ServiceCD) - итоги по услуге (все годы)
---   (AccountCD) - итоги по абоненту (все услуги и годы)
---   () - общий итог
-SELECT
-    AccountCD,
-    ServiceCD,
-    PayYear,
-    SUM(PaySum)
-FROM
-    PaySumma
-GROUP BY
-    ROLLUP (AccountCD, ServiceCD, PayYear);
+select *
+from street
+where streetnm = 'Московская улица';
 
--- #####################################################################
--- 46. ROLLUP с GROUPING() - красивые подписи
--- #####################################################################
+select *
+from street
+where streetnm = 'МОСКОВСКАЯ УЛИЦА';
 
--- GROUPING(столбец) = 1 - если строка создана ROLLUP (итоговая).
--- GROUPING(столбец) = 0 - обычная детальная строка.
--- CASE подставляет осмысленные тексты вместо NULL.
-SELECT
-    CASE
-        WHEN GROUPING(AccountCD) = 1 AND GROUPING(ServiceCD) = 1 AND GROUPING(PayYear) = 1
-                                     THEN 'ВСЕГО ПО БАЗЕ'
-        WHEN GROUPING(AccountCD) = 1 THEN 'ИТОГО ПО ВСЕМ АБОНЕНТАМ'
-        WHEN GROUPING(ServiceCD) = 1 THEN 'ИТОГО ПО ВСЕМ УСЛУГАМ'
-        ELSE AccountCD
-        END AS "Абонент",
-    CASE
-        WHEN GROUPING(ServiceCD) = 1 AND GROUPING(PayYear) = 1 AND GROUPING(AccountCD) = 0
-                                     THEN 'ВСЕ УСЛУГИ ЗА ВСЕ ГОДЫ'
-        WHEN GROUPING(ServiceCD) = 1 THEN 'ВСЕ УСЛУГИ'
-        ELSE ServiceCD::TEXT
-        END AS "Услуга",
-    CASE
-        WHEN GROUPING(PayYear) = 1 THEN 'ВСЕ ГОДЫ'
-        ELSE PayYear::TEXT
-        END AS "Год",
-    SUM(PaySum) AS "Сумма"
-FROM
-    PaySumma
-GROUP BY
-    ROLLUP (AccountCD, ServiceCD, PayYear)
-ORDER BY
-    AccountCD,
-    ServiceCD,
-    PayYear;
+/*Условие в секции where вообще не обязательно должно велючать какие-либо
+  столбцы в таблице. Например, допустимым являются следующие:
+*/
 
--- #####################################################################
--- 47. HAVING - фильтрация групп
--- #####################################################################
+/*Возврат всех строк, такие условия полезны для тестирования
+  самого условия, а не для получения фактических результатов*/
+SELECT *
+FROM abonent
+WHERE 'a' = 'a';
 
--- GROUP BY accountcd - группируем заявки по абоненту.
--- COUNT(*) - количество заявок в группе.
--- MIN(incomingdate) - дата первой заявки.
--- HAVING COUNT(*) > 2 - оставляем только абонентов с >2 заявками.
-SELECT
-    accountcd,
-    COUNT(*),
-    MIN(incomingdate)
-FROM
-    request
-GROUP BY
-    accountcd
-HAVING
-    COUNT(*) > 2;
+/*Не вернется ни одной строки, потому ка условие не является истинным*/
+SELECT *
+FROM abonent
+WHERE 1 = 0;
 
--- Сложное условие HAVING.
--- MAX(CASE WHEN servicecd = 2 THEN paysum ELSE NULL END) - максимальный платёж
--- по услуге 2 для данного абонента.
--- Если этот максимум > 600 ИЛИ по услуге 4 > 300 - абонент подходит.
--- Выводятся ВСЕ группы (все услуги) этого абонента.
-SELECT
-    accountcd,
-    servicecd,
-    MAX(paysum)
-FROM
-    paysumma p
-GROUP BY
-    p.accountcd,
-    p.servicecd
-HAVING
-    (MAX(CASE WHEN servicecd = 2 THEN p.paysum ELSE NULL END) > 600
-        OR MAX(CASE WHEN servicecd = 4 THEN p.paysum ELSE NULL END) > 300);
+/*При определении условий поиска не обходимо помнить об обработки
+  null, в результаты запроса попадают только те строки, для которых условие
+  поиска имеет значение true
+  1.Применение not к null возвращает в качестве результата unknown
+  2.Если сравнение истинно, то результаты имеет значение true
+  3.Если сравнение ложно то результат проверки имеет значение false
+  4.Если хотя бы одно значение из двух сравниваемых значений установлено в null,
+  то результатом будет unknown
 
--- #####################################################################
--- 48. HAVING без GROUP BY
--- #####################################################################
+  В следующем запросе результат будет неполным, потому как имеются
+  значения null
+  */
 
--- Если нет GROUP BY, вся таблица считается одной группой.
--- HAVING фильтрует эту единственную группу.
--- Выполнится, если максимальная дата > '31.08.2019'.
-SELECT
-    MAX(IncomingDate)
-FROM
-    Request
-HAVING
-    MAX(IncomingDate) > '31.08.2019';
+select *
+from request
+where incomingdate <> executiondate;
 
--- #####################################################################
--- 49. GROUP BY с сортировкой по агрегатам
--- #####################################################################
+/*Проверка на логическое значение
+  При работе с СУБД может возникнуть необходимость выполнить проверку
+  значения логического выражения на соответствие одному из значений
+  техзначной логики (true, false, unknown)
 
--- GROUP BY ServiceCD - группировка по услуге.
--- ORDER BY COUNT(ServiceCD) DESC, AVG(PaySum) - сначала по убыванию количества,
--- затем по возрастанию средней суммы.
-SELECT
-    ServiceCD,
-    COUNT(ServiceCD),
-    AVG(PaySum)
-FROM
-    PaySumma
-GROUP BY
-    ServiceCD
-ORDER BY
-    COUNT(ServiceCD) DESC,
-    AVG(PaySum);
+  Например, для вывода номеров лицевых счетов абонентов и дат подачи ими
+  непогашенных ремонтных заявок можно использовать такие запроосы:
+*/
 
--- #####################################################################
--- 50. LIKE и ORDER BY с NULLS FIRST
--- #####################################################################
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed IS FALSE;
 
--- LIKE '08%' - счёт начинается с '08'.
--- OR LIKE '11%' - или с '11'.
--- ORDER BY ExecutionDate DESC NULLS FIRST - сортировка по дате выполнения
--- от новых к старым, но NULL (невыполненные) в начало списка.
-SELECT
-    RequestCD,
-    ExecutionDate,
-    AccountCD
-FROM
-    Request
-WHERE
-    (AccountCD LIKE '08%') OR (AccountCD LIKE '11%')
-ORDER BY
-    ExecutionDate DESC NULLS FIRST;
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed = 'FALSE';
 
--- #####################################################################
--- 51. CASE в ORDER BY - кастомная сортировка
--- #####################################################################
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed = 'NO';
 
--- CASE ServiceCD WHEN 3 THEN 1 ... - задаём числовой приоритет для услуг.
--- Услуга 3 получает приоритет 1 (первая), услуга 1 → 2, услуга 2 → 3,
--- услуга 4 → 4, остальные → 5.
--- ORDER BY по этому приоритету.
-SELECT
-    AccountCD,
-    ServiceCD,
-    PaySum
-FROM
-    PaySumma
-ORDER BY
-    CASE ServiceCD
-        WHEN 3 THEN 1
-        WHEN 1 THEN 2
-        WHEN 2 THEN 3
-        WHEN 4 THEN 4
-        ELSE 5
-        END;
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed = 'OFF';
 
--- Сортировка по приоритету статуса заявки.
--- 1: не выполнена (Executed = FALSE AND ExecutionDate IS NULL)
--- 2: выполнена, но не погашена (Executed = FALSE AND ExecutionDate IS NOT NULL)
--- 3: выполнена и погашена (Executed = TRUE)
--- 4: остальные (например, NULL)
-SELECT
-    RequestCD,
-    ExecutionDate,
-    Executed,
-    AccountCD
-FROM
-    Request
-ORDER BY
-    CASE
-        WHEN Executed = FALSE AND ExecutionDate IS NULL THEN 1
-        WHEN Executed = FALSE AND ExecutionDate IS NOT NULL THEN 2
-        WHEN Executed = TRUE THEN 3
-        ELSE 4
-        END;
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed = '0';
 
--- #####################################################################
--- 52. Приведение типов в ORDER BY
--- #####################################################################
 
--- Все ветки CASE должны возвращать значения одного типа.
--- PaySum имеет тип NUMERIC, PayDate - DATE, accountcd - VARCHAR.
--- Приводим всё к TEXT, чтобы избежать ошибки.
-SELECT
-    AccountCD,
-    ServiceCD,
-    PaySum,
-    PayDate
-FROM
-    PaySumma
-ORDER BY
-    CASE
-        WHEN ServiceCD = 1 THEN PaySum::TEXT
-        WHEN ServiceCD = 2 THEN PayDate::TEXT
-        WHEN ServiceCD = 3 THEN accountcd::TEXT
-        ELSE PaySum::TEXT
-        END;
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed != '1';
+
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE not executed;
+
+/*А для погашенных заявок*/
+
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed IS TRUE ;
+
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed = 'YES';
+
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed = '1';
+
+SELECT accountid, incomingdate,executed
+FROM request
+WHERE executed != '0';
+
+/*Проверка на принадлежность диапазону значений
+  Меньшее из двух значений всегда должно быть записано первым
+границы включительно*/
+
+SELECT accountid, nachislsum
+FROM nachislsumma
+WHERE nachislsum BETWEEN 60 AND 200.13;
+
+/*Инвертированная проверка на принадлежность
+*/
+SELECT accountid, nachislsum
+FROM nachislsumma
+WHERE nachislsum NOT BETWEEN 60 AND 200.13;
+
+/*Не рекомендуется использовать с датами в которых содержится дата и время
+  -- Хотим найти все платежи за 15 марта 2025 года
+SELECT * FROM paysumma
+WHERE paydate BETWEEN '2025-03-15' AND '2025-03-15';
+
+  Что происходит на самом деле
+Когда вы пишете '15.03.2025', компьютер понимает
+это как 15 марта 2025 года в 00:00:00 (полночь, самое начало суток).
+
+Ваш запрос становится таким WHERE paydate >= '15.03.2025 00:00:00'   -- от начала суток
+  AND paydate <= '15.03.2025 00:00:00'   -- до начала суток
+
+Получается: ищем записи, которые одновременно и больше или равны полуночи,
+и меньше или равны полуночи.
+
+
+15 марта 2025 года
+│
+├── 00:00 (полночь) ← сюда BETWEEN попадает
+├── 01:00
+├── 02:00
+├── ...
+├── 10:30
+├── 12:00
+├── 15:00
+├── 18:45
+├── 23:59
+└── 24:00 (следующая полночь)
+
+BETWEEN берёт только точку ровно в 00:00.
+А ваши платежи были в 10:30, 15:00, 18:45 — они НЕ попадают в результат.
+
+Что делать?
+Используйте не BETWEEN, а вот такую конструкцию:
+SELECT * FROM paysumma
+WHERE paydate >= '15.03.2025'      -- от начала суток
+  AND paydate < '16.03.2025';      -- до начала следующих суток
+
+BETWEEN с датами не рекомендуют, потому что он не захватывает весь день — только полночь.
+Вместо этого пишите >= начало дня AND < следующий день.
+*/
+
+
+/*Проверка like на соответствие шаблону
+Оператор	Чувствительность к регистру	Что ищет
+LIKE	✅ Чувствителен	Ищет точно с учётом заглавных и строчных букв
+ILIKE	❌ Не чувствителен	Ищет без учёта регистра
+%	Любое количество любых символов	'С%' — начинается с С
+_	Один любой символ	'С_' — С + один символ
+\%	Поиск символа % (экранирование)	'100\%'
+\_	Поиск символа _ (экранирование)	'A\_B'
+  */
+
+SELECT fio
+FROM abonent
+WHERE fio LIKE 'С%';
+
+SELECT fio
+FROM abonent
+WHERE fio ILIKE 'с%';
+
+SELECT *
+FROM abonent
+WHERE fio LIKE 'Т__у%'; --Тулупова М. И.
+
+/*fio имеет тип varchar(30) из чего следует что пробелы в конце строки
+  отрезаются автоматически, можно сделать вывод что в конце слова можно
+  было применить шаблон 'Шлык_ов М.К.' без знака процента в конце
+Однако если столбец имеет тип CHAR(n)? использование знака процента в конце
+  строки шаблона необходимо для того, чтобы строки с такими столбцами
+  дополненными справа пробелами до общего количества символов n были
+  включены в результат выполнения запроса*/
+
+select *
+from abonent
+where fio like '%ина%' and phone like '25%';
+
+select fio
+from abonent
+where fio like '\%%';
+
+select fio
+from abonent
+where fio like '$%%' ESCAPE '$';
+
+/*Проверка на членство во множестве*/
+
+-- Вместо SELECT * берите только нужные столбцы
+SELECT failureid, failurenm
+FROM disrepair
+WHERE failureid IN (1, 5, 12);
+
+-- Создаём покрывающий индекс
+CREATE INDEX idx_disrepair_covering
+    ON disrepair (failureid, failurenm);
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM disrepair
+WHERE failureid = 12
+   OR failureid = 1
+   OR failureid = 5;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM disrepair
+WHERE failureid IN (1, 5, 12);
+
+/*С помощью not in можно убедиться в том, что значение данных не является
+членом заданного множества
+Если результатом проверяемого выражения является null,
+то проверка in также возвращает null
+Все значения в списке заданных значений должны иметь один и тот же тип дпнных,
+который должен быть сравним с типом данных проверяемого выражения
+При работе со строковыми данными значения с пи ске in необходимо заключать
+в одинарные кавычки и как следствие требуется учитывать регистр букв.
+*/
+
+
+/*Проверка null обеспечивает возможность применения трехзначной логики у словиях
+поиска
+Null никогда не равен ничему и даже другому null
+Однако несмотря на это в СУБД реализуется только двухзначная логика
+Поэтому условие с null должно интерпретироваться либо как true
+либо как false
+Часто необходимо явно проверять згначения столбцов на null и непосредственно обрабатывать
+их, для выявления имеется специальная проверка is null работающая с любым типом данных
+
+
+Необходимо вывести номера лицевых счетов абонентов и даты подачи ими заявок, по
+  которым не выполнены ремонтные работы, то есть столбце executiondate равен null.
+Что делает IS NOT NULL
+executiondate IS NOT NULL — это логическая проверка, которая возвращает:
+Значение executiondate
+Результат проверки
+Есть дата (не NULL)	true
+Нет даты (NULL)	false
+*/
+
+SELECT accountid, incomingdate, executiondate
+FROM request
+WHERE executiondate IS NULL;
+
+/*Пример запроса с логическим выражением, признак выполнения заявки*/
+SELECT accountid, incomingdate, executiondate, executiondate IS NOT NULL AS "Выполнена?"
+FROM request
+
+/*Предикаты like, between, in а также <,>, =, != не позволяют обнаружить null*/
+
+
+/*Проверка двух значений на отличие
+  is [not] distinct from <значение1>
+  Предикат distinct аналогичен предикату равенства с тем лишь различием, что считает
+  два признака null не различающимися (возвращает true если оба значения не определены)
+  Поскольку предикат distinct считакт, что два признака null не различаются, то он никогда
+  не возвращает неизвестное значение
+  он возвращает либо truе или false.
+  */
+
+select null is distinct from null; --false
+select null is not distinct from null; --true
+select 1 is not distinct from 1; --true
+select 1 is  distinct from 1; --false
+
+/*Вывести все данные по ремонтным заявкам у которых дата
+  регистрации отличается от даты выполнения, можно следующим запросом
+  IS DISTINCT FROM — это NULL-безопасное сравнение. Оно работает так:
+Значение 1	Значение 2	=	IS DISTINCT FROM
+2023-01-01	2023-01-01	TRUE	FALSE (не отличаются)
+2023-01-01	2023-01-15	FALSE	TRUE (отличаются)
+2023-01-01	    NULL	NULL	TRUE (отличаются)
+NULL	    2023-01-01	NULL	TRUE (отличаются)
+NULL	        NULL	NULL	FALSE (не отличаются)
+
+-- Обычное сравнение <> (НЕ работает с NULL)
+WHERE incomingdate <> executiondate
+-- Результат: NULL не попадают (сравнение с NULL даёт NULL)
+-- NULL-безопасное сравнение (работает с NULL)
+WHERE incomingdate IS DISTINCT FROM executiondate
+-- Результат: NULL считаются отличными от любой даты
+
+Построчный разбор ваших данных
+requestid	incomingdate	executiondate	<>	IS DISTINCT FROM	Попадает?
+1	2023-12-17	2023-12-20	TRUE	TRUE	✅ ДА
+2	2023-08-07	2023-08-12	TRUE	TRUE	✅ ДА
+3	2024-02-28	2024-03-08	TRUE	TRUE	✅ ДА
+5	2023-12-31	   NULL	    NULL	TRUE	✅ ДА
+6	2023-06-16	2023-06-24	TRUE	TRUE	✅ ДА
+7	2024-10-20	2024-10-24	TRUE	TRUE	✅ ДА
+9	2023-11-06	2023-11-08	TRUE	TRUE	✅ ДА
+10	2023-04-01	2023-04-03	TRUE	TRUE	✅ ДА
+11	2025-01-12	2025-01-12	FALSE	FALSE	❌ НЕТ
+12	2023-08-08	2023-08-10	TRUE	TRUE	✅ ДА
+13	2022-09-04	2022-12-05	TRUE	TRUE	✅ ДА
+14	2025-04-04	2025-04-13	TRUE	TRUE	✅ ДА
+15	2022-09-20	2022-09-23	TRUE	TRUE	✅ ДА
+16	2023-12-28	NULL	    NULL	TRUE	✅ ДА
+17	2023-08-15	2023-09-06	TRUE	TRUE	✅ ДА
+18	2024-12-28	2025-01-04	TRUE	TRUE	✅ ДА
+19	2023-12-17	2023-12-27	TRUE	TRUE	✅ ДА
+20	2023-10-11	2023-10-11	FALSE	FALSE	❌ НЕТ
+21	2023-09-13	2023-09-14	TRUE	TRUE	✅ ДА
+22	2023-05-18	2023-05-25	TRUE	TRUE	✅ ДА
+23	2023-05-07	2023-05-08	TRUE	TRUE	✅ ДА
+
+*/
+
+select *
+from request
+where incomingdate is distinct from executiondate;
+/* Не попадут строки
+incomingdate | executiondate
+2023-10-11   |2023-10-11
+2025-01-12   |2025-01-12
+*/
+
+
+/*Проверка на соответствие регулярному выражению
+  Если один из операндов имеет null, то и результат
+  будет null */
+
+SELECT * FROM Abonent WHERE Fio ~'^[МШ].*к*В.$';
+
+SELECT * FROM Abonent WHERE Fio ~'^[М|Ш].*к*В.$';
+
+/*Исключить ремонтные заявки, зарегистрированные в 2023 году, можно таким образом:*/
+
+SELECT * FROM Request WHERE Incomingdate::TEXT != '^2023';
+
+SELECT * FROM Request
+WHERE Incomingdate::TEXT NOT SIMILAR TO '2023 %';
+
+/*Регулярные выражения, помимо использования в секции WHERE, могут применяться в ограничении
+CHECK запросов на создание домена и таблицы БД (см. лекц. 6.1) и в логическом
+условии оператора ветвления IF.
+Также в PostgreSQL регулярные выражения могут
+использоваться в качестве аргументов функции SUBSTRING
+*/
+
+/*Составные условия поиска*/
+SELECT *
+FROM paysumma
+WHERE (paydate > '13.06.2025' AND paysum > 120)
+   OR (paydate < '01.01.2024' AND accountid = '005488');
+
+SELECT *
+FROM Paysumma
+WHERE Accountid = '005488' AND Payyear = 2025;
+
+SELECT *
+FROM Paysumma
+WHERE (Accountid, Payyear) = ('005488', 2025);
+
+/*Например, требуется вывести всю информацию о ремонтных заявках,
+дата выполнения которых отличается от 20.12.2023. Запрос
+выдаст неверный результат.
+В него не попадут данные о невыполненных заявках.*/
+
+SELECT *
+FROM Request
+WHERE Executiondate != '2023.12.20';
+
+/*Добавив проверку на NULL:*/
+
+SELECT *
+FROM Request
+WHERE Executiondate != '2023.12.20' OR Executiondate IS NULL;
+
+/*или применив проверку на отличие:
+Таблица истинности
+Executiondate	IS DISTINCT FROM '20.12.2023'	       Результат
+20.12.2023	    FALSE (не отличается)	               ❌ НЕ попадает
+21.12.2023	    TRUE (отличается)	                   ✅ Попадает
+19.12.2023	    TRUE (отличается)	                   ✅ Попадает
+NULL	        TRUE (NULL отличается от любой даты)   ✅ Попадает
+*/
+
+SELECT *
+FROM Request
+WHERE Executiondate IS DISTINCT FROM '20.12.2023';
+
+/*Функции для обработки данных скалярные функции
+Встроенными (системными) являются функции, предопределенные
+в диалекте языка SQL конкретной СУБД.
+В SQL определено множество встроенных функций различных категорий.
+Эти функции делятся на следующие основные группы:
+-скалярные функции - обрабатывают входные данные и возвращаю одно значение
+-функции, возвращающие множество;
+-агрегатные функции;
+-условные выражения и функции;
+-функции полнотекстового поиска;
+-оконные (аналитические) функции.
+
+Для вызова функции необходимо указать ее имя и перечислить список аргументов
+в скобках через запятую
+*/
+
+select *
+from pg_proc;
+
+/*Скалярные функции
+  подразделяются на строковые математические, функции даты и времени, функции преобразования
+  типов и форматирования данных
+*/
+
+select accountid, substring(fio from 1 for 3) as "Fio3"
+from abonent;
+
+select accountid, substr(fio, 1,3) as "Fio3"
+from abonent;
+
+/*Функции left и right используются для выделения нужного
+  количества символов соотвественно из начала или конца
+  определенной строки
+*/
+
+SELECT fio,
+       LEFT(accountid, 5),
+       RIGHT(accountid, 5),
+       accountid
+FROM abonent
+WHERE streetid = 3;
+
+/*131 страница*/
