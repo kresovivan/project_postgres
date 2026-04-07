@@ -1024,11 +1024,14 @@ from pg_proc;
   типов и форматирования данных
 */
 
-select accountid, substring(fio from 1 for 3) as "Fio3"
-from abonent;
+SELECT accountid, SUBSTRING(fio FROM 1 FOR 3) AS "Fio3"
+FROM abonent;
 
-select accountid, substr(fio, 1,3) as "Fio3"
-from abonent;
+SELECT accountid, SUBSTR(fio, 1, 3) AS "Fio3"
+FROM abonent;
+
+SELECT SUBSTRING(fio, 1, 3) AS "Fio3"
+FROM abonent;
 
 /*Функции left и right используются для выделения нужного
   количества символов соотвественно из начала или конца
@@ -1042,4 +1045,868 @@ SELECT fio,
 FROM abonent
 WHERE streetid = 3;
 
-/*131 страница*/
+
+/*Существует ряд функций для замены исходной строки
+  на другую последовательность символов
+  Функция overlay заменяет в исходной строке подстроку, начинающуюся с номера,
+  позиция, и имеющую размер длина, на значение строка_для_замены
+*/
+
+select overlay(phone placing '66' from 1), phone --666893|556893
+from abonent;
+
+/*Функция replace заменяет все вхождения подстрока в сровое_выражение
+  на указанную строка_для_замены*/
+
+SELECT replace(failurenm,'плиты', 'газовой плиты'),failurenm
+FROM disrepair
+where replace(failurenm,'плиты', 'газовой плиты') != failurenm
+
+
+
+/*Убрать пробелы из начала и конца строки
+  Также можно удалять символы из начала и конца строки, из конца строки, наибольшую
+  подстроку из начала строки
+
+  leading - удалить указанную наибольшую подстроку их начала строки.
+  trailing - из конца строки.
+  both - из начала и конца строки.
+  Если удаляемая строка не определена, то по умолчанию определяется пробел
+*/
+
+/*Убрать слово улица из названия улицы*/
+select streetid,
+       trim(TRAILING 'УЛИЦА' FROM streetnm) as Str_Name,
+       streetnm
+from street;
+
+/*Убрать ведущий ноль слева*/
+SELECT streetid, TRIM(LEADING '0' FROM accountid) AS accountid, fio
+FROM abonent;
+
+
+/*Вывод: RTRIM сработал одинаково, потому что оба аргумента задают один и тот
+  же набор символов (просто в разном порядке). Для удаления целого слова
+  RTRIM не подходит.
+*/
+select streetid,
+       rtrim(streetnm, 'УЛИЦА') as Str_Name,
+       streetnm
+from street;
+
+select streetid,
+       rtrim(streetnm, 'АИЛЦУ') as Str_Name,
+       streetnm
+from street;
+
+
+/*LPAD и RPAD дополняют строки указанной последовательность симвлов
+  до заданного размера длина*/
+
+
+SELECT accountid, RPAD(fio, 20, '*')
+FROM abonent;
+
+/*Для объединения двух или более строковых значений можно использовать функцию
+  concat
+*/
+
+SELECT accountid                                        AS accointidryazan,
+       CONCAT(fio, ' имеет телефон ', '8-4912-', phone) AS fiotelephone
+FROM abonent;
+
+/*concat_ws - объединение строк через разделитель*/
+
+SELECT accountid                                        AS accointidryazan,
+       CONCAT_WS(' / ',fio, ' имеет телефон ', '8-4912-', phone) AS fiotelephone
+FROM abonent;
+
+
+/*Функция repeat повторяет значение строки указанное количество раз*/
+
+SELECT REPEAT('SQL', 3);
+
+/*Функция вывода строки в обратной последовательонсти */
+
+SELECT *,SUBSTR(REVERSE(fio), 1, 5), REVERSE('Е. В.')
+FROM abonent
+WHERE SUBSTR(REVERSE(fio), 1, 5) = REVERSE('Е. В.');
+
+
+/*Перевод строки в зашлавные буквы*/
+
+select *
+from abonent
+where upper(fio)='ШМАКОВ С. В.';
+
+/*Преобразование строки в нижний регистр букв*/
+
+select *
+from abonent
+where lower(fio)='шмаков с. в.';
+
+/*initcap - каждая первая буква слова превращается в заглавную*/
+
+select initcap(streetnm) ---Циолковского Улица
+from street;
+
+
+/*Для определения функции первого вхождения заданной подcтроки
+  в строку можно использовать функцию position
+  Например вывести всех абонентов у которых в фамилии вторая
+  бука "у".
+*/
+
+SELECT accountid, fio
+FROM abonent
+WHERE POSITION('у' IN fio) = 2
+
+/*Найти позицию слова select в строке inwert update delete =
+  select merge@create можно следющим образом*/
+
+SELECT POSITION('select' IN 'insert, update; delete = select merge@create') AS position;
+
+--strpos(строка, подстрока)
+
+SELECT STRPOS(fio, 'к'), fio
+FROM abonent;
+
+
+/*Функция для определения размера строки
+  bit_length - в битах
+  octet_length - в байтах
+  char_length в символах
+
+Проверить что тип varchar предусматривает автоматическое отбрасование символов
+  пробела можно с помощью данного запроса
+*/
+
+SELECT failurenm,
+       CHAR_LENGTH(failurenm)  AS f1,
+       LENGTH(TRIM(failurenm)) AS f2
+FROM disrepair;
+
+
+/*Рассмотрим пример запроса, который позволяет подсчитать,
+  сколько раз сивол или подстрока встречается в заданной строке,
+  для подсчета количества букв "и" в ФИО абонентов можно использовать
+  такой запрос
+
+В этом запросе при вычитании из длины строки длины строки без подстроки получаетя разгница,
+  которая соответствует количеству букв "И" в ФИО*/
+
+SELECT fio, 'и', (LENGTH(fio) - LENGTH(REPLACE(fio, 'и', ''))) / LENGTH('и')
+FROM abonent;
+
+/*аналог вычисления с  regexp_count*/
+select fio, 'и', regexp_count(Fio,'и')
+from abonent;
+
+/*Для нахождения позиций первой и последней буквы "и" можно применить
+  функцию регулярных выражений*/
+
+SELECT fio,
+       REGEXP_INSTR(fio, 'и') AS first_position,
+       LENGTH(fio) - REGEXP_INSTR(REVERSE(fio), 'и') + 1
+                              AS last_position
+
+FROM abonent
+WHERE REGEXP_INSTR(fio, 'и') > 0;
+
+/*Запрос, выводящий позицию последней буквы «и» в фамилии абонентов, может быть таким:
+  */
+SELECT fio,
+       LENGTH(fio) + 1 - POSITION('и' IN REVERSE(fio)) "Позиция и"
+FROM abonent
+WHERE LENGTH(fio) + 1 - POSITION('и' IN REVERSE(fio)) <= LENGTH(fio);
+
+/*Функции для работы с датой и временем
+  функция extract используется для извлечения
+  различных частей даты и времени
+
+  можно извлекать век, квартал, год, месяц, номер недели,
+  день недели, дня, часа, минуты, секунды и имеет формат
+  numeric.
+*/
+
+SELECT
+    Requestid,
+    Incomingdate,
+    -- Основные
+    EXTRACT(DAY FROM Incomingdate) AS "Day",
+    EXTRACT(MONTH FROM Incomingdate) AS "Month",
+    EXTRACT(YEAR FROM Incomingdate) AS "Year",
+    -- Дни
+    EXTRACT(DOW FROM Incomingdate) AS "DOW",
+    EXTRACT(ISODOW FROM Incomingdate) AS "ISODOW",
+    EXTRACT(DOY FROM Incomingdate) AS "DOY",
+    -- Недели и кварталы
+    EXTRACT(WEEK FROM Incomingdate) AS "Week",
+    EXTRACT(QUARTER FROM Incomingdate) AS "Quarter",
+    -- Десятилетия, века, тысячелетия
+    EXTRACT(DECADE FROM Incomingdate) AS "Decade",
+    EXTRACT(CENTURY FROM Incomingdate) AS "Century",
+    EXTRACT(MILLENNIUM FROM Incomingdate) AS "Millennium",
+    -- Время (приводим к TIMESTAMP)
+    EXTRACT(HOUR FROM Incomingdate::TIMESTAMP) AS "Hour",        -- всегда 0
+    EXTRACT(MINUTE FROM Incomingdate::TIMESTAMP) AS "Minute",    -- всегда 0
+    EXTRACT(SECOND FROM Incomingdate::TIMESTAMP) AS "Second",    -- всегда 0
+    EXTRACT(EPOCH FROM Incomingdate::TIMESTAMP) AS "Epoch"
+FROM Request
+WHERE EXTRACT(YEAR FROM Incomingdate) <> 2025;
+
+
+/*Например, требуется вывести даты регистрации ремонтных
+  заявок с кодом неисправности, равным 1, и даты через 14
+  дней после их регистрации
+  Запрос будет выглядеть следующим образом:*/
+SELECT Incomingdate,
+       DATE(Incomingdate + 14) AS "Exec_Limit"
+FROM Request
+WHERE Failureid = 1;
+
+
+SELECT Incomingdate,
+       DATE(Incomingdate + INTERVAL '14 DAY') AS "Exec_Limit"
+FROM Request WHERE Failureid = 1;
+
+/*Найти и обрезать переданное значение*/
+
+SELECT DATE_TRUNC('HOUR', CURRENT_TIMESTAMP); -- время до часа
+
+SELECT COUNT(Paysum) -- количество платежей в месяце 3 года назад
+FROM Paysumma
+WHERE DATE_TRUNC('MONTH', Paydate)= DATE_TRUNC('MONTH', NOW() - INTERVAL '3 YEAR');
+
+SELECT Incomingdate, Incomingdate + 14 AS "Exec_Limit"
+FROM Request
+WHERE Failureid = 1;
+
+/*Функция age используется для вычисления разницы
+  в годах месяцах и днях
+*/
+
+
+SELECT Requestid, (executiondate - Incomingdate) AS "Interval"
+FROM Request
+WHERE Accountid = '115705';
+
+
+SELECT Requestid, AGE(executiondate , Incomingdate)
+    AS "Interval"
+FROM Request WHERE Accountid = '115705';
+
+/*Явное преобразование типов*/
+
+select *,CAST('yesterday' as date)
+from paysumma
+where paydate < CAST('yesterday' as date);--явное преобразование
+
+SELECT distinct nachislmonth, nachislyear,
+                cast('1.' || nachislmonth || '.' || nachislyear as date) as "firstday"
+FROM nachislsumma
+WHERE serviceid = 2;
+
+SELECT DISTINCT nachislmonth,
+                nachislyear,
+                CAST(CONCAT('1.', nachislmonth, '.', nachislyear) AS DATE) AS "firstday"
+FROM nachislsumma
+WHERE serviceid = 2;
+
+/*Можно преобразовывать числовые типы в строку и наоборот,
+  такие преобразования необходимы когда значения, которые должны
+  быть целыми, получаются из строки, а затем к ним нужно применить математические
+  или агрегатные функции
+*/
+
+
+/*144 страница*/
+
+SELECT nachislfactid, nachislsum,
+       CAST(nachislsum AS INTEGER) AS "RoundSum"
+FROM nachislsumma
+WHERE Accountid='115705';
+
+SELECT
+    CAST(1.5 AS INTEGER) AS cast_result,    -- 2
+    ROUND(1.5, 0) AS round_result;          -- 2
+
+/*Операция преобразования типов
+  ::DATE*/
+
+SELECT distinct nachislmonth, nachislyear,
+                ('1.' || nachislmonth || '.' || nachislyear)::DATE as "firstday"
+FROM nachislsumma
+WHERE serviceid = 2;
+
+/*Рассмотрим популярные функции
+  to_char, to_date, to_number
+*/
+
+
+SELECT
+    Requestid,
+    Incomingdate,
+    TO_CHAR(Incomingdate, 'DD.MM.YYYY') AS "Дата_российская",
+    TO_CHAR(Incomingdate, 'YYYY-MM-DD') AS "Дата_ISO",
+    TO_CHAR(Incomingdate, 'DD Month YYYY') AS "Дата_прописью",
+    TO_CHAR(Incomingdate, 'Day, DD.MM.YYYY') AS "Дата_с_днем_недели",
+    TO_CHAR(Incomingdate, 'HH24:MI:SS') AS "Время"
+FROM Request
+WHERE Requestid <= 5;
+
+SELECT
+    TO_DATE('25.12.2025', 'DD.MM.YYYY') AS "Дата1",
+    TO_DATE('2025-12-25', 'YYYY-MM-DD') AS "Дата2",
+    TO_DATE('25 December 2025', 'DD Month YYYY') AS "Дата3";
+
+SELECT DISTINCT
+    nachislmonth,
+    nachislyear,
+    TO_DATE(CONCAT_WS('.', '01', nachislmonth, nachislyear), 'DD.MM.YYYY') AS "firstday"
+FROM nachislsumma
+WHERE serviceid = 2;
+
+SELECT
+    TO_NUMBER('1,234.56', '9,999.99') AS "Число1",
+    TO_NUMBER('1 234,56', '9,999D99') AS "Число2",
+    TO_NUMBER('$1,234.56', 'L9,999.99') AS "Число3";
+
+
+/*Функцию to_char удобно использщовать для выделения
+  из текущей даты однозначного номера дня недели*/
+select to_char(current_date, 'D');--1воскресенье-7;
+
+---полного названия дня недели в верхнем регистре
+select  to_char(current_date, 'DAY'); --TUESDAY
+
+---номер квартала
+select  to_char(current_date, 'Q'); ---2
+
+SELECT
+    TO_NUMBER('1593480.829', '$9,999,999.99') AS "Pay";
+
+
+/*Возможность совместного использования функции CAST (для формирования строки)
+  и функции TO_DATE (для преобразования строки в дату) иллюстрирует следующий запрос:
+  */
+
+SELECT TO_DATE('January 10, 2023', 'Month DD, YYYY');
+SELECT TO_TIMESTAMP('10/17/2023 10:27:48',
+                    'MM/DD/YYYY HH24:MI:SS');
+SELECT TO_DATE('7.14.12', 'MM. DD. YY');
+SELECT TO_DATE('2009/9/14', 'YYYY/MM/DD');
+
+SELECT DISTINCT nachislmonth,
+                nachislyear,
+                TO_DATE(CAST('1.' AS VARCHAR(2))
+                            || CAST(nachislmonth AS VARCHAR(2))
+                            || '.'
+                            || CAST(nachislyear AS VARCHAR(4)), 'DD.MM.YYYY')
+                    AS "FirstDay"
+
+FROM nachislsumma
+WHERE serviceid = 2;
+
+
+SELECT *
+FROM Request
+WHERE Incomingdate <= TO_DATE('31-12-2023', 'DD-MM-YYYY');
+
+/*Функция PG_TYPEOF в PostgreSQL позволяет определить тип данных.*/
+SELECT PG_TYPEOF(100);
+--выдаст INTEGER, запрос
+SELECT PG_TYPEOF(PI());
+--DOUBLE PRECISION, а запрос
+SELECT PG_TYPEOF('postgres');
+--UNKNOWN.
+
+
+/*Агрегатные и другие функции обработки даннных
+
+Для подведения итогов по данным, содержащимся в БД, в языке SQL предусмотрены агрегатные (статистические) функции. Агрегатная функция использует в качестве аргумента какой-либо столбец.
+
+---
+
+**Сообщить об ошибке в тесте**
+
+(для множества строк), а возвращает одно значение, определяемое типом функции. Основные агрегатные функции, поддерживаемые СУБД PostgreSQL:
+
+- **AVG** — арифметическое среднее входных значений;
+- **SUM** — сумма всех входных значений, отличных от NULL;
+- **MAX** — максимальное из всех значений, отличных от NULL;
+- **MIN** — минимальное из всех значений, отличных от NULL;
+- **COUNT** — количество входных строк;
+- **STDDEV_POP** — стандартное отклонение по генеральной совокупности входных значений;
+- **STDDDEV_SAMP** — стандартное отклонение по выборке входных значений.
+
+ Функция EVERY возвращает TRUE, если все входные значения, отличные от NULL, равны TRUE, и FALSE в противном случае.
+Объединение всех входных значений в массив осуществляет функция ARRAY_AGG.
+
+Аргументами агрегатных функций могут быть как столбцы таблицы,
+так и результаты выражений над ними.
+При этом выражение может быть сколь угодно сложным.
+Агрегатные функции могут использоваться:
+1) сами по себе для вывода результирующего значения;
+2) с группировкой по столбцам для получения результирующих значений в каждой группе (см. лекц. 3.5).
+Для функций SUM и AVG столбец должен содержать числовые значения. Специальная функция COUNT (*) служит для подсчета
+всех без исключения строк в таблице (включая дубликаты). Результатом функции COUNT не может быть NULL.
+Она может вернуть только натуральное число (положительное целое) или ноль. Все другие агрегатные функции
+могут дать на выходе NULL, если аргумент не содержит ни одной строки или содержит строки, включающие только NULL.
+Аргументу всех функций, кроме COUNT (*), может предшествовать опция DISTINCT (различный), указывающая, что избыточные
+дублирующие значения должны быть исключены перед тем, как будет применяться функция.
+
+Агрегатные функции могут использоваться только в секциях
+SELECT, HAVING и ORDER BY.
+
+Функция count(*) служит для подсчета всех без исключения строк в
+таблице включая дубликаты, результатом count не может быть null.
+Она может вернуть только натуральное число (положительное целое) или ноль.
+
+Аргументом агрегатной функции может быть как простое имя столбца,так
+  и выражение как например с ледующем запросе
+*/
+
+SELECT AVG(nachislsum + 2) AS avg
+FROM nachislsumma;
+
+SELECT AVG(paysum)
+FROM paysumma;
+
+/*Найти среднее количество целых дней, прошелших с даты подачи
+  ремотных заявок до даты их выполнения*/
+
+SELECT AVG(executiondate - incomingdate)
+FROM request;
+
+SELECT AVG(executiondate - incomingdate)
+       FILTER (WHERE executiondate IS NOT NULL)
+FROM request;
+
+/*Выислить средднее значение всех плат за услугу с
+  идентификатором 1 и сумму всех плат за услугу с идентификатором 2*/
+
+SELECT AVG(paysum) FILTER (WHERE serviceid = 1),
+       SUM(paysum) FILTER (WHERE serviceid = 2)
+FROM paysumma;
+
+/*Подсчитать количество невыполненных ремонтных заявок*/
+SELECT SUM((executiondate IS NULL)::int)
+FROM request;
+
+/*Вычисление экстремумов
+  использование функций max и min
+  Столбце может содержать числовые и строковые значения,
+  значения даты.времени,
+  неопределенные значения null функциями vin и max не учитываются
+MIN( { [[ALL] | DISTINCT] столбец | [DISTINCT] <выражение> } )
+MAX( { [[ALL] | DISTINCT] столбец | [DISTINCT] <выражение> } )
+Символ	Значение
+{}	Фигурные скобки группируют элементы (обязательная часть)
+[]	Квадратные скобки означают необязательный элемент
+|	Вертикальная черта означает ИЛИ (выбор одного из вариантов)
+...	Многоточие означает повторение (обычно для списка столбцов)
+< >	Угловые скобки содержат описание того, что должно быть написано
+*/
+
+
+SELECT MIN(paysum), MAX(paysum)
+FROM paysumma;
+
+
+/*Вычисление количества
+  вычислим количество абонентов, которые подавали заявки на ремонт
+  газового оборудования,
+  общее количество заявок, сколько из них выполнено и погашено
+
+В SQL функции COUNT(*) и COUNT(1) выполняют похожие действия, но существуют небольшая разница:
+- COUNT(*): эта функция считает количество всех строк в результирующем наборе, включая строки с
+  NULL значениями. Она не пропускает ни одной строки, даже если все значения в строке являются NULL;
+- COUNT(1): эта функция также считает количество строк в результирующем наборе, но она не учитывает
+  значения столбцов!!! Вместо этого она просто учитывает наличие строк, а значения игнорируются.
+  Это делает ее немного более эффективной, чем COUNT(*), когда важно только количество строк, а значения несущественны.
+Выбор между COUNT(*) и COUNT(1) может зависеть от конкретной задачи и оптимизации запроса.
+В большинстве случаев разница в производительности будет незначительной, но COUNT(1) может быть предпочтительным, если не нужно учитывать значения столбцов.
+
+*/
+
+SELECT
+    COUNT(DISTINCT Accountid) AS "Число абонентов с заявками",
+    COUNT(*) AS "Всего заявок",
+    COUNT(executiondate) AS "из них выполнено",  -- считает не-NULL даты
+    COUNT(Requestid) FILTER (WHERE Executed = TRUE) AS "погашено"  -- или просто WHERE Executed
+FROM Request;
+
+
+/*В качестве аргумента string_agg могут быть заданы столбец таблицы,
+  переменная, выражение, константа, числовые значения, значения типа
+  дата.время, которые в процессе работы функции преобразуются строку
+  Для вывода строк в одну строку вех улсгу, разделенных запятой
+  можео использовать такой запрос*/
+
+---Газоснабжение,Электроснабжение,Теплоснабжение,Водоснабжение
+SELECT STRING_AGG(servicenm, ',') AS "Список услуг"
+FROM services;
+
+/*Вызов функции создания массива ARRAY_AGG выглядит следующим
+  образом:
+*/
+
+select array_agg(servicenm) as array_service
+from services;
+
+select array_agg(servicenm order by servicenm) as array_service
+from services;
+
+/*Функция EVERY
+проверить все ли ремонтные заявки погашены можно запросом
+EVERY() — это агрегатная логическая функция, которая возвращает TRUE,
+если все значения в группе равны TRUE, и FALSE в противном случае.
+*/
+
+select every(executed)
+from request;
+
+/*Функция возвращающая множество
+  generate_series(начало, конец [,шаг])*/
+
+SELECT *
+FROM GENERATE_SERIES(1, 15);
+--числа от 1 до 15 с шагом 1
+
+SELECT GENERATE_SERIES(3, 1000, 2);
+--числа от 3 до 1000 с шагом 2
+
+-- даты от завтрашней до конца месяца с шагом 5 дней
+SELECT CURRENT_DATE + d.dt AS Dat
+FROM GENERATE_SERIES(1, 31, 5) AS d(dt);
+
+/*все месяцы с подачи первой до последней заявки, независимо
+от того, подал ли абонент заявку в этом месяце */
+SELECT TO_CHAR(GENERATE_SERIES(MIN(incomingdate),
+                               MAX(incomingdate), INTERVAL '1 MONTH'), 'MM/YYYY') "Месяц/Год"
+FROM request;
+
+/*Если для функции в секции FROM указать WITH ORDINALITY,
+то к столбцам результата функции добавляется столбец типа BIGINT,
+числа в котором начинаются с 1 и увеличиваются на 1 для каждой
+строки, выданной функцией, например*/
+
+-- Добавление порядкового номера к каждой строке
+--GENERATE_SERIES(10, 15) создаёт 6 строк со значениями: 10, 11, 12, 13, 14, 15
+--WITH ORDINALITY добавляет второй столбец с номером строки
+--AS t(value, ordinality) даёт имена столбцам:
+--value — значения из GENERATE_SERIES
+--ordinality — порядковые номера (1, 2, 3...)
+SELECT *
+FROM GENERATE_SERIES(10, 15)
+    WITH ORDINALITY AS t(value, ordinality);
+
+/*Условные выражения
+  Необходимы для выбора вариантов действий взависимости от значений данных
+Например CASE.
+
+Средства выбора вариантов могут использоваться в списке возвращаемых
+  столбцов секции select, в секции where, а также в качестве элементов
+  списка группировки group by и сортировки order by.
+Также они применимы в запросах языков  DDL и DML/
+
+CASE,COALESCE, NULLIF, GREATEST, LEAST
+*/
+
+
+/*
+Пусть необходимо вывести следующую информацию о ремонтных заявках абонента,
+имеющего лицевой счет с номером '115705': номер заявки, номер лицевого счета абонента,
+подавшего заявку, код неисправности. Необходимо также пометить, погашена ли заявка,
+что определяется значением столбца Executed. Запрос будет выглядеть таким образом:
+*/
+
+SELECT requestid,
+       ' № л/с абонента ' || accountid    AS "Ab_Info",
+       ' Код неисправности ' || failureid AS "Failure",
+       CASE executed
+           WHEN FALSE THEN 'Не погашена'
+           ELSE 'Погашена'
+           END                               "Гашение"
+FROM request
+WHERE accountid = '115705';
+
+/*
+Такое использование CASE удобно для оценки того, насколько широко распространен определенный атрибут,
+в данном случае признак гашения ремонтных заявок. Важно отметить, что типы возвращаемых и
+проверяемых данных могут отличаться.
+В данном примере сравниваются логические значения и возвращаются строки.
+*/
+
+
+/*Пусть необходимо вывести информацию о платежах со значением от 530 до 600 включительно
+  с указанием срока давности оплаты: если оплата была произведена до 2023 г., то вывести
+  'Давно', если оплата была произведена в 2023 г. или 2024 г., то вывести 'Не очень давно',
+  если позднее — 'Недавно'. Запросы с использованием операций CASE с поиском
+*/
+SELECT Payfactid, Accountid, Paysum, Paydate,
+       CASE WHEN Paydate < '01.01.2023'
+                 THEN 'Давно'
+            WHEN Paydate
+                 BETWEEN '01.01.2023' AND '31.12.2024'
+                 THEN 'Не очень давно'
+            ELSE 'Недавно'
+       END AS "OpIata"
+FROM Paysumma
+WHERE Paysum BETWEEN 530 AND 600;
+
+
+/*
+При выводе номера лицевого счета абонента заменить цифру 6
+на случайную можно следующим запросом:
+*/
+
+SELECT accountid,
+       REPLACE(accountid,
+               '6',
+               CASE
+                   WHEN RANDOM() * 10 < 6 THEN
+                       6 - RANDOM() * 6
+                   ELSE
+                       RANDOM() * 3 + 7
+                   END :: CHAR(1)
+       ) AS new_accountid,
+       fio
+FROM abonent;
+
+
+/*
+Операции CASE могут быть вложены друг в друга и в другие функции. Следующий запрос
+выведет дату оплаты и соответствующий ей рабочий день или расшифровку выходного дня:
+*/
+
+SELECT paydate,
+       CASE
+           WHEN EXTRACT(ISODOW FROM paydate) NOT IN (6, 7)
+               THEN 'Рабочий'
+           ELSE
+               CASE
+                   WHEN EXTRACT(ISODOW FROM paydate) = 7
+                       THEN 'Воскресенье'
+                   ELSE 'Суббота'
+               END
+           END "День"
+FROM paysumma;
+
+/*или получить тоже самое без вложения:*/
+
+SELECT Paydate,
+       CASE TRIM(TO_CHAR(Paydate, 'day'))
+           WHEN 'saturday' THEN 'Суббота'
+           WHEN 'sunday' THEN 'Воскресенье'
+           ELSE 'Рабочий'
+           END AS "День"
+FROM Paysumma;
+
+/*CASE может использоваться в качестве аргумента агрегатных
+  функций для «свертывания» данных в виде флага со значением 1 или
+  0 в качестве возвращаемого значения. Примером использования
+  агрегатной функции SUM по CASE может быть такой запрос.
+
+Он возвращает общее число ремонтных заявок,
+число невыполненных и непогашенных заявок.
+  */
+
+SELECT COUNT(*)                                               AS "Всего заявок",
+       SUM(CASE WHEN executiondate IS NULL THEN 1 ELSE 0 END) AS "невыполненных",
+       SUM(CASE WHEN NOT executed THEN 1 ELSE 0 END)          AS "непогашенных"
+FROM request;
+
+
+
+SELECT Requestid,
+       (' Номер л/с абонента ' || Accountid) AS "Ab_Info",
+       (' Код неисправности ' || Failureid) AS "Failure",
+       CASE WHEN Executiondate IS NOT NULL
+                THEN 'Выполнена'
+            ELSE 'Не выполнена'
+           END AS "Выполнение",
+       CASE WHEN Executed ---CASE WHEN Executed = TRUE THEN 'Погашена' ELSE 'Не погашена' END
+                THEN 'Погашена'
+            ELSE 'Не погашена'
+           END AS "Гашение"
+FROM Request WHERE Accountid='115705';
+
+
+SELECT requestid,
+       executiondate,
+       executed,
+       CASE
+           WHEN executiondate IS NOT NULL AND executed     THEN 'Выполнена и погашена'
+           WHEN executiondate IS NOT NULL AND NOT executed THEN 'Выполнена и не погашена'
+
+           ELSE 'Не выполнена и не погашена'
+           END "Статус"
+FROM request;
+
+
+
+-- Исправленный вариант
+
+/*Здесь производится выборка всех данных о заявках из таблицы
+  Request при различных условиях:
+- с неисправностями с идентификаторами 1, 3, 6, 7, 8
+  (в том числе невыполненных), со сроком выполнения более 30 дней;
+- с неисправностью 5 со сроком выполнения более 13 дней.*/
+SELECT r.*
+FROM request r
+WHERE (COALESCE(executiondate, CURRENT_DATE) - incomingdate) >=
+      CASE
+          WHEN failureid IN (1, 3, 6, 7, 8) THEN 31
+          WHEN failureid = 5                THEN 14
+          ELSE NULL
+          END;
+
+
+
+/*Завершая предметное изучение операции CASE, приведем еще
+один пример запроса, демонстрирующего логические результаты
+условий поиска с AND и OR:
+*/
+
+/*
+3. Здесь ремонтные заявки разделяются на назначенные исполнителям с идентификаторами меньше
+4 и больше 3, а также на исполненные раньше 01.01.2024 и позже 31.12.2023. Учитывая то,
+что в БД имеются только не назначенная на исполнение
+(NULL в столбце Executorid для Requestid, равного 16) и (или) не выполненные
+(NULL в столбце Executiondate для Requestid, равного 5 и 16) ремонтные заявки,
+то удается получить лишь пять из шести возможных вариантов
+
+*/
+
+SELECT requestid,
+       executorid,
+       executiondate,
+       CASE
+           WHEN executorid > 3 AND executiondate > '31.12.2023'
+               THEN 'TRUE'
+           WHEN executorid < 4 OR executiondate < '01.01.2024'
+               THEN 'FALSE'
+           ELSE 'UNKNOWN'
+           END " > 3 AND > 31.12.2023",
+       CASE
+           WHEN executorid >= 4 OR executiondate > '31.12.2023'
+                               THEN 'TRUE'
+           WHEN executorid < 4 THEN 'FALSE'
+           ELSE 'UNKNOWN'
+           END " > 3 OR > 31.12.2023"
+FROM request;
+
+/*Если заявка не выполнена, то установить дату поступления заявки,
+  если ни дата поступления ни дата выполнения неизвестны,
+  то написать что дата неизвестна
+*/
+SELECT RequestId,
+       COALESCE(
+               CAST(executiondate AS TEXT),
+               CAST(Incomingdate AS TEXT),
+               'Дата неизвестна'
+       ) AS "Date_Info"
+FROM Request
+WHERE Accountid IN ('005488', '115705', '080270');
+
+/*
+Рассмотрим проблему использования COALESCE с конкатенацией.
+Пусть требуется вывести ФИО и через пробел номер телефона,
+если он есть. Если нет — вывести «Нет телефона». Решение с функцией CONCAT может быть таким:
+*/
+SELECT COALESCE(CONCAT(fio || ' ', phone), fio || ' Нет телефона')
+FROM abonent;
+
+/*
+Но вместо ожидаемого результата выводится либо только ФИО,
+либо результат конкатенации. А все потому,
+что CONCAT игнорирует NULL
+следовательно, результат получается отличным
+от NULL и COALESCE не отрабатывает.
+Чтобы избежать такой ситуации, выполним конкатенацию
+с помощью «||»:
+*/
+SELECT COALESCE(Fio||' ' || Phone, Fio ||' Нет телефона')
+FROM Abonent;
+
+
+
+/*Запрос, возвращающий всю информацию по заявкам, у которых равны
+даты регистрации и выполнения, или такой:*/
+
+SELECT *
+FROM Request
+WHERE NULLIF(Executiondate, Incomingdate) IS NULL;
+
+
+/*Запрос выбирающий для указанных абонентов
+  значения их платежей за заданные услуги*/
+SELECT accountid, serviceid, paysum
+FROM paysumma
+WHERE serviceid =
+      CASE
+          WHEN accountid = '136169' THEN 1
+          WHEN accountid = '136160' THEN 3
+          WHEN accountid = '080270' THEN 4
+          ELSE null
+          END;
+
+
+/*
+Функцию NULLIF полезно использовать для обратного преобразования значений
+в NULL, если известно значение по умолчанию.
+Так в таблице заявок на ремонт Request с датой регистрации
+заявки по умолчанию можно при выводе изменить значения обратно
+на NULL, используя
+
+Во всех заявках, зарегистрированных в текущий день,
+значение столбца Incomingdate отобразится как NULL.
+*/
+
+SELECT NULLIF(incomingdate, CURRENT_DATE)
+FROM request;
+
+
+/*
+Например, поставить в соответствие ремонтным заявкам, принятым исполнителем с кодом 1,
+дату их выполнения или 1 января 2024 г., если соответствующая
+заявка была выполнена раньше этой даты, можно запросом
+GREATEST() возвращает наибольшее (максимальное)
+значение из списка аргументов.
+*/
+
+
+SELECT requestid,executiondate, GREATEST(executiondate, '01.01.2024')
+FROM request
+WHERE executorid = 1;
+
+
+/*
+Шаг 1: GREATEST(Incomingdate, Executondate) → выбираем бОльшую дату
+Шаг 2: GREATEST(результат_шага1, '2024-01-01') → выбираем максимум
+
+*/
+SELECT requestid,
+       GREATEST(GREATEST(incomingdate, executiondate), '2024-01-01')
+FROM request
+WHERE executorid = 4;
+
+
+SELECT requestid,
+       GREATEST(incomingdate, executiondate, '2024-01-01')
+FROM request
+WHERE executorid = 4;
+
+
+SELECT executorid,
+       MIN(LEAST(incomingdate,
+                 COALESCE(executiondate, CURRENT_DATE))
+          )
+FROM request
+GROUP BY executorid;
+
+/*Функции полнотекстового поиска*/
+
+/*178*/
