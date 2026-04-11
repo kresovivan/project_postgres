@@ -5909,13 +5909,1596 @@ WHERE tnscount = (SELECT MIN(tscount)
 без применения подзапросов
 */
 
+-- группируем по ФИО и считаем количество
+-- платежей для каждого абонента.
 SELECT fio           AS tnsfio,
-       COUNT(paysum) AS tnscount
+       COUNT(paysum) AS tnscount,
+       COUNT(1)
 FROM paysumma
          INNER JOIN abonent USING (accountid)
 GROUP BY fio
 ORDER BY COUNT(1) ASC
+--COUNT(1) — это функция подсчёта строк,
+-- где 1 — это просто константа,
+--не имеющая никакого отношения к столбцам таблицы.
+--отсортировать по значению, которое возвращает COUNT(1).
+--Сортируем по количеству платежей по возрастанию (от меньшего
+--к большему).
+--А COUNT(1) внутри GROUP BY fio считает количество строк в группе
+--(т.е. количество платежей для каждого абонента).
+--Поскольку 1 — это константа, которая никогда не бывает NULL,
+-- COUNT(1) считает все строки так же, как и COUNT(*).
     FETCH FIRST rows
+--взять первую строку
 WITH TIES;
+-- взять также все остальные строки, у которых значение сортировки
+-- (tnscount) такое же, как у последней взятой строки
 
-/*266*/
+
+
+/*
+Независимые многостолбцовые подзапросы. СУБД PostgreSQL предоставляет
+дополнительные возможности по реализации условий поиска с подзапросами.
+
+До сих пор рассматривались такие запросы, где в секциях WHERE или
+HAVING сравнивалось значение только одного столбца с результатом,
+возвращаемым однострочным или многострочным подзапросом.
+
+Если требуется сравнение значений двух или более столбцов, необходимо
+сложное условие с логическими операторами.
+Многостолбцовые подзапросы позволяют объединять дублируемые условия
+секции WHERE или HAVING в единое условие поиска.
+Синтаксис запроса с многостолбцовым подзапросом в секции WHERE имеет вид
+
+SELECT <столбец1>, <столбец2>, [<столбец3>, ...]
+FROM <таблица> [<табличный_подзапрос>]
+WHERE (<столбец1>, <столбец2>, [<столбец3>, ...]) IN
+(SELECT <столбец1>, <столбец2>, [<столбец4>, ...]
+FROM <таблица> [<табличный_подзапрос>])
+WHERE <условие_поиска>
+
+
+Первым примером проверки на членство нескольких значений во множестве
+может быть следующий запрос:
+*/
+
+
+SELECT accountid, serviceid, paysum, paydate
+FROM paysumma
+WHERE (serviceid, paydate) IN (SELECT serviceid, MAX(paydate)
+                               FROM paysumma
+                               GROUP BY serviceid)
+ORDER BY serviceid DESC;
+
+
+/*
+
+Для получения всей информации об абонентах, проживающих в одном доме
+с абонентом с ФИО Конюхов В.С. (номер лицевого счёта '015527'), можно
+применить следующий запрос с двустолбцовым подзапросом:
+*/
+
+SELECT *
+FROM abonent
+WHERE (streetid, houseno) = (SELECT streetid, houseno
+                             FROM abonent
+                             WHERE accountid = '015527')
+  AND accountid != '015527';
+
+/*
+Для вывода информации о начислениях абонентов за те же месяцы и годы,
+что и начисления для абонента с лицевым счётом '015527', можно
+использовать такой многостолбцовый запрос:
+*/
+
+SELECT accountid,
+       serviceid,
+       nachislsum,
+       nachislmonth,
+       nachislyear
+FROM nachislsumma
+WHERE (nachislmonth, nachislyear) IN
+      (SELECT DISTINCT nachislmonth, nachislyear
+       FROM nachislsumma
+       WHERE accountid = '015527')
+  AND accountid != '015527'
+ORDER BY accountid;
+
+
+/*
+Использование подзапросов в секции GROUP BY необычно, но возможно.
+Это может быть полезно в определённых ситуациях, когда требуется
+динамическое вычисление значений для группировки!!!
+Например, вывести количество начислений по сравнению
+со средним значением можно таким запросом:
+
+Подзапросы в секции GROUP BY для создания динамических группировок
+на основе вычисляемых значений следует использовать с осторожностью,
+так как они могут быть менее эффективными из-за необходимости их
+выполнения для каждой строки!!!
+*/
+
+
+SELECT CASE
+           WHEN nachislsum > (SELECT AVG(nachislsum) FROM nachislsumma)
+               THEN 'Выше среднего'
+           ELSE 'Ниже или равно среднему'
+           END  AS "Группа начислений",
+       COUNT(*) AS "Количество",
+       (SELECT AVG(nachislsum) FROM nachislsumma)
+
+FROM nachislsumma
+GROUP BY nachislsum > (SELECT AVG(nachislsum) FROM nachislsumma);
+/*
+Группировка по вычисляемому выражению
+GROUP BY nachislsum > (SELECT AVG(nachislsum) FROM nachislsumma)
+
+Проблема в том, что PostgreSQL не может использовать индекс для такой
+группировки. Выражение nachislsum > константа — это условие,
+а не значение столбца.
+
+1. Seq Scan по всей таблице nachislsumma (читаем все строки)
+2. Для каждой строки вычисляем TRUE/FALSE
+3. Сортируем или хешируем по этому вычисленному значению
+4. Считаем агрегаты
+
+Двойное вычисление AVG
+В запросе:
+SELECT → AVG(nachislsum) вычисляется ещё раз для каждой группы
+Агрегаты считаются после группировки
+Но это нормально — агрегаты так и работают.
+*/
+
+
+/*
+Независимые подзапросы в секции HAVING.
+Такие запросы могут использовать свои собственные агрегатные функции
+(если эти функции не возвращают многочисленных значений)!!!
+Также в подзапросе, включённом в условие поиска секции HAVING
+внешнего запроса, могут использоваться свои собственные секции:
+- GROUP BY
+- HAVING.
+Следует помнить, что аргументы, указанные в секции HAVING, должны
+присутствовать в качестве аргументов и в секции GROUP BY. Например,
+для подсчёта числа абонентов с максимальным значением платежа
+за 2024 г. можно использовать запрос
+*/
+
+SELECT COUNT(DISTINCT accountid), paysum
+FROM paysumma
+GROUP BY paysum
+HAVING paysum = (SELECT MAX(paysum)
+                 FROM paysumma
+                 WHERE payyear = 2024);
+
+
+/*
+Следующим примером может быть поиск услуги, за которую произведено
+наибольшее количество платежей:
+
+Здесь в начале выполняется самый «нижний» подзапрос, который выдает
+по каждой услуге количество платежей, и результат помещает в
+производную таблицу. «Верхний» подзапрос находит в этой таблице
+максимальное количество платежей, которое передаётся во внешний
+запрос. Внешний запрос выводит наименование услуги и соответствующее
+количество произведённых платежей.
+*/
+
+SELECT servicenm, COUNT(*)
+FROM paysumma
+         JOIN services USING (serviceid)
+GROUP BY servicenm
+HAVING COUNT(*) = (SELECT MAX(a)
+                   FROM (SELECT serviceid, COUNT(*) AS a
+                         FROM paysumma
+                         GROUP BY serviceid) t);
+
+
+/*
+Вывести наименования услуг, за которые сумма значений начислений
+всем абонентам превышает более чем на величину, задаваемую
+параметром Pr, начисление тому абоненту, который имеет максимальное
+значение начисления, может следующий запрос:
+*/
+
+
+SELECT servicenm
+FROM services
+         INNER JOIN nachislsumma USING (serviceid)
+GROUP BY servicenm
+HAVING SUM(nachislsum) > (SELECT :Pr + MAX(nachislsum)
+                          FROM services
+                                   INNER JOIN nachislsumma USING (serviceid));
+
+
+
+/*
+Следующий запрос с автономным подзапросом выбирает номера лицевых
+счетов всех абонентов, для которых число платежей со значением
+меньше средней суммы значений платежей по всем абонентам превышает 5.
+*/
+
+SELECT accountid
+FROM paysumma
+GROUP BY accountid
+HAVING COUNT(*) FILTER (WHERE paysum < (SELECT AVG(paysum)
+                                        FROM paysumma)) > 5;
+
+
+/*
+Независимые подзапросы при ограничении строк. Можно привести
+следующие примеры учебного запроса с использованием автономных
+подзапросов при ограничении количества выводимых строк
+
+Вывод всей информации по абонентам производится, начиная со строки,
+номер которой равен числу строк в таблице Services, а количество
+выводимых строк равно числу строк в таблице Request. Так как число
+строк в таблице Request превышает число строк в таблице Abonent,
+то выводятся все оставшиеся строки.
+*/
+
+SELECT *
+FROM abonent
+ORDER BY accountid
+OFFSET (SELECT COUNT(*) FROM services)
+    ROWS FETCH NEXT
+    (SELECT COUNT(*)
+     FROM request) ROWS ONLY;
+
+SELECT *
+FROM Abonent
+ORDER BY AccountId
+OFFSET (SELECT COUNT(*) FROM Services)
+    ROWS LIMIT (SELECT COUNT(*)
+                FROM Request);
+
+/*
+Используя такой же подход, можно выбирать из определённой таблицы
+заданный процент строк случайным образом
+
+Вывод всей информации по абонентам производится, начиная со строки,
+номер которой равен числу строк в таблице Services, а количество
+выводимых строк равно числу строк в таблице Request. Так как число
+строк в таблице Request превышает число строк в таблице Abonent,
+то выводятся все оставшиеся строки.
+
+Используя такой же подход, можно выбирать из определённой таблицы
+заданный процент строк случайным образом
+*/
+
+/*
+
+Этот запрос выбирает случайные 75% строк из таблицы Paysumma.
+*/
+SELECT *
+FROM Paysumma
+ORDER BY RANDOM()
+    FETCH NEXT (SELECT COUNT(*) * 75.0 / 100 FROM Paysumma) ROWS ONLY;
+
+/*
+или первую половину строк:
+*/
+
+SELECT *
+FROM Paysumma
+ORDER BY Accountid
+OFFSET 0 ROWS FETCH NEXT (SELECT COUNT(*) / 2 FROM Paysumma) ROWS ONLY;
+
+/*
+Обобщённые табличные выражения.
+Обобщённые табличные выражения — это мощная функция в SQL,
+которая позволяет создавать временный результирующий набор,
+на который затем можно ссылаться в запросах:
+SELECT,
+INSERT,
+UPDATE,
+DELETE.
+Они особенно полезны для разбиения
+сложных запросов на более простые, удобочитаемые части.
+
+Производные таблицы, возвращаемые табличным подзапросом,
+определяются в секции WITH, которая записывается перед основным запросом
+SELECT.
+Такая техника вынесения определений подзапросов из тела основного запроса
+получила название Subquery Factoring («факторизация», «разложение
+на подзапросы»).
+
+Производные таблицы получили название обобщённые
+табличные выражения (Common Table Expression, CTE) и являются
+наиболее сложной и мощной вариацией производных таблиц!!!
+
+Суть этих
+выражений заключается в том, что с помощью секции WITH можно задать
+шаблон, состоящий из подзапросов, к которым можно обратиться с
+помощью основного запроса.
+Обобщённое табличное выражение играет роль представления,
+созданного в рамках одного запроса, и не сохраняется как объект
+БД.
+
+Секция WITH может использоваться в нескольких целях:
+
+-устранение дублирования кода. Единожды определённый таким образом
+подзапрос может использоваться неоднократно в разных частях запроса;
+
+-придание запросу более понятной формулировки: описание подзапросов,
+которые многократно используются в основном запросе, с тем чтобы
+к ним (подзапросам) можно было обращаться в запросе по имени;
+
+-запись рекурсивных запросов (recursive subquery factoring).
+
+Таким образом, подзапросы в секции WITH могут быть рекурсивными
+и не рекурсивными.
+Простое и рекурсивное разложение на подзапросы с помощью секции
+WITH не противоречат друг другу и могут использоваться совместно.
+Синтаксис нерекурсивных запросов выглядит так:
+
+WITH
+имя_производной_таблицы [(<список_столбцов>)]
+AS (<табличный_подзапрос>) [, ...]
+<запрос_SQL>
+
+Итак, чтобы построить CTE, необходимо применить ключевое слово WITH
+в начале основного запроса (запрос_SQL), за которым следует название
+CTE (имя_производной_таблицы) с необязательным списком названий
+столбцов, а затем (после AS) в круглых скобках запрос, который он
+обозначает.
+
+Примером простого нерекурсивного CTE с одним подзапросом может быть
+следующий:
+*/
+
+
+-- Создаётся табличное выражение с именем "Абонент"
+WITH "Абонент" (Accountid, Fio) -- имя таблицы и столбцов подзапроса
+         AS (
+-- Далее указывается подзапрос
+        SELECT Accountid, Fio
+        FROM Abonent)
+-- Вывод результата выполнения основного запроса
+SELECT *
+FROM "Абонент"
+ORDER BY Fio;
+-- обращение к таблице подзапроса
+
+
+---или такой без перечисления имён столбцов, так как они уникальные:
+
+WITH "Абонент" -- имя таблицы подзапроса
+         AS (SELECT Accountid, Fio
+             FROM Abonent)
+SELECT *
+FROM "Абонент"
+ORDER BY Fio;
+-- основной запрос
+
+/*
+Основное предназначение CTE заключается в разбиении сложных запросов
+на простые части.
+Чтобы проиллюстрировать возможности, предоставляемые оператором WITH,
+рассмотрим следующую типовую задачу.
+
+Требуется вывести данные об абонентах, у которых среднее значение
+платежей превышает среднее значение платежей всех абонентов.
+Рассмотрим сначала запросы, которые понадобятся при
+решении этой задачи.
+
+Вывести среднее значение платежей каждого абонента:
+*/
+
+SELECT AccountId, ROUND(AVG(Paysum), 2) AS Avg_Ab
+FROM Paysumma
+GROUP BY AccountId;
+
+--Определить среднее значение платежей всех абонентов:
+
+SELECT ROUND(AVG(Paysum), 2) AS Avg_Total
+FROM Paysumma;
+
+/*Используя эти запросы, построим обычный запрос, который решает
+поставленную задачу.
+
+Вывести данные об абонентах, у которых среднее значение платежа
+превышает среднее значение платежей всех абонентов (используются
+автономный и коррелированный подзапросы):
+*/
+
+
+SELECT Accountid, Fio
+FROM Abonent A
+WHERE (SELECT ROUND(AVG(Paysum), 2) AS Avg_ab
+       FROM Paysumma
+       GROUP BY Accountid
+       HAVING Accountid = A.Accountid)
+          > (SELECT ROUND(AVG(Paysum), 2) AS Avg_total
+             FROM Paysumma);
+
+/*
+
+Используя оператор with, решение рассматриваемой задачи
+можно представить в следующем виде.
+Вывести данные об абонентах у которых среднее значение
+платежей превышает среднее значение платежей всех абонентов
+
+*/
+
+
+WITH
+    avg_ab AS (
+        SELECT Accountid, ROUND(AVG(Paysum), 2) AS avg_ab
+        FROM Paysumma
+        GROUP BY Accountid
+    ),
+    avg_total AS (
+        SELECT ROUND(AVG(Paysum), 2) AS avg_total
+        FROM Paysumma
+    )
+
+SELECT A.Accountid, A.Fio, avg_ab.avg_ab
+FROM Abonent A
+         inner join avg_ab  on avg_ab.Accountid = A.Accountid
+WHERE (SELECT avg_ab
+       FROM avg_ab
+       WHERE Accountid = A.Accountid)
+          > (SELECT avg_total FROM avg_total);
+
+/*
+В секции WITH может быть определено несколько подзапросов.
+В PostgreSQL секции WITH могут быть вложенными, т.е. запрос
+в секции WITH может иметь свою секцию WITH.
+WITH
+    -- Внешняя CTE
+    outer_cte AS (
+        WITH
+            -- Внутренняя CTE (видна только внутри outer_cte)
+            inner_cte AS (
+                SELECT Accountid, SUM(Paysum) AS total
+                FROM Paysumma
+                GROUP BY Accountid
+            )
+        SELECT Accountid, total
+        FROM inner_cte
+        WHERE total > 1000
+    )
+-- Основной запрос (видит только outer_cte, но не inner_cte)
+SELECT * FROM outer_cte;
+
+Имена нескольких обобщённых табличных выражений должны быть
+различными.
+Результат CTE после выполнения запроса не сохраняется.
+Запросы в CTE могут обращаться как к таблицам, так и друг к другу.
+
+Примером CTE с двумя подзапросами, второй из которых использует
+результат первого, может быть такой запрос:
+*/
+
+WITH Sum_pay AS (SELECT Servicenm AS "Услуга", SUM(Paysum) AS "Сумма"
+                 FROM Paysumma
+                          NATURAL JOIN Services
+                 GROUP BY Servicenm),
+     Avg_pay AS (SELECT SUM("Сумма") / COUNT(*) AS "Среднее"
+                 FROM Sum_pay)
+SELECT *
+FROM Sum_pay
+WHERE "Сумма" > (SELECT "Среднее" FROM Avg_pay)
+ORDER BY "Услуга";
+
+/*
+Рассмотрим ещё учебные примеры простого разложения на подзапросы
+в WITH.
+Вывести год поступления и
+название дня недели первой ремонтной заявки и
+того же дня месяца в каждом году следующих
+трёх лет:
+
+*/
+
+WITH Initial_date
+/* блок создаёт временную таблицу Initial_date с одной строкой,
+содержащей MIN(Incomingdate)*/
+         AS (SELECT MIN(Incomingdate) AS Dat
+             FROM Request),
+     Generated_dates
+/* блок использует функцию GENERATE_SERIES для создания списка дат,
+начиная с Initial_date и до трёх лет вперед, с шагом в один год.
+Каждая дата преобразуется в тип DATE */
+         AS (SELECT GENERATE_SERIES(
+                            (SELECT Dat FROM Initial_date),
+                            (SELECT Dat + INTERVAL '3 YEARS' FROM Initial_date),
+                            '1 YEAR'
+                    )::DATE AS Generated_date)
+SELECT
+/* запрос вернёт таблицу, где каждая строка будет содержать год
+и день недели для заданной даты (MIN(Incomingdate)
+соответствующего и следующих трёх лет) */
+    EXTRACT(YEAR FROM Generated_date) AS "Год",
+    TO_CHAR(Generated_date, 'Day')    AS "День недели"
+FROM Generated_dates;
+
+
+
+WITH Initial_date
+/* блок создаёт временную таблицу Initial_date с одной строкой,
+содержащей MIN(Incomingdate)*/
+         AS (SELECT MIN(Incomingdate) AS Dat
+             FROM Request),
+Generated_dates
+AS (SELECT GENERATE_SERIES(
+                   (SELECT Dat FROM Initial_date),
+                   (SELECT Dat + INTERVAL '3 YEARS' FROM Initial_date),
+                   '1 YEAR'
+           )::DATE AS Generated_date)
+
+select *
+    from Generated_dates;
+
+
+/*
+Пусть требуется вычислить метрики платёжной активности абонентов:
+среднее число платежей в:
+год YAA (Annually Active Abonents),
+в месяц MAA (Monthly Active Abonents),
+в неделю WAA (Weekly Active Abonents)
+и в день DAA (Daily Active Abonents).
+Эти метрики показывают число уникальных абонентов, которые в течение
+конкретного временного промежутка хотя бы раз оплачивали коммунальные
+ресурсы или жилищные услуги.
+Для этого достаточно определить число платежей, произведённых
+в каждом году, месяце, неделе и дне, а затем найти их среднее.
+В частности, метрика DAA может быть полезной при планировании
+пропускной способности, например с оценкой ожидаемой нагрузки на
+серверы.
+
+Каждую подзадачу можно решить с использованием подзапроса
+в секции WITH:
+
+*/
+
+
+WITH Pdates AS (SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY')::DATE AS Dates
+                FROM Paysumma P),
+     Daa AS (SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'), COUNT(DISTINCT Accountid) AS Acc
+             FROM Paysumma P
+                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+             GROUP BY 1),
+     Waa AS (SELECT TO_CHAR(D.Dates, 'YYYY-WW'), COUNT(DISTINCT Accountid) AS Acc
+             FROM Paysumma P
+                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+             GROUP BY 1),
+     Maa AS (SELECT TO_CHAR(D.Dates, 'YYYY-MM') AS Mon, COUNT(DISTINCT Accountid) AS Acc
+             FROM Paysumma P
+                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+             GROUP BY Mon),
+     Yaa AS (SELECT TO_CHAR(D.Dates, 'YYYY'), COUNT(DISTINCT Accountid) AS Acc
+             FROM Paysumma P
+                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+             GROUP BY 1)
+
+SELECT ROUND((SELECT AVG(Acc) FROM Daa), 2) AS Daa,
+       ROUND((SELECT AVG(Acc) FROM Waa), 2) AS Waa,
+       ROUND((SELECT AVG(Acc) FROM Maa), 2) AS Maa,
+       ROUND((SELECT AVG(Acc) FROM Yaa), 2) AS Yaa;
+
+
+WITH Pdates AS (SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY')::DATE AS Dates
+                FROM Paysumma P),
+     Daa AS (SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'), COUNT(DISTINCT Accountid) AS Acc
+             FROM Paysumma P
+                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+             GROUP BY 1)
+
+select sum(acc)/1413, avg(acc)
+from Daa;
+
+/*
+Здесь первый подзапрос вызовом функции GENERATE_SERIES
+формирует последовательность дат с шагом в один день в периоде от
+первого до последнего платежа.
+В каждом последующем подзапросе производится соединение
+этой последовательности с таблицей платежей и вычисляется их количество
+в соответствующем периоде.
+Внешний запрос вычисляет среднее количество платежей в день,
+неделю, месяц и год
+*/
+
+
+/*
+Рассмотрим примеры использования CTE в секции WHERE. Допустим, нужно
+вывести всю информацию об абонентах, которые подавали заявки на ремонт
+до 2024 года. Обычный запрос:
+*/
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM Abonent
+WHERE AccountID IN (SELECT AccountID
+                    FROM Request
+                    WHERE Incomingdate < '01.01.2024');
+
+
+---Запрос с CTE:
+EXPLAIN (ANALYZE, BUFFERS)
+WITH Cte_n  AS (
+    SELECT *
+    FROM Request
+    WHERE Incomingdate < '01.01.2024'
+)
+SELECT *
+FROM Abonent
+WHERE AccountID IN (SELECT AccountID FROM Cte_n);
+
+
+/*
+Получить результат и избежать повторения
+подзапроса в секциях SELECT и WHERE можно, определив его только раз
+в секции WITH, а затем используя в самом запросе:
+*/
+
+WITH Fact_avg AS (SELECT ROUND(AVG(Nachislsum), 2) AS Avg_nach
+                  FROM Nachislsumma
+                  GROUP BY Nachislyear
+                  HAVING Nachislyear = 2025)
+SELECT Ns.Accountid,
+       Ns.Nachislsum,
+       Ns.Nachislmonth,
+       Ns.Nachislyear,
+       (SELECT Avg_nach FROM Fact_avg) AS Avg_all
+FROM Nachislsumma Ns
+WHERE Ns.Nachislsum > (SELECT Avg_nach FROM Fact_avg)
+  AND Ns.Nachislyear = 2025
+ORDER BY 1;
+
+
+/*
+Допустим, необходимо вывести по каждому абоненту:
+-номер его лицевого счёта,
+-ФИО
+-общие суммы значений плат за 2024 г. и 2025 г.
+-результат выполнения запроса с простым разложением на подзапросы
+
+
+Этот SQL-запрос использует CTE, чтобы сначала создать временную
+таблицу Year_abon_pay, содержащую суммы значений оплат (Total_sum)
+для каждого года (Payyear) и для каждого абонента (Accountid).
+Эти суммы вычисляются из таблицы Paysumma с использованием агрегатной
+функции SUM и группировки по году и абоненту. Затем основной запрос
+выбирает из таблицы Abonent данные о каждом абоненте, и для каждого
+абонента присоединяет суммы значений оплат из временной таблицы
+Year_abon_pay для года 2024 (Year_2024.Total_sum) и 2025
+(Year_2025.Total_sum). Если для определённого года или абонента нет
+оплат, возвращается NULL.
+*/
+
+WITH Year_abon_pay AS (SELECT Payyear, Accountid, SUM(Paysum) AS Total_sum
+                       FROM Paysumma
+                       GROUP BY Payyear, Accountid)
+SELECT A.Accountid,
+       A.Fio,
+       Year_2024.Total_sum AS Total_2024,
+       Year_2025.Total_sum AS Total_2025
+FROM Abonent A
+         LEFT JOIN Year_abon_pay AS Year_2024
+                   ON A.Accountid = Year_2024.Accountid
+                       AND Year_2024.Payyear = 2024
+         LEFT JOIN Year_abon_pay AS Year_2025
+                   ON A.Accountid = Year_2025.Accountid
+                       AND Year_2025.Payyear = 2025
+ORDER BY Accountid;
+
+
+SELECT
+    A.Accountid,
+    A.Fio,
+    SUM(CASE WHEN P.Payyear = 2024 THEN P.Paysum ELSE 0 END) AS Total_2024,
+    SUM(CASE WHEN P.Payyear = 2025 THEN P.Paysum ELSE 0 END) AS Total_2025
+FROM Abonent A
+         LEFT JOIN Paysumma P ON A.Accountid = P.Accountid
+GROUP BY A.Accountid, A.Fio
+ORDER BY A.Accountid;
+
+
+SELECT
+    A.Accountid,
+    A.Fio,
+    SUM(P.Paysum) FILTER (WHERE P.Payyear = 2024) AS Total_2024,
+    SUM(P.Paysum) FILTER (WHERE P.Payyear = 2025) AS Total_2025
+FROM Abonent A
+         LEFT JOIN Paysumma P ON A.Accountid = P.Accountid
+GROUP BY A.Accountid, A.Fio
+ORDER BY A.Accountid;
+
+
+
+/*
+crosstab(source_sql text, category_sql text)
+Параметр	                Что это	                                            Обязательность
+source_sql	    SQL-запрос, который возвращает исходные данные	                ✅ Обязателен
+category_sql	SQL-запрос, который возвращает список категорий (имён столбцов)	❌ Опционален (но лучше указывать)
+
+crosstab(source_sql, category_sql)
+берёт строки вида (строка, категория, значение),
+и для каждой строки создаёт столбец по категории,
+кладя значение в нужную ячейку.
+Второй параметр задаёт, какие категории будут столбцами
+и в каком порядке.
+
+*/
+CREATE EXTENSION IF NOT EXISTS tablefunc;
+
+SELECT *
+FROM crosstab(
+             $$
+    SELECT A.Accountid, A.Fio, P.Payyear::TEXT, P.Paysum
+    FROM Abonent A
+    LEFT JOIN Paysumma P ON A.Accountid = P.Accountid
+    WHERE P.Payyear IN (2024, 2025) OR P.Payyear IS NULL
+    ORDER BY 1, 3
+    $$,
+    $$ VALUES ('2024'), ('2025') $$
+     ) AS ct(
+             Accountid TEXT,
+             Fio TEXT,
+             Total_2024 NUMERIC,
+             Total_2025 NUMERIC
+    )
+ORDER BY Accountid;
+
+
+/*
+В качестве табличного подзапроса может использоваться любой запрос
+SELECT, причём при использовании рекурсии <табличный_подзапрос>
+обязательно содержит в себе объединение результатов нескольких
+запросов. Примеры использования рекурсивных подзапросов в секции WITH
+будут приведены после изучения объединений результатов нескольких
+запросов.
+
+Вывести наименования услуг, за которые сумма значений начислений
+всем абонентам превышает более чем на величину, задаваемую
+параметром Pr, начисление тому абоненту, который имеет максимальное
+значение начисления, может следующий запрос:
+*/
+
+WITH
+    Maxnach AS (
+        SELECT MAX(Nachislsum) AS Maxpayment
+        FROM Nachislsumma
+    ),
+    Servicenach AS (
+        SELECT S.Servicenm, SUM(N.Nachislsum) AS Totalnach
+        FROM Services S
+                 JOIN Nachislsumma N USING(Serviceid)
+        GROUP BY S.Servicenm
+    )
+
+SELECT Sn.Servicenm
+FROM Servicenach Sn
+         JOIN Maxnach ON Sn.Totalnach > Maxpayment + :Pr;
+
+/*
+Этот SQL-запрос выполняет следующие действия:
+
+CTE Maxnach: в этой части запроса выбирается максимальное значение
+начисления (Nachislsum) из таблицы Nachislsumma и сохраняется во
+временной таблице Maxnach;
+
+CTE Servicenach: здесь происходит подсчёт сумм значений начислений
+для каждой услуги (Servicenm). Сначала выполняется соединение
+таблицы услуг (Services) с таблицей начислений (Nachislsumma) по
+коду услуги (Serviceid). Затем данные группируются по названию
+услуги, и для каждой группы вычисляется сумма значений начислений
+(Totalnach);
+
+Основной запрос: в нём происходит соединение результатов из CTE
+Servicenach с временной таблицей Maxnach по условию: значения
+начислений для каждой услуги (Sn.Totalnach) должны быть больше
+максимального значения начисления, найденного в CTE Maxnach,
+увеличенного на определённое значение (:Pr). Результатом запроса
+являются названия услуг (Sn.Servicenm), для которых выполняется
+данное условие.
+
+Итак, запрос возвращает названия услуг, значения начислений которых
+превышают определённое пороговое значение (максимальное значение
+начислений в таблице Nachislsumma, увеличенное на значение параметра
+:Pr).
+
+
+*/
+
+
+SELECT A.Accountid, A.Fio,
+       COALESCE(SUM(CASE WHEN P.Serviceid = 1 THEN P.Paysum END), 0) AS "Газ",
+       COALESCE(SUM(CASE WHEN P.Serviceid = 2 THEN P.Paysum END), 0) AS "Электр.",
+       COALESCE(SUM(CASE WHEN P.Serviceid = 3 THEN P.Paysum END), 0) AS "Тепло",
+       COALESCE(SUM(CASE WHEN P.Serviceid = 4 THEN P.Paysum END), 0) AS "Вода",
+       COALESCE(SUM(P.Paysum), 0) AS "ВСЕГО"
+FROM Abonent A
+         LEFT JOIN Paysumma P USING(Accountid)
+WHERE P.Serviceid IN (1, 2, 3, 4)
+GROUP BY A.Accountid, A.Fio
+ORDER BY A.Accountid;
+
+
+/*
+Значения оплат каждым абонентом в разрезе услуг
+*/
+
+SELECT A.Accountid, A.Fio,
+       COALESCE(SUM(CASE WHEN P.Serviceid = 1 THEN P.Paysum END), 0) AS "Газ",
+       COALESCE(SUM(CASE WHEN P.Serviceid = 2 THEN P.Paysum END), 0) AS "Электр.",
+       COALESCE(SUM(CASE WHEN P.Serviceid = 3 THEN P.Paysum END), 0) AS "Тепло",
+       COALESCE(SUM(CASE WHEN P.Serviceid = 4 THEN P.Paysum END), 0) AS "Вода",
+       COALESCE(SUM(P.Paysum), 0) AS "ВСЕГО"
+FROM Abonent A
+         LEFT JOIN Paysumma P USING(Accountid)
+WHERE P.Serviceid IN (1, 2, 3, 4)
+GROUP BY A.Accountid, A.Fio
+ORDER BY A.Accountid;
+
+
+---или CTE
+
+
+WITH Serv AS (SELECT Accountid, Serviceid, SUM(Paysum) AS S
+              FROM Paysumma P
+              GROUP BY Accountid, Serviceid)
+SELECT A.Accountid,
+       A.Fio,
+       COALESCE(S1.S, 0)                                                             AS "Газ",
+       COALESCE(S2.S, 0)                                                             AS "Электр.",
+       COALESCE(S3.S, 0)                                                             AS "Тепло",
+       COALESCE(S4.S, 0)                                                             AS "Вода",
+       COALESCE(S1.S, 0) + COALESCE(S2.S, 0) + COALESCE(S3.S, 0) + COALESCE(S4.S, 0) AS "ВСЕГО"
+FROM Abonent A
+         LEFT JOIN Serv S1 ON A.Accountid = S1.Accountid AND S1.Serviceid = 1
+         LEFT JOIN Serv S2 ON A.Accountid = S2.Accountid AND S2.Serviceid = 2
+         LEFT JOIN Serv S3 ON A.Accountid = S3.Accountid AND S3.Serviceid = 3
+         LEFT JOIN Serv S4 ON A.Accountid = S4.Accountid AND S4.Serviceid = 4
+ORDER BY A.Accountid;
+
+
+SELECT A.Accountid, A.Fio,
+       COALESCE(SUM(P.Paysum) FILTER (WHERE P.Serviceid = 1), 0) AS "Газ",
+       COALESCE(SUM(P.Paysum) FILTER (WHERE P.Serviceid = 2), 0) AS "Электр.",
+       COALESCE(SUM(P.Paysum) FILTER (WHERE P.Serviceid = 3), 0) AS "Тепло",
+       COALESCE(SUM(P.Paysum) FILTER (WHERE P.Serviceid = 4), 0) AS "Вода",
+       COALESCE(SUM(P.Paysum), 0) AS "ВСЕГО"
+FROM Abonent A
+         LEFT JOIN Paysumma P ON A.Accountid = P.Accountid AND P.Serviceid IN (1, 2, 3, 4)
+GROUP BY A.Accountid, A.Fio
+ORDER BY A.Accountid;
+
+
+WITH Serv AS MATERIALIZED (
+    SELECT Accountid,
+           SUM(Paysum) FILTER (WHERE Serviceid = 1) AS Gas,
+           SUM(Paysum) FILTER (WHERE Serviceid = 2) AS Electr,
+           SUM(Paysum) FILTER (WHERE Serviceid = 3) AS Heat,
+           SUM(Paysum) FILTER (WHERE Serviceid = 4) AS Water,
+           SUM(Paysum) AS Total
+    FROM Paysumma
+    WHERE Serviceid IN (1, 2, 3, 4)
+    GROUP BY Accountid
+)
+SELECT A.Accountid, A.Fio,
+       COALESCE(S.Gas, 0) AS "Газ",
+       COALESCE(S.Electr, 0) AS "Электр.",
+       COALESCE(S.Heat, 0) AS "Тепло",
+       COALESCE(S.Water, 0) AS "Вода",
+       COALESCE(S.Total, 0) AS "ВСЕГО"
+FROM Abonent A
+         LEFT JOIN Serv S ON A.Accountid = S.Accountid
+ORDER BY A.Accountid;
+
+
+
+WITH aggregated AS (
+    SELECT DISTINCT A.Accountid, A.Fio,
+                    SUM(P.Paysum) FILTER (WHERE P.Serviceid = 1) OVER (PARTITION BY A.Accountid) AS Gas,
+                    SUM(P.Paysum) FILTER (WHERE P.Serviceid = 2) OVER (PARTITION BY A.Accountid) AS Electr,
+                    SUM(P.Paysum) FILTER (WHERE P.Serviceid = 3) OVER (PARTITION BY A.Accountid) AS Heat,
+                    SUM(P.Paysum) FILTER (WHERE P.Serviceid = 4) OVER (PARTITION BY A.Accountid) AS Water,
+                    SUM(P.Paysum) OVER (PARTITION BY A.Accountid) AS Total
+    FROM Abonent A
+             LEFT JOIN Paysumma P ON A.Accountid = P.Accountid AND P.Serviceid IN (1, 2, 3, 4)
+)
+SELECT Accountid, Fio,
+       COALESCE(Gas, 0) AS "Газ",
+       COALESCE(Electr, 0) AS "Электр.",
+       COALESCE(Heat, 0) AS "Тепло",
+       COALESCE(Water, 0) AS "Вода",
+       COALESCE(Total, 0) AS "ВСЕГО"
+FROM aggregated
+ORDER BY Accountid;
+
+/*
+1.Особенности использования простого разложения на подзапросы
+в секции WITH:
+
+2.производные таблицы, определённые в секции WITH, могут ссылаться
+друг на друга;
+
+3.сcылка на производную таблицу (имя_производной_таблицы) может
+использоваться в любой части основного запроса (в секциях SELECT,
+FROM и т.д.);
+
+4.одна и та же производная таблица может использоваться несколько раз
+в основном запросе под разными псевдонимами;
+
+5.в многострочных запросах на обновление (INSERT, UPDATE и DELETE)
+подзапросы могут включать секцию WITH, определяющую производные
+таблицы;
+
+6.производные таблицы могут использоваться в процедурном языке.
+
+
+
+
+=============================================================================
+Сравнение подзапроса и обобщённого табличного выражения (CTE)
+=============================================================================
+После изучения вложенных запросов и общих табличных выражений можно
+сделать вывод о том, что использование CTE вместо подзапроса имеет
+несколько преимуществ.
+
+-------------------------------------------------------------------------------------------------------------
+| Критерий              | CTE                                           | Подзапрос                         |
+|-----------------------+-----------------------------------------------+-----------------------------------|
+| Множественные ссылки  | После определения CTE можно многократно       | Требуется каждый раз писать       |
+|                       | ссылаться на него по имени в последующих      | полный подзапрос                  |
+|                       | запросах                                      |                                   |
+|-----------------------+-----------------------------------------------+-----------------------------------|
+| Несколько таблиц      | Более удобен для чтения при работе с          | Подзапросы будут разбросаны       |
+|                       | несколькими таблицами, поскольку можно        | по всему запросу                  |
+|                       | перечислить все CTE заранее                   |                                   |
+-------------------------------------------------------------------------------------------------------------
+
+Преимущества CTE:
+- Улучшает читаемость сложных запросов
+- Позволяет повторно использовать один и тот же подзапрос
+- Упрощает отладку (можно выполнить CTE отдельно)
+- Снижает дублирование кода
+
+Недостатки CTE:
+- В PostgreSQL до версии 12 CTE материализуются (могут быть медленнее)
+- Может потреблять больше памяти
+=============================================================================
+*/
+
+
+/*
+
+Запросы со связанными вложенными запросами!!!
+
+Вложенный запрос может ссылаться на таблицу(ы), указанную(ые) во
+внешнем (основном) запросе (независимо от его уровня вложенности).
+
+Такой вложенный запрос называется зависимым, соотнесённым,
+коррелированным или связанным из-за того, что результат его выполнения
+зависит от значений, определённых в основном запросе.
+При этом вложенный запрос выполняется неоднократно, по разу
+для каждой строки таблицы основного (внешнего) запроса, а не раз,
+как в случае независимого вложенного запроса!!!
+
+Строка внешнего запроса, для которой внутренний запрос каждый раз
+будет выполнен, называется текущей строкой-кандидатом.
+
+Процедура оценки, выполняемой при использовании связанного
+вложенного запроса, состоит из нескольких шагов:
+
+1.выбрать очередную строку из таблицы, именованной во внешнем
+запросе. Это будет текущая строка-кандидат;
+
+2.сохранить значения из этой строки-кандидата в псевдониме,
+который задан в секции FROM внешнего запроса;
+
+3.выполнить вложенный запрос. Везде, где псевдоним, данный
+для внешнего запроса, найден, использовать значение для текущей
+строки-кандидата.
+Использование значения из строки-кандидата
+внешнего запроса во вложенном запросе называется внешней ссылкой;
+
+4.Если связанный подзапрос используется в секции WHERE или HAVING,
+оценить условие поиска (TRUE или FALSE) внешнего запроса на основе
+результатов вложенного запроса, выполняемого на шаге 3.
+Результат вложенного запроса определяет, выбирается ли строка-кандидат для
+вывода.
+Если связанный подзапрос используется в секции SELECT,
+то выводятся столбцы, указанные в списке возвращаемых элементов
+основного запроса, и результат выполнения вложенного запроса;
+
+
+5.повторить процедуру для следующей строки-кандидата основной
+(внешней) таблицы и т.д., пока все её строки не будут проверены.
+
+Общая структура связанного подзапроса такая же, как и независимого
+подзапроса (используются те же самые конструкции и не меняется
+порядок их следования).
+Однако в секциях:
+SELECT,
+WHERE,
+HAVING
+связанного подзапроса содержится ссылка на столбец таблицы внешнего
+запроса, и алгоритм выполнения связанного подзапроса совершенно
+другой.
+
+Поскольку вложенный запрос содержит ссылки на таблицу (таблицы)
+основного запроса, то вероятность неоднозначных ссылок на имена
+столбцов достаточно высока!!!
+Поэтому если во вложенном запросе
+присутствует неполное имя столбца, сервер БД должен определить,
+относится оно к таблице, указанной в секции FROM самого вложенного
+запроса, или к таблице, указанной в секции FROM внешнего запроса,
+содержащего данный вложенный запрос.
+Возможные неоднозначности при определении столбца устраняются
+использованием полного имени столбца.
+
+Неоднозначность при определении таблицы, используемой для конкретного
+отбора строк, устраняется с помощью псевдонимов таблиц, указываемых
+во внешнем и внутреннем запросах.
+
+Связанные подзапросы в секции SELECT.
+Чаще всего в секции SELECT применяется вложенный связанный,
+а не независимый подзапрос, и только типа <скалярный_подзапрос>.
+
+Запрос со связанным подзапросом, возвращающий ФИО абонентов и названия
+улиц, на которых они проживают, имеет вид
+
+
+Скалярный подзапрос — это подзапрос, который возвращает ровно одну
+строку и один столбец (одно единственное значение).
+Возвращает один столбец — только Streetnm
+Возвращает одну строку — условие WHERE S.Streetid = A.Streetid находит
+не более одной улицы (предполагается, что Streetid — уникальный ключ
+в таблице Street)
+Используется в SELECT — как обычное выражение, вычисляющее значение для
+каждой строки внешнего запроса
+Для каждой строки Abonent выполняется отдельно, подставляя A.Streetid
+
+*/
+
+
+/*
+Как он работает:
+Если у абонента есть улица — возвращает название
+Если у абонента нет улицы (Streetid = NULL)
+или улица не найдена — возвращает NULL
+Это поведение LEFT JOIN !!!
+*/
+SELECT A.Fio,
+       (SELECT S.Streetnm
+        FROM Street S
+        WHERE S.Streetid = A.Streetid)
+FROM Abonent A;
+
+SELECT A.Fio, S.Streetnm
+FROM Abonent A
+         LEFT JOIN Street S ON A.Streetid = S.Streetid;
+
+
+/*
+В соответствии с алгоритмом, описанным выше, данный запрос работает
+в такой последовательности:
+
+1.внешний запрос выбирает из таблицы Abonent строку с данными
+об абоненте, проживающем на улице с кодом, равным 3 (первая строка);
+
+2.сохраняет эту строку как текущую строку-кандидат под псевдонимом A;
+
+3.выполняет вложенный запрос, просматривающий всю таблицу Street,
+чтобы найти строку, где значение столбца S.Streetid такое же,
+как значение A.Streetid (3). Из найденной строки таблицы Street
+извлекается значение столбца Streetnm;
+
+4.для вывода выбираются значение столбца A.Fio из основного запроса
+(Аксенов С.А.) и найденное значение столбца S.Streetnm из вложенного
+запроса (Войков переулок);
+
+5.повторяются п.п. 1-4, пока каждая строка таблицы Abonent не будет
+проверена.
+*/
+
+
+/*
+Следует напомнить, что эту же задачу можно решить с использованием
+неявного или явного соединения таблиц Abonent и Street.
+
+Пусть необходимо вывести для каждого абонента номер его лицевого
+счёта, ФИО и общее количество поданных им заявок.
+Для этого может использоваться запрос
+*/
+
+
+SELECT A.Accountid,
+       A.Fio,
+       (SELECT COUNT(*)
+        FROM Request R
+        WHERE A.Accountid = R.Accountid) AS Request_count
+FROM Abonent A
+ORDER BY A.Accountid;
+
+/*
+Запрос работает таким образом:
+
+1.внешний запрос из таблицы Abonent выбирает строку с данными
+об абоненте, имеющем номер лицевого счёта '005488' (первая строка);
+
+2.сохраняет эту строку как текущую строку-кандидат под псевдонимом А;
+
+3.выполняется вложенный запрос, просматривающий таблицу Request,
+чтобы найти все строки, где значение столбца R.AccountId такое же,
+как значение A.AccountId ('005488'). С помощью агрегатной функции
+COUNT подсчитывается общее количество таких строк (3);
+
+4.для вывода выбираются значения столбцов A.AccountId и A.Fio
+из основного запроса ('005488', 'Аксенов С.А.') и найденное
+вложенным запросом количество связанных строк в таблице Request (3);
+
+5.повторяются п.п. 1-4, пока каждая строка таблицы Abonent не будет
+просмотрена.
+
+
+Данный пример запроса является демонстрационным, так как поставленную
+задачу эффективнее решать с применением автономного подзапроса:
+*/
+
+SELECT A.Accountid, A.Fio, COALESCE(Request_count, 0) AS Request_count
+FROM Abonent A
+         LEFT JOIN (SELECT Accountid, COUNT(*) AS Request_count
+                    FROM Request
+                    GROUP BY Accountid) R USING (Accountid)
+ORDER BY A.Accountid;
+
+
+/*
+Если во внешнем запросе используется секция GROUP BY, то выражения,
+указанные в ней, можно использовать внутри подзапросов.
+С помощью следующего запроса можно получить общие суммы начислений
+и плат по услуге с кодом 2 (Электроснабжение) по каждому абоненту,
+который подавал ремонтные заявки:
+
+
+Здесь в подзапросах вычисляются суммы значений начислений и плат
+по услуге с кодом 2 для каждого абонента, отобранного внешним запросом
+из таблицы Request.
+Затем возвращённые подзапросами значения выводятся
+по каждому абоненту в результирующих столбцах Nachisl и Pay.
+*/
+
+---Сначала PostgreSQL группирует таблицу Request по Accountid.
+--Теперь PostgreSQL берёт каждую строку (каждый уникальный Accountid)
+--из сгруппированного результата и выполняет подзапросы для этой строки.
+---WHERE Accountid = '005488' AND Serviceid = 2 → выбирает строки 1 и 2.
+---SUM(Nachislsum) = 1000 + 1500 = 2500
+--WHERE Accountid = '005488' AND Serviceid = 2 → выбирает строки 1 и 2.
+--SUM(Paysum) = 500 + 700 = 1200
+--(Если нет записей — SUM() возвращает NULL,
+--но в запросе нет COALESCE, поэтому будет NULL)
+
+/*
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Шаг 1: GROUP BY Accountid FROM Request                                     │
+│  ┌─────────────┐                                                            │
+│  │ '005488'    │                                                            │
+│  │ '015527'    │                                                            │
+│  │ '080047'    │                                                            │
+│  └─────────────┘                                                            │
+│         │                                                                    │
+│         ▼                                                                    │
+│  Шаг 2: Для каждого Accountid выполняются подзапросы                        │
+│                                                                             │
+│  Accountid = '005488' ──┬──► (SELECT SUM(Nachislsum) FROM Nachislsumma...)  │
+│                         │         → 2500                                    │
+│                         └──► (SELECT SUM(Paysum) FROM Paysumma...)          │
+│                                   → 1200                                    │
+│                                                                             │
+│  Accountid = '015527' ──┬──► (SELECT SUM(Nachislsum) ...) → 800             │
+│                         └──► (SELECT SUM(Paysum) ...) → 600                 │
+│                                                                             │
+│  Accountid = '080047' ──┬──► (SELECT SUM(Nachislsum) ...) → NULL            │
+│                         └──► (SELECT SUM(Paysum) ...) → NULL                │
+│                                                                             │
+│  Шаг 3: Формирование результата                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+*/
+
+SELECT R.Accountid,
+       (SELECT SUM(Nachislsum)
+        FROM Nachislsumma
+        WHERE Accountid = R.Accountid
+          AND Serviceid = 2) AS Nachisl,
+       (SELECT SUM(Paysum)
+        FROM Paysumma
+        WHERE Accountid = R.Accountid
+          AND Serviceid = 2) AS Pay
+FROM Request R
+GROUP BY R.Accountid;
+
+
+WITH nachisl_agg AS (
+    SELECT Accountid, SUM(Nachislsum) AS Nachisl
+    FROM Nachislsumma
+    WHERE Serviceid = 2
+    GROUP BY Accountid
+),
+     pay_agg AS (
+         SELECT Accountid, SUM(Paysum) AS Pay
+         FROM Paysumma
+         WHERE Serviceid = 2
+         GROUP BY Accountid
+     )
+SELECT R.Accountid, N.Nachisl, P.Pay
+FROM Request R
+         LEFT JOIN nachisl_agg N ON R.Accountid = N.Accountid
+         LEFT JOIN pay_agg P ON R.Accountid = P.Accountid
+GROUP BY R.Accountid, N.Nachisl, P.Pay
+ORDER BY R.Accountid;
+
+
+
+SELECT R.AccountId, N.Nachisl, P.Pay
+FROM Request R
+         LEFT JOIN (SELECT Accountid, SUM(Nachislsum) AS Nachisl
+                    FROM Nachislsumma
+                    WHERE Serviceid = 2
+                    GROUP BY Accountid) N ON R.Accountid = N.Accountid
+         LEFT JOIN (SELECT Accountid, SUM(Paysum) AS Pay
+                    FROM Paysumma
+                    WHERE Serviceid = 2
+                    GROUP BY Accountid) P ON R.Accountid = P.Accountid
+GROUP BY R.Accountid, N.Nachisl, P.Pay
+ORDER BY R.Accountid;
+
+/*
+Для получения более полной информации, например, чтобы дополнительно
+вывести ФИО абонентов, подойдёт следующий запрос со скалярным
+коррелированным подзапросом:
+*/
+
+
+SELECT R.AccountId,
+       (SELECT Fio FROM Abonent WHERE Accountid = R.Accountid),
+       (SELECT SUM(Nachislsum)
+        FROM Nachislsumma N
+        WHERE N.Accountid = R.Accountid
+          AND N.Serviceid = 2) AS Nachisl,
+       (SELECT SUM(Paysum)
+        FROM Paysumma P
+        WHERE P.Accountid = R.Accountid
+          AND P.Serviceid = 2) AS Pay
+FROM Request R
+GROUP BY R.Accountid
+ORDER BY 1;
+
+
+/*
+Следует отметить, что можно допустить ошибку, если попытаться получить
+аналогичные данные, используя запрос с соединением таблицы, например,
+такого вида:
+
+Этот запрос выдаёт некорректные данные, так как в результате соединения
+строки с начислениями и оплатами будут дублироваться.
+Второй запрос (с JOIN) некорректен, потому что LEFT JOIN к двум таблицам создаёт
+декартово произведение строк из Nachislsumma и Paysumma для одного абонента.
+Это приводит к задвоению (заутроению) сумм.
+
+Корректные результаты будет выдавать запрос, в котором начисления и оплаты
+вычисляются отдельно во вложенных связанных подзапросах в секции SELECT
+(аналогичный запросу, представленному ранее).
+*/
+
+
+SELECT R.AccountId,
+       SUM(N.Nachislsum) AS Nachisl,
+       SUM(P.Paysum) AS Pay
+FROM Request R
+         LEFT JOIN Nachislsumma N USING(AccountId)
+         LEFT JOIN Paysumma P USING(AccountId)
+WHERE P.Serviceid = 2
+GROUP BY R.AccountId
+ORDER BY 1;
+
+/*
+
+Вывести информацию о каждой заявке и при этом определить, погашена ли
+она, и если да, отобразить ФИО соответствующего исполнителя, а если нет,
+вывести «Not Executed», можно следующим запросом:
+*/
+
+SELECT Requestid,
+       Accountid,
+       CASE
+           WHEN Executed = TRUE THEN (SELECT Fio
+                                      FROM Executor
+                                      WHERE Executorid = R.Executorid)
+           ELSE 'Not Executed'
+           END AS "ExecutorNameOrStatus",
+       Failureid,
+       Incomingdate,
+       Executiondate
+FROM Request R;
+
+SELECT
+    R.Requestid,
+    R.Accountid,
+    COALESCE(E.Fio, 'Not Executed') AS ExecutorNameOrStatus,
+    R.Failureid,
+    R.Incomingdate,
+    R.Executiondate
+FROM Request R
+         LEFT JOIN LATERAL (
+    SELECT Fio
+    FROM Executor
+    WHERE Executorid = R.Executorid AND R.Executed = TRUE
+    ) E ON TRUE;
+
+--- ON TRUE =
+---"берём всё что подзапрос вернул"
+
+
+SELECT R.Requestid,
+       R.Accountid,
+       COALESCE(E.Fio, 'Not Executed') AS ExecutorNameOrStatus,
+       R.Failureid,
+       R.Incomingdate,
+       R.Executiondate
+FROM Request R
+         LEFT JOIN Executor E
+                   ON E.Executorid = R.Executorid -- соединяем по ID
+                       AND R.Executed = TRUE;          -- и только если Executed = TRUE
+
+
+/*
+Подзапросы могут быть использованы для сравнения значений с NULL
+или NOT NULL в других таблицах. Например, вывести код заявки, лицевой
+счёт абонента, который подал эту заявку, и ФИО её исполнителя, если он
+существует, иначе вывести «Исполнитель не назначен»:
+*/
+
+SELECT Requestid,
+       Accountid,
+       CASE
+           WHEN Executorid IS NOT NULL THEN
+               (SELECT Fio
+                FROM Executor
+                WHERE Executorid = R.Executorid)
+           ELSE 'Исполнитель не назначен'
+           END AS "ExecutorName"
+FROM Request R
+ORDER BY Requestid;
+
+/*
+В запросе можно использовать одновременно независимые и связанные
+подзапросы.
+Если в предыдущем примере код услуги неизвестен,
+то его можно определить, используя независимый подзапрос,
+например:
+*/
+
+SELECT R.AccountId,
+       (SELECT SUM(Nachislsum)
+        FROM Nachislsumma N
+        WHERE N.AccountId = R.AccountId
+          AND N.Serviceid = (SELECT Serviceid
+                             FROM Services
+                             WHERE Servicenm = 'Электроснабжение')) AS Nachisl,
+       (SELECT SUM(Paysum)
+        FROM Paysumma P
+        WHERE P.AccountId = R.AccountId
+          AND P.Serviceid = (SELECT Serviceid
+                             FROM Services
+                             WHERE Servicenm = 'Электроснабжение')) AS Pay
+FROM Request R
+GROUP BY R.AccountId;
+
+/*
+Если независимый подзапрос вынести в секцию WITH, то получится запрос:
+*/
+
+WITH Service AS (
+    SELECT Serviceid
+    FROM Services
+    WHERE Servicenm = 'Электроснабжение'
+)
+SELECT R.Accountid,
+       (SELECT SUM(Nachislsum)
+        FROM Nachislsumma N
+        WHERE N.Accountid = R.Accountid
+          AND N.Serviceid = (SELECT Serviceid FROM Service)) AS Nachisl,
+       (SELECT SUM(Paysum)
+        FROM Paysumma P
+        WHERE P.Accountid = R.Accountid
+          AND P.Serviceid = (SELECT Serviceid FROM Service)) AS Pay
+FROM Request R
+GROUP BY R.Accountid;
+
+
+/*
+nachislfactid|accountid|serviceid|nachislsum|nachislmonth|nachislyear
+1            |136160   |2        |656.00    |1           |2025
+13           |136160   |2        |620.00    |5           |2023
+*/
+select * ---сумма начислений 1276
+from Nachislsumma
+where Accountid = '136160'
+and Serviceid = 2;
+
+/*
+Следующий пример запроса демонстрирует применение соединения
+в подзапросе:
+В этом запросе со связанным подзапросом неявно соединяются таблицы
+Abonent и Street для получения ФИО абонентов и их адреса, а также
+выполняется явное соединение с таблицей Request, чтобы возвратить
+даты подачи ими ремонтных заявок.
+
+*/
+
+SELECT A.Fio,
+       (SELECT S.Streetnm
+        FROM Street S
+        WHERE S.Streetid = A.Streetid) ||
+       ', д.'  ||
+       A.Houseno ||
+       ', кв.' ||
+       A.Flatno AS Address,
+       R.Incomingdate
+FROM Abonent A
+         INNER JOIN Request R USING (Accountid)
+ORDER BY 1;
+
+SELECT *
+FROM Street S;
+
+select *
+from Abonent A;
+
+/*
+Коррелированные подзапросы можно использовать для вычисления
+накопительных итогов.
+Выведем для каждой услуги суммарную величину
+значений плат за каждый день и все предыдущие дни.
+Запрос может быть таким:
+
+Сам запрос синтаксически правильный и логически верный,
+но есть потенциальная проблема: если в один день по одной услуге есть
+несколько платежей, то GROUP BY P.Serviceid, P.Paydate
+сгруппирует их в одну строку, а нарастающий итог будет считаться
+по всем платежам этого дня вместе, но без учёта порядка платежей внутри дня.
+*/
+
+SELECT P.Serviceid,
+       P.Paydate,
+       SUM(P.Paysum),
+       (SELECT SUM(Paysum)
+        FROM Paysumma
+        WHERE Paydate <= P.Paydate
+          AND Serviceid = P.Serviceid) AS "Нарастающий итог"
+FROM Paysumma P
+GROUP BY P.Serviceid, P.Paydate
+ORDER BY P.Serviceid, P.Paydate;
+
+SELECT Serviceid
+     , Paydate
+     , Paysum
+     , SUM(Paysum) OVER (PARTITION BY Serviceid ORDER BY Paydate) AS "Нарастающий итог"
+     , SUM(Paysum) OVER (PARTITION BY Serviceid )                 as total_service_id
+     , SUM(Paysum) OVER ()                                        as total
+     , SUM(Paysum) OVER (ORDER BY Serviceid,Paydate)                        as paydates
+FROM Paysumma
+ORDER BY Serviceid,Paydate;
+---это оконная функция без PARTITION BY, которая считает нарастающий итог по всем строкам (без разбиения на услуги),
+-- но порядок определяется только Paydate.
+
+
+/*
+
+Таким образом, коррелированные подзапросы в секции SELECT полезны
+для выполнения вычислений или извлечения данных, которые зависят
+от каждой строки основного запроса!!!
+Использование коррелированных подзапросов в секции SELECT
+позволяет включать в результативный набор более информативные данные,
+не создавая дополнительные JOIN, что делает запросы более лаконичными
+и понятными. Например, следующий запрос вычисляет общую задолженность
+или переплату каждого абонента, вычитая сумму значений всех его платежей
+из общей суммы значений его начислений:
+*/
+
+
+/*
+Сложность: O(количество абонентов × (поиск по Nachislsumma + поиск по Paysumma))
+При 1 млн абонентов и 10 млн записей в каждой из таблиц —
+это десятки секунд или минуты.
+*/
+
+SELECT A.AccountId,
+       A.FIO,
+       (SELECT SUM(N.Nachislsum)
+        FROM Nachislsumma N
+        WHERE N.AccountId = A.AccountId) -
+       (SELECT SUM(P.Paysum)
+        FROM Paysumma P
+        WHERE P.AccountId = A.AccountId) AS "Debet/Credit"
+FROM Abonent A;
+
+/*
+Оптимизация 1: Предварительная агрегация + LEFT JOIN (рекомендуемый)
+Сложность: O(размер Nachislsumma + размер Paysumma + размер Abonent)
+— один проход по каждой таблице.
+*/
+
+WITH nachisl_agg AS (SELECT AccountId, SUM(Nachislsum) AS total_nachisl
+                     FROM Nachislsumma
+                     GROUP BY AccountId),
+     pay_agg AS (SELECT AccountId, SUM(Paysum) AS total_pay
+                 FROM Paysumma
+                 GROUP BY AccountId)
+SELECT A.AccountId,
+       A.FIO,
+       COALESCE(N.total_nachisl, 0) - COALESCE(P.total_pay, 0) AS "Debet/Credit"
+FROM Abonent A
+         LEFT JOIN nachisl_agg N ON A.AccountId = N.AccountId
+         LEFT JOIN pay_agg P ON A.AccountId = P.AccountId;
+
+
+WITH totals AS (SELECT AccountId, SUM(Nachislsum) AS total_nachisl, 0 AS total_pay
+                FROM Nachislsumma
+                GROUP BY AccountId
+                UNION ALL
+                SELECT AccountId, 0 AS total_nachisl, SUM(Paysum) AS total_pay
+                FROM Paysumma
+                GROUP BY AccountId)
+SELECT A.AccountId,
+       A.FIO,
+       SUM(total_nachisl) - SUM(total_pay) AS "Debet/Credit"
+FROM Abonent A
+         LEFT JOIN totals T ON A.AccountId = T.AccountId
+GROUP BY A.AccountId, A.FIO;
+
+
+
+WITH monthly_balance AS (
+    -- Начисления (положительные)
+    SELECT AccountId,
+           DATE_TRUNC('month', MAKE_DATE(Nachislyear, Nachislmonth, 1)) AS MonthStart,
+           SUM(Nachislsum) AS monthly_nachisl
+    FROM Nachislsumma
+    GROUP BY AccountId, DATE_TRUNC('month', MAKE_DATE(Nachislyear, Nachislmonth, 1))
+
+    UNION ALL
+
+    -- Платежи (отрицательные)
+    SELECT AccountId,
+           DATE_TRUNC('month', Paydate) AS MonthStart,
+           -SUM(Paysum) AS monthly_nachisl   -- минус, так как платежи уменьшают сальдо
+    FROM Paysumma
+    GROUP BY AccountId, DATE_TRUNC('month', Paydate)
+),
+     monthly_agg AS (
+         SELECT AccountId, MonthStart, SUM(monthly_nachisl) AS monthly_change
+         FROM monthly_balance
+         GROUP BY AccountId, MonthStart
+     )
+SELECT AccountId,
+       TO_CHAR(MonthStart, 'YYYY-MM') AS Month,
+       monthly_change,
+       SUM(monthly_change) OVER (PARTITION BY AccountId ORDER BY MonthStart) AS balance_end_of_month
+FROM monthly_agg
+ORDER BY AccountId, MonthStart;
+
+/*
+А проверить, есть ли у абонента начисления, превышающие среднее
+начисление по его аккаунту, можно так:
+
+десь подзапросы используются для подсчёта начислений, превышающих
+среднее значение для данного абонента.
+*/
+
+SELECT A.AccountId,
+       A.FIO,
+       (SELECT COUNT(*)
+        FROM Nachislsumma N
+        WHERE N.AccountId = A.AccountId
+          AND N.Nachislsum > (SELECT AVG(N1.Nachislsum)
+                              FROM Nachislsumma N1
+                              WHERE N1.AccountId = A.AccountId)) AS Above_average_accruals
+FROM Abonent A;
+
+/*287*/
+
