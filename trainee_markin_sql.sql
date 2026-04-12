@@ -7411,11 +7411,58 @@ SELECT A.AccountId,
        A.FIO,
        (SELECT SUM(N.Nachislsum)
         FROM Nachislsumma N
-        WHERE N.AccountId = A.AccountId) -
+        WHERE N.AccountId = A.AccountId)
+           -
        (SELECT SUM(P.Paysum)
         FROM Paysumma P
         WHERE P.AccountId = A.AccountId) AS "Debet/Credit"
 FROM Abonent A;
+
+
+WITH monthly_data AS (
+    -- Начисления по месяцам
+    SELECT AccountId,
+           MAKE_DATE(Nachislyear, Nachislmonth, 1) AS MonthStart,
+           SUM(Nachislsum)                         AS nachisl,
+           0                                       AS pay
+    FROM Nachislsumma
+    GROUP BY AccountId, MAKE_DATE(Nachislyear, Nachislmonth, 1)
+
+    UNION ALL
+
+    -- Платежи по месяцам
+    SELECT AccountId,
+           DATE_TRUNC('month', Paydate) AS MonthStart,
+           0                            AS nachisl,
+           SUM(Paysum)                  AS pay
+    FROM Paysumma
+    GROUP BY AccountId, DATE_TRUNC('month', Paydate)),
+     aggregated AS (SELECT AccountId,
+                           MonthStart,
+                           SUM(nachisl) AS nachisl,
+                           SUM(pay)     AS pay
+                    FROM monthly_data
+                    GROUP BY AccountId, MonthStart),
+     balance AS (SELECT AccountId,
+                        MonthStart,
+                        nachisl,
+                        pay,
+                        nachisl - pay                                                        AS change,
+                        SUM(nachisl - pay) OVER (PARTITION BY AccountId ORDER BY MonthStart) AS balance_end
+                 FROM aggregated)
+SELECT A.AccountId,
+       A.FIO,
+       TO_CHAR(b.MonthStart, 'YYYY-MM')                                                         AS "Месяц",
+       b.nachisl                                                                                AS "Начисления",
+       b.pay                                                                                    AS "Оплата",
+       b.change                                                                                 AS "Изменение",
+       COALESCE(LAG(b.balance_end, 1) OVER (PARTITION BY A.AccountId ORDER BY b.MonthStart), 0) AS "Сальдо на начало",
+       b.balance_end                                                                            AS "Сальдо на конец"
+FROM Abonent A
+         JOIN balance b ON A.AccountId = b.AccountId
+WHERE A.AccountId = '136160' -- ← подставьте нужный лицевой счёт
+ORDER BY b.MonthStart;
+
 
 /*
 Оптимизация 1: Предварительная агрегация + LEFT JOIN (рекомендуемый)
@@ -7436,57 +7483,10 @@ FROM Abonent A
          LEFT JOIN nachisl_agg N ON A.AccountId = N.AccountId
          LEFT JOIN pay_agg P ON A.AccountId = P.AccountId;
 
-
-WITH totals AS (SELECT AccountId, SUM(Nachislsum) AS total_nachisl, 0 AS total_pay
-                FROM Nachislsumma
-                GROUP BY AccountId
-                UNION ALL
-                SELECT AccountId, 0 AS total_nachisl, SUM(Paysum) AS total_pay
-                FROM Paysumma
-                GROUP BY AccountId)
-SELECT A.AccountId,
-       A.FIO,
-       SUM(total_nachisl) - SUM(total_pay) AS "Debet/Credit"
-FROM Abonent A
-         LEFT JOIN totals T ON A.AccountId = T.AccountId
-GROUP BY A.AccountId, A.FIO;
-
-
-
-WITH monthly_balance AS (
-    -- Начисления (положительные)
-    SELECT AccountId,
-           DATE_TRUNC('month', MAKE_DATE(Nachislyear, Nachislmonth, 1)) AS MonthStart,
-           SUM(Nachislsum) AS monthly_nachisl
-    FROM Nachislsumma
-    GROUP BY AccountId, DATE_TRUNC('month', MAKE_DATE(Nachislyear, Nachislmonth, 1))
-
-    UNION ALL
-
-    -- Платежи (отрицательные)
-    SELECT AccountId,
-           DATE_TRUNC('month', Paydate) AS MonthStart,
-           -SUM(Paysum) AS monthly_nachisl   -- минус, так как платежи уменьшают сальдо
-    FROM Paysumma
-    GROUP BY AccountId, DATE_TRUNC('month', Paydate)
-),
-     monthly_agg AS (
-         SELECT AccountId, MonthStart, SUM(monthly_nachisl) AS monthly_change
-         FROM monthly_balance
-         GROUP BY AccountId, MonthStart
-     )
-SELECT AccountId,
-       TO_CHAR(MonthStart, 'YYYY-MM') AS Month,
-       monthly_change,
-       SUM(monthly_change) OVER (PARTITION BY AccountId ORDER BY MonthStart) AS balance_end_of_month
-FROM monthly_agg
-ORDER BY AccountId, MonthStart;
-
 /*
 А проверить, есть ли у абонента начисления, превышающие среднее
 начисление по его аккаунту, можно так:
-
-десь подзапросы используются для подсчёта начислений, превышающих
+здесь подзапросы используются для подсчёта начислений, превышающих
 среднее значение для данного абонента.
 */
 
@@ -7500,5 +7500,447 @@ SELECT A.AccountId,
                               WHERE N1.AccountId = A.AccountId)) AS Above_average_accruals
 FROM Abonent A;
 
-/*287*/
+/*
+Здесь подзапросы используются для подсчёта начислений, превышающих
+среднее значение для данного абонента.
+*/
+
+
+/*
+Связанные подзапросы в секции FROM.
+В секции FROM можно использовать только независимый подзапрос!!!,
+но внутри последнего можно применять коррелированный вложенный запрос!!!
+В следующем запросе реализован вывод номеров лицевых счетов абонентов,
+имеющих отрицательную разницу между суммами значений всех их оплат и
+начислений (задолженность):
+*/
+
+SELECT t.AccountId, ABS(t."Долг")
+FROM (SELECT P.AccountId,
+             (SUM(P.Paysum) - (SELECT SUM(N.Nachislsum)
+                               FROM Nachislsumma N
+                               WHERE N.AccountId = P.AccountId
+                               GROUP BY N.AccountId)) AS "Долг"
+      FROM Paysumma AS P
+      GROUP BY P.AccountId) t
+WHERE t."Долг" < 0
+ORDER BY t."Долг";
+
+/*
+Для вычисления по каждому абоненту искомой разницы в секции FROM
+основного запроса применён автономный подзапрос, содержащий
+коррелированный вложенный запрос. В качестве выходного значения,
+элемента фильтрации строк и сортировки используется псевдоним
+«Долг».
+Применяя предыдущий запрос, можно вычислить общие значения
+переплаты и задолженности следующим образом:
+*/
+
+
+SELECT SUM(CASE WHEN "Сальдо" > 0 THEN "Сальдо" ELSE 0 END)      AS "Переплата",
+       SUM(CASE WHEN "Сальдо" < 0 THEN ABS("Сальдо") ELSE 0 END) AS "Долг"
+FROM (SELECT P.Accountid,
+             (SUM(P.Paysum) - (SELECT SUM(N.Nachislsum)
+                               FROM Nachislsumma N
+                               WHERE N.Accountid = P.Accountid
+                               GROUP BY N.Accountid)) AS "Сальдо"
+      FROM Paysumma AS P
+      GROUP BY P.Accountid) t;
+
+/*
+Коррелированный подзапрос в секции FROM применяется с помощью
+конструкции LATERAL.
+Принципиальное отличие такого вложенного запроса
+заключается в возвращаемом результате.
+
+Если коррелированные подзапросы в секциях SELECT и WHERE
+возвращают одно значение или TRUE/FALSE,
+то запрос во FROM может возвращать таблицу.
+
+Ключевое слово LATERAL, используемое во FROM-секции запроса,
+позволяет вложенному запросу обращаться к строкам, извлечённым основной
+частью запроса — то есть к текущей строке «левой» таблицы.
+
+Это делает возможным создание построчных зависимых соединений между
+таблицами, особенно если данные поступают из разных источников и
+имеют несовпадающие временные метки.
+
+Например, для вывода по каждому абоненту его номера лицевого счёта
+и ФИО, а также всех данных о последней поданной ремонтной заявке,
+можно использовать такой запрос:
+*/
+
+SELECT A.AccountId,
+       Fio,
+       Last_request.*
+FROM Abonent A
+         INNER JOIN LATERAL
+    (SELECT *
+     FROM Request R
+     WHERE AccountId = A.AccountId
+     ORDER BY R.Incomingdate DESC
+     LIMIT 1) AS Last_request ON TRUE;
+
+
+/*
+LATERAL позволяет подзапросу в FROM обращаться к колонкам
+из левой таблицы и выполняться для каждой строки этой таблицы.
+
+Запрос работает следующим образом:
+
+-для каждой строки из Abonent выполняется подзапрос, отбирающий самую
+позднюю (по Incomingdate) заявку из таблицы Request;
+
+-подзапрос ограничен LIMIT 1, чтобы вернуть только одну — последнюю
+известную заявку;
+
+-условие ON TRUE указывает, что явного соединительного условия здесь
+не требуется — связь установлена в самом подзапросе.
+
+Если убрать ключевое слово LATERAL, подзапрос не сможет обратиться
+к A.Accountid, и PostgreSQL выдаст ошибку: в элементе предложения FROM
+неверная ссылка на таблицу «a».
+
+Рассмотрим пример связанного подзапроса с применением приёма,
+аналогичного Asof JOIN.
+Предположим, необходимо сопоставить данные из таблиц Request и Paysumma
+по дате регистрации заявки и дате оплаты.
+Однако поскольку данные из этих таблиц могут
+поступать из разных систем, точное совпадение дат встречается редко.
+В таких ситуациях применяется LATERAL, позволяющий гибко выбирать
+строку из второй таблицы (в данном случае — Paysumma) для каждой
+строки из первой таблицы (Request).
+
+Семантика запроса следующая: «Найти последний (максимально близкий,
+но не превышающий по дате) платёж для каждой заявки на ремонт»:
+*/
+
+SELECT *
+FROM Request R
+         LEFT JOIN LATERAL
+    (SELECT p.Payfactid, p.Paysum, p.Paydate
+     FROM Paysumma p
+     WHERE p.Accountid = R.Accountid
+       AND p.Paydate <= R.Incomingdate
+     ORDER BY Paydate DESC
+     LIMIT 1) t ON TRUE ---можно использовать CROSS JOIN LATERAL
+ORDER BY r.Incomingdate - t.Paydate, r.Requestid;
+
+
+/*
+Этот запрос выполняется по принципу «сверху-вниз».
+Берётся строка из таблицы Request, то есть конкретная заявка,
+поданная определённым абонентом, и выполняется подзапрос с условием
+
+Accountid = R.Accountid AND Paydate <= Incomingdate
+
+Таким образом, из таблицы Paysumma выбираются только платежи данного
+абонента с датой не позднее даты регистрации выбранной заявки.
+
+Затем выполняется левое соединение текущей строки из таблицы Request
+на все строки, которые возвратил подзапрос.
+После этого берётся следующая строка из таблицы Request,
+для неё выполняется подзапрос, и эта строка соединяется со строками,
+которые возвратил подзапрос.
+Этот процесс повторяется до исчерпания строк таблицы Request!!!
+Все сформированные наборы строк объединяются в единую результирующую
+выборку.
+
+В результате, например, ближайшим к дате регистрации заявки с номером
+13 от 04.09.2022 является платёж № 29 от 03.05.2022, а для заявки
+с № 21 от 13.09.2023 — платёж № 17 от 13.09.2023.
+Если для заявки подходящий платёж не найден (например, Incomingdate раньше всех дат
+оплат по этому счёту), то поля Payfactid, Paysum и Paydate будут NULL —
+благодаря LEFT JOIN.
+
+Следует отметить, что в контексте JOIN LATERAL можно использовать
+коррелированные подзапросы внутри секции LIMIT, что расширяет
+возможности SQL для сложных аналитических запросов.
+Это демонстрирует гибкость конструкции LATERAL,
+которая позволяет создавать сложные зависимости между данными в запросе.
+*/
+
+
+
+/*
+Связанные подзапросы в секциях WHERE и HAVING. При использовании
+связанного вложенного запроса в условиях поиска секций WHERE и HAVING
+он может представлять собой <скалярный_подзапрос>, <подзапрос_столбца>
+или <табличный_подзапрос>, как и для независимых вложенных запросов.
+Поскольку запрос связанный, то внутренний запрос выполняется отдельно
+для каждой строки внешнего запроса (текущая строка-кандидат).
+
+Рассмотрим примеры, в которых используются:
+-<скалярный_подзапрос>
+и
+-<подзапрос_столбца>.
+
+
+Подзапросы, представляющие собой <табличный_подзапрос>,
+будут рассмотрены позднее при изучении предиката EXISTS.
+
+!!!Лучший способ решить любую задачу — это представить её в виде
+пошаговой логики!!!
+
+Пусть, например, требуется найти:
+1.номера лицевых счетов абонентов
+2.которые имеют максимальное значение платежа по каждой услуге.
+
+1.Сначала найдём максимальное значение платежа за каждую
+услугу.
+2.Затем определяем формат вывода, для чего нужен только номер
+лицевого счёта.
+
+-- 1-й шаг. Найдём максимальное значение платежа за каждую услугу
+*/
+SELECT MAX(Paysum)
+FROM Paysumma
+GROUP BY Serviceid;
+
+-- 2-й шаг. Получаем нужный формат вывода Accountid
+/*
+Так как Accountid нельзя напрямую использовать
+в группе путём агрегации, используем связанный подзапрос
+*/
+
+SELECT P.Accountid, P.Serviceid, P.Paysum, p.Paydate, p.payfactid
+FROM Paysumma P
+WHERE P.Paysum = (SELECT MAX(Paysum)
+                  FROM Paysumma
+                  GROUP BY Serviceid
+                  HAVING Serviceid = P.Serviceid)
+order by p.accountid, p.serviceid;
+
+-- Найдём все платежи абонента 115705 по услуге 2
+SELECT Payfactid, Accountid, Serviceid, Paysum, Paydate
+FROM Paysumma
+WHERE Accountid = '115705'
+  AND Serviceid = 2;
+
+
+/*
+Чтобы вывести все данные об абонентах, которые 17 декабря 2023 г.
+подали заявки на ремонт газового оборудования (рис. 4.50),
+можно использовать связанный вложенный запрос:
+*/
+
+SELECT *
+FROM Abonent Out
+WHERE '17.12.2023' IN
+      (SELECT Incomingdate
+       FROM Request Inn
+       WHERE Out.Accountid = Inn.Accountid);
+
+---или
+
+SELECT *
+FROM Abonent Out
+WHERE TO_DATE('17.12.2023', 'DD.MM.YYYY') IN
+      (SELECT Incomingdate
+       FROM Request Inn
+       WHERE Out.Accountid = Inn.Accountid);
+
+/*
+В этом примере Out и Inn — это соответственно псевдонимы таблиц
+Abonent и Request (могут задаваться произвольно).
+Поскольку значение в столбце Accountid внешнего запроса меняется
+(при переборе строк), внутренний запрос должен выполняться отдельно
+для каждой строки внешнего запроса.
+SQL здесь осуществляет следующую процедуру:
+- выбирает строку с данными об абоненте, имеющем номер лицевого
+счёта '005488' (первая строка), из таблицы Abonent;
+- сохраняет эту строку как текущую строку-кандидат под псевдонимом Out;
+- выполняет вложенный запрос, просматривающий всю таблицу Request,
+чтобы найти строки, где значение столбца Inn.Accountid — такое же,
+как значение Out.Accountid (005488).
+- затем из каждой такой строки таблицы Request извлекается значение
+столбца Incomingdate.
+-в результате вложенный запрос, представляющий
+собой <подзапрос_столбца>, формирует набор значений столбца Incomingdate
+для текущей строки-кандидата;
+
+после получения набора всех значений столбца Incomingdate для
+Accountid = '005488' анализируется условие поиска основного запроса,
+чтобы проверить, имеется ли значение 17 декабря 2023 г. в наборе
+всех значений столбца Incomingdate. Если это так (а это так),
+выбирается строка с номером лицевого счёта '005488' для вывода её
+из основного запроса;
+
+повторяются п.п. 1-4 (для второй строки с номером лицевого счёта
+'015527' и т.д.), пока каждая строка таблицы Abonent не будет
+проверена.
+
+Тут же самую задачу можно решить, используя естественное соединение
+таблиц Abonent и Request:
+*/
+
+explain analyze
+SELECT A.*
+FROM Abonent A
+         NATURAL JOIN Request Inn
+WHERE Inn.Incomingdate = '17.12.2023';
+
+---или
+
+explain analyze
+SELECT A.*
+FROM Abonent A
+         NATURAL JOIN Request Inn
+WHERE Inn.Incomingdate = TO_DATE('17.12.2023', 'DD.MM.YYYY');
+
+/*
+Результат выполнения будет совпадать с результатом, представленным
+Однако следует обратить внимание на наличие существенных
+различий между соединением таблиц и вложенными соотнесёнными
+запросами.
+
+Дело в том, что запросы с использованием соединения таблиц
+формируются СУБД как строки из декартова произведения таблиц,
+перечисленных в секции FROM.
+
+В случае же с вложенным соотнесённым
+запросом строки из произведения таблиц не вычисляются благодаря
+использованию механизма строки-кандидата.
+
+Вывод в связанном вложенном запросе формируется в секции
+SELECT внешнего запроса, в то время как соединения могут выводить
+строки из обеих соединяемых таблиц (при указании символа «*» в секции SELECT).
+Но даже если столбцы для вывода при соединении таблиц указаны явно
+(см. предыдущий пример), то сначала всё равно формируется декартово произведение.
+
+Пример использования подзапроса, возвращающего результат выражения,
+основанного на столбце, может быть следующий запрос:
+*/
+
+explain analyze
+SELECT *
+FROM Paysumma P
+WHERE Paysum IN (SELECT Nachislsum + 10
+                 FROM Nachislsumma
+                 WHERE Accountid = P.Accountid);
+
+/*Хорошим примером выборки из таблицы нужных строк является такой
+запрос:
+*/
+
+explain analyze
+SELECT *
+FROM Nachislsumma N
+WHERE (SELECT Fio FROM Abonent WHERE Accountid = N.Accountid)
+          ILIKE '%д%'
+order by N.Accountid;
+
+/*
+Содержательная интерпретация этого запроса состоит в следующем.
+Вывести всю информацию о начислениях абонентов, в ФИО которых
+встречается буква «д» без учёта регистра.
+
+Сортировать по возрастанию номера лицевого счёта.
+
+В результате выполнения такого запроса выводится
+вся информация о начислениях абонентов с ФИО Денисова Е.К. ('136169')
+и Стародубцев Е.В. ('443069'), упорядоченная по возрастанию номера
+лицевого счёта.
+
+Каждый SQL-запрос можно оценить с точки зрения используемых ресурсов
+сервера БД.
+
+На практике большинство СУБД подзапросы выполняют более
+эффективно.
+
+Тем не менее при проектировании комплекса программ
+с критичными требованиями по быстродействию разработчик должен
+проанализировать план выполнения SQL-запроса для конкретной СУБД.
+
+Тестирование в реальных условиях — единственный надёжный способ
+решить, что лучше подходит для конкретных потребностей.
+
+Рассмотрим пример сравнения значения, возвращаемого вложенным
+запросом, с константой.
+Вывести информацию об исполнителях, назначенных на выполнение четырёх
+и более ремонтных заявок, можно с помощью запроса
+*/
+
+SELECT *
+FROM Executor e
+WHERE 4 <= (SELECT COUNT(r.Requestid)
+            FROM Request r
+            WHERE e.Executorid = r.Executorid);
+
+
+/*
+В данном примере связанный подзапрос в условии поиска представляет
+собой <скалярный_подзапрос>.
+Он возвращает одно единственное значение
+(количество ремонтных заявок) для текущей строки-кандидата, выбранной
+из таблицы Executor.
+
+Если это значение больше или равно 4, то текущая
+строка-кандидат выбирается для вывода из основного запроса.
+Эта процедура повторяется, пока каждая строка таблицы Executor не будет
+проверена.
+
+В SQL имеется возможность использовать соотнесённый вложенный запрос,
+основанный на той же самой таблице, что и основной запрос.
+
+Это позволяет использовать соотнесённые вложенные запросы для извлечения сложных
+форм производной информации.
+
+Например, вывести для каждого абонента размеры начислений,
+превышающие среднее значение всех его начислений, можно с помощью следующего
+запроса (в результирующий НД необходимо включить только первые восемь строк):
+*/
+
+SELECT A.AccountId,
+       A.Fio,
+       N.Nachislsum,
+       (SELECT ROUND(AVG(Nachislsum), 2)
+        FROM Nachislsumma
+        WHERE AccountId = N.AccountId) AS Avg_d
+FROM Abonent A
+         INNER JOIN Nachislsumma N USING (AccountId)
+WHERE Nachislsum > (SELECT ROUND(AVG(Nachislsum), 2)
+                    FROM Nachislsumma
+                    WHERE AccountId = N.AccountId)
+ORDER BY 1, 3
+    FETCH FIRST 8 ROWS ONLY;
+
+/*
+В этом примере производится одновременная оценка среднего значения
+для всех строк, удовлетворяющих условию поиска в секции WHERE
+вложенного связанного запроса, одной и той же таблицы со значениями
+строки-кандидата.
+
+
+Выбирается первая строка-кандидат из таблицы
+Nachislsumma и сохраняется под псевдонимом F. Выполняется вложенный
+запрос, просматривающий ту же самую таблицу Nachislsumma с самого
+начала, чтобы найти все строки, где значение столбца S.Accountid —
+такое же, как значение F.Accountid. Затем по всем таким строкам
+в таблице Nachislsumma вложенный запрос (<скалярный_подзапрос>)
+подсчитывает среднее значение столбца Nachislsum. Анализируется
+условие поиска основного запроса, чтобы проверить, превышает ли
+значение столбца Nachislsum из текущей строки-кандидата среднее
+значение, вычисленное вложенным запросом. Если это так, то текущая
+строка-кандидат выбирается для вывода. Таким образом, производятся
+одновременно и вычисление среднего, и отбор строк, удовлетворяющих
+условию.
+
+Построим запрос на основе CTE, выбирающий ту же информацию:
+*/
+
+WITH T AS (SELECT Accountid, ROUND(AVG(Nachislsum), 2) AS Avg_d
+           FROM Nachislsumma
+           GROUP BY Accountid)
+SELECT A.Accountid, A.Fio, N.Nachislsum, T.Avg_d
+FROM Nachislsumma N
+         LEFT JOIN T USING (Accountid)
+         LEFT JOIN Abonent A USING (Accountid)
+WHERE N.Nachislsum > T.Avg_d
+ORDER BY 1, 3
+    FETCH NEXT 8 ROWS ONLY;
+
+
+
+/*294*/
 
