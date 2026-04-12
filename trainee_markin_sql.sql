@@ -7419,69 +7419,80 @@ SELECT A.AccountId,
 FROM Abonent A;
 
 
-WITH monthly_data AS (
-    -- Начисления по месяцам
-    SELECT AccountId,
-           MAKE_DATE(Nachislyear, Nachislmonth, 1) AS MonthStart,
-           SUM(Nachislsum)                         AS nachisl,
-           0                                       AS pay
-    FROM Nachislsumma
-    GROUP BY AccountId, MAKE_DATE(Nachislyear, Nachislmonth, 1)
+SELECT a.accountid,
+       a.fio,
+       (SELECT SUM(n.nachislsum)
+        FROM nachislsumma n
+        WHERE n.accountid = a.accountid)
+           -
+       (SELECT SUM(p.paysum)
+        FROM paysumma p
+        WHERE p.accountid = a.accountid) AS "Debet/Credit"
+FROM abonent a;
 
-    UNION ALL
 
-    -- Платежи по месяцам
-    SELECT AccountId,
-           DATE_TRUNC('month', Paydate) AS MonthStart,
-           0                            AS nachisl,
-           SUM(Paysum)                  AS pay
-    FROM Paysumma
-    GROUP BY AccountId, DATE_TRUNC('month', Paydate)),
-     aggregated AS (SELECT AccountId,
-                           MonthStart,
-                           SUM(nachisl) AS nachisl,
-                           SUM(pay)     AS pay
-                    FROM monthly_data
-                    GROUP BY AccountId, MonthStart),
-     balance AS (SELECT AccountId,
-                        MonthStart,
+
+WITH nachisl AS (SELECT accountid,
+                        nachislyear,
+                        nachislmonth,
+                        SUM(nachislsum) AS nachislsum
+                 FROM nachislsumma
+                 GROUP BY accountid, nachislyear, nachislmonth),
+     payment AS (SELECT accountid,
+                        payyear,
+                        paymonth,
+                        SUM(paysum) AS paysum
+                 FROM paysumma
+                 GROUP BY accountid, payyear, paymonth),
+-- Объединяем все уникальные периоды для каждого абонента
+     periods AS (SELECT accountid, year, month
+                 FROM (SELECT accountid, nachislyear AS year, nachislmonth AS month
+                       FROM nachisl
+                       UNION
+                       SELECT accountid, payyear, paymonth
+                       FROM payment) t),
+-- Собираем данные по периодам
+     monthly_data AS (SELECT p.accountid,
+                             p.year,
+                             p.month,
+                             COALESCE(n.nachislsum, 0) AS nachisl,
+                             COALESCE(pm.paysum, 0)    AS pay
+                      FROM periods p
+                               LEFT JOIN nachisl n ON p.accountid = n.accountid AND p.year = n.nachislyear AND
+                                                      p.month = n.nachislmonth
+                               LEFT JOIN payment pm ON p.accountid = pm.accountid AND p.year = pm.payyear AND
+                                                       p.month = pm.paymonth),
+-- Добавляем накопленное сальдо
+     balance AS (SELECT accountid,
+                        year,
+                        month,
                         nachisl,
                         pay,
-                        nachisl - pay                                                        AS change,
-                        SUM(nachisl - pay) OVER (PARTITION BY AccountId ORDER BY MonthStart) AS balance_end
-                 FROM aggregated)
-SELECT A.AccountId,
-       A.FIO,
-       TO_CHAR(b.MonthStart, 'YYYY-MM')                                                         AS "Месяц",
-       b.nachisl                                                                                AS "Начисления",
-       b.pay                                                                                    AS "Оплата",
-       b.change                                                                                 AS "Изменение",
-       COALESCE(LAG(b.balance_end, 1) OVER (PARTITION BY A.AccountId ORDER BY b.MonthStart), 0) AS "Сальдо на начало",
-       b.balance_end                                                                            AS "Сальдо на конец"
-FROM Abonent A
-         JOIN balance b ON A.AccountId = b.AccountId
-WHERE A.AccountId = '136160' -- ← подставьте нужный лицевой счёт
-ORDER BY b.MonthStart;
+                        nachisl - pay                                                         AS change,
+                        SUM(nachisl - pay)
+                        OVER (PARTITION BY accountid
+                              ORDER BY year, month) AS balance_end
+                 FROM monthly_data)
+-- Финальный вывод с информацией об абоненте
+SELECT a.accountid,
+       a.fio,
+       a.phone,
+       a.houseno || ', кв.' || a.flatno                                                            AS address,
+       b.year || '-' || LPAD(b.month::TEXT, 2, '0')                                                AS period,
+       b.nachisl                                                                                   AS "Начисления",
+       b.pay                                                                                       AS "Оплата",
+       b.change                                                                                    AS "Изменение",
+       COALESCE(LAG(b.balance_end, 1)
+                OVER (PARTITION BY b.accountid
+                    ORDER BY b.year, b.month),
+                0)                                                                                 AS "Сальдо на начало",
+       b.balance_end                                                                               AS "Сальдо на конец"
+FROM abonent a
+         JOIN balance b ON a.accountid = b.accountid
+WHERE a.accountid = '136160' -- ← подставьте нужный лицевой счёт
+ORDER BY b.year, b.month;
 
 
-/*
-Оптимизация 1: Предварительная агрегация + LEFT JOIN (рекомендуемый)
-Сложность: O(размер Nachislsumma + размер Paysumma + размер Abonent)
-— один проход по каждой таблице.
-*/
-
-WITH nachisl_agg AS (SELECT AccountId, SUM(Nachislsum) AS total_nachisl
-                     FROM Nachislsumma
-                     GROUP BY AccountId),
-     pay_agg AS (SELECT AccountId, SUM(Paysum) AS total_pay
-                 FROM Paysumma
-                 GROUP BY AccountId)
-SELECT A.AccountId,
-       A.FIO,
-       COALESCE(N.total_nachisl, 0) - COALESCE(P.total_pay, 0) AS "Debet/Credit"
-FROM Abonent A
-         LEFT JOIN nachisl_agg N ON A.AccountId = N.AccountId
-         LEFT JOIN pay_agg P ON A.AccountId = P.AccountId;
 
 /*
 А проверить, есть ли у абонента начисления, превышающие среднее
@@ -7515,14 +7526,14 @@ FROM Abonent A;
 начислений (задолженность):
 */
 
-SELECT t.AccountId, ABS(t."Долг")
-FROM (SELECT P.AccountId,
-             (SUM(P.Paysum) - (SELECT SUM(N.Nachislsum)
-                               FROM Nachislsumma N
-                               WHERE N.AccountId = P.AccountId
-                               GROUP BY N.AccountId)) AS "Долг"
-      FROM Paysumma AS P
-      GROUP BY P.AccountId) t
+SELECT t.accountid, ABS(t."Долг")
+FROM (SELECT p.accountid,
+             (SUM(p.paysum) - (SELECT SUM(n.nachislsum)
+                               FROM nachislsumma n
+                               WHERE n.accountid = p.accountid
+                               GROUP BY n.accountid)) AS "Долг"
+      FROM paysumma AS p
+      GROUP BY p.accountid) t
 WHERE t."Долг" < 0
 ORDER BY t."Долг";
 
@@ -7570,16 +7581,16 @@ FROM (SELECT P.Accountid,
 можно использовать такой запрос:
 */
 
-SELECT A.AccountId,
-       Fio,
-       Last_request.*
-FROM Abonent A
+SELECT a.accountid,
+       fio,
+       last_request.*
+FROM abonent a
          INNER JOIN LATERAL
     (SELECT *
-     FROM Request R
-     WHERE AccountId = A.AccountId
-     ORDER BY R.Incomingdate DESC
-     LIMIT 1) AS Last_request ON TRUE;
+     FROM request r
+     WHERE accountid = a.accountid
+     ORDER BY r.incomingdate DESC
+     LIMIT 1) AS last_request ON TRUE;
 
 
 /*
@@ -7913,10 +7924,12 @@ ORDER BY 1, 3
 
 
 Выбирается первая строка-кандидат из таблицы
-Nachislsumma и сохраняется под псевдонимом F. Выполняется вложенный
-запрос, просматривающий ту же самую таблицу Nachislsumma с самого
-начала, чтобы найти все строки, где значение столбца S.Accountid —
-такое же, как значение F.Accountid. Затем по всем таким строкам
+Nachislsumma и сохраняется под псевдонимом F.
+
+Выполняется вложенный запрос, просматривающий ту же самую таблицу
+Nachislsumma с самого начала, чтобы найти все строки,
+где значение столбца S.Accountid — такое же,
+как значение F.Accountid. Затем по всем таким строкам
 в таблице Nachislsumma вложенный запрос (<скалярный_подзапрос>)
 подсчитывает среднее значение столбца Nachislsum. Анализируется
 условие поиска основного запроса, чтобы проверить, превышает ли
@@ -7932,6 +7945,7 @@ Nachislsumma и сохраняется под псевдонимом F. Выпо
 WITH T AS (SELECT Accountid, ROUND(AVG(Nachislsum), 2) AS Avg_d
            FROM Nachislsumma
            GROUP BY Accountid)
+
 SELECT A.Accountid, A.Fio, N.Nachislsum, T.Avg_d
 FROM Nachislsumma N
          LEFT JOIN T USING (Accountid)
@@ -7940,7 +7954,1420 @@ WHERE N.Nachislsum > T.Avg_d
 ORDER BY 1, 3
     FETCH NEXT 8 ROWS ONLY;
 
+/*
+Запрос, использующий агрегатную функцию в условии поиска основного
+запроса (данная функция является возвращаемым элементом вложенного
+запроса), нельзя сформулировать с помощью техники соединения таблиц.
+
+Коррелированные подзапросы в секции WHERE полезны в следующих
+ситуациях:
+
+1.если необходимо отфильтровать строки в одной таблице на основе
+данных из другой таблицы,
+где условия фильтрации зависят от каждой строки внешнего запроса;
+
+2.использование подзапроса в WHERE для проверки наличия связанных
+записей в другой таблице.
+Это часто реализуется с помощью оператора EXISTS;
+
+3.если требуется сравнить значения в одной таблице с вычисляемыми
+значениями из другой таблицы, и эти вычисления зависят от текущей
+строки;
+
+4.когда условия фильтрации настолько сложны, что их невозможно
+выразить с помощью простых логических операторов. Коррелированные
+подзапросы могут использоваться для создания более сложных
+логических условий;
+
+5.если необходимо извлечь специфические значения на основе условий,
+которые зависят от данных текущей строки.
+
+Если необходимо получить список всех абонентов, чья общая сумма
+платежей превышает среднюю сумму платежей по всем абонентам, то
+можно использовать такой запрос с коррелированным подзапросом:
+*/
+
+SELECT a.accountid,
+       a.fio,
+       (SELECT SUM(p.paysum)
+        FROM paysumma p
+        WHERE p.accountid = a.accountid) AS total_payments
+
+FROM abonent a
+WHERE (SELECT AVG(total_sum)
+       FROM (SELECT SUM(p.paysum) AS total_sum
+             FROM paysumma p
+             GROUP BY p.accountid) AS subquery)
+          <
+      (SELECT SUM(p.paysum)
+       FROM paysumma p
+       WHERE p.accountid = a.accountid)
+ORDER BY a.accountid;
 
 
-/*294*/
+WITH payments AS (SELECT accountid, SUM(paysum) AS total_payments
+                  FROM paysumma
+                  GROUP BY accountid),
+
+     ranked AS (SELECT accountid,
+                       total_payments,
+                       AVG(total_payments) OVER () AS avg_total
+                FROM payments)
+
+SELECT a.accountid, a.fio, r.total_payments
+FROM abonent a
+         JOIN ranked r ON a.accountid = r.accountid
+WHERE r.total_payments > r.avg_total
+ORDER BY a.accountid;
+
+
+
+WITH payments AS (SELECT accountid, SUM(paysum) AS total_payments
+                  FROM paysumma
+                  GROUP BY accountid)
+
+SELECT a.accountid, a.fio, p.total_payments
+FROM abonent a
+         JOIN payments p ON a.accountid = p.accountid
+WHERE p.total_payments > (SELECT AVG(total_payments) FROM payments)
+ORDER BY a.accountid;
+
+/*
+Здесь использован коррелированный подзапрос для вычисления общей суммы
+платежей для каждого абонента, чтобы затем сравнить её со средним
+значением по всем абонентам.
+*/
+
+
+/*
+Найти абонентов, у которых есть задолженность по платежам (т.е. сумма
+значений начислений превышает сумму значений платежей), можно таким
+запросом:
+*/
+
+SELECT a.accountid,
+       a.fio,
+       (SELECT COALESCE(SUM(n.nachislsum), 0)
+        FROM nachislsumma n
+        WHERE n.accountid = a.accountid) AS total_charges,
+
+       (SELECT COALESCE(SUM(p.paysum), 0)
+        FROM paysumma p
+        WHERE p.accountid = a.accountid) AS total_payments
+
+FROM abonent a
+WHERE (SELECT COALESCE(SUM(n.nachislsum), 0)
+       FROM nachislsumma n
+       WHERE n.accountid = a.accountid) >
+      (SELECT COALESCE(SUM(p.paysum), 0)
+       FROM paysumma p
+       WHERE p.accountid = a.accountid);
+
+
+
+WITH charges AS (SELECT accountid, COALESCE(SUM(nachislsum), 0) AS total_charges
+                 FROM nachislsumma
+                 GROUP BY accountid),
+
+     payments AS (SELECT accountid, COALESCE(SUM(paysum), 0) AS total_payments
+                  FROM paysumma
+                  GROUP BY accountid)
+
+SELECT a.accountid,
+       a.fio,
+       COALESCE(c.total_charges, 0)  AS total_charges,
+       COALESCE(p.total_payments, 0) AS total_payments
+FROM abonent a
+         LEFT JOIN charges c ON a.accountid = c.accountid
+         LEFT JOIN payments p ON a.accountid = p.accountid
+WHERE COALESCE(c.total_charges, 0) > COALESCE(p.total_payments, 0);
+
+
+/*
+Применены коррелированные подзапросы, чтобы получить общую сумму
+начислений и общую сумму платежей для каждого абонента, чтобы выяснить,
+есть ли задолженность.
+
+Рассмотрим использование соотнесённого вложенного запроса в условии
+поиска секции HAVING.
+
+Условие поиска секции HAVING в подзапросе оценивается для каждой
+группы из внешнего запроса, а не для каждой строки. Следовательно,
+вложенный запрос будет выполняться только раз для каждой группы,
+выведенной внешним запросом, а не для каждой строки (как это было
+при использовании в секции WHERE).
+
+Например, чтобы подсчитать общие суммы начислений за услуги для
+абонентов, чьи ФИО начинаются с буквы «С» (рис. 4.53), можно
+использовать соотнесённый вложенный запрос:
+*/
+
+
+SELECT n.accountid, SUM(n.nachislsum) AS summ
+FROM nachislsumma n
+GROUP BY accountid
+HAVING accountid = (SELECT a.accountid
+                    FROM abonent a
+                    WHERE a.accountid = n.accountid
+                      AND a.fio LIKE 'С%')
+ORDER BY n.accountid;
+
+/*
+Последовательность выполнения: основной запрос группирует таблицу
+Nachislsumma по столбцу Accountid; затем для каждой группы выполняется
+связанный вложенный запрос, возвращая единственное значение столбца
+Accountid таблицы Abonent (столбец Accountid содержит уникальные
+значения).
+
+Использование коррелированных подзапросов в секции HAVING полезно,
+если:
+1.нужно сравнить агрегированное значение каждой группы с
+агрегированными результатами, зависящими от подзапроса;
+2.требуется отбор на основе вложенных условий, зависящих от сложных
+логических операций.
+*/
+
+
+
+/*
+Связанные подзапросы в секции ORDER BY.
+Это может быть полезно, если нужно отсортировать результаты
+на основе данных, которые вычисляются динамически с помощью подзапроса.
+Важно, чтобы подзапрос возвращал одно значение для каждой строки
+основного запроса.
+Пусть необходимо вывести ФИО каждого абонента и всю информацию о его
+платежах со значениями меньше среднего.
+Результат упорядочить по наименованию соответствующей услуги:
+*/
+
+
+SELECT a.fio, p.*
+FROM paysumma p
+         JOIN abonent a USING (accountid)
+WHERE p.paysum < (SELECT AVG(paysum)
+                  FROM paysumma
+                  WHERE accountid = a.accountid)
+ORDER BY (SELECT servicenm
+          FROM services
+          WHERE serviceid = p.serviceid);
+
+
+
+/*
+Количественные предикаты.
+Проверка существования результата запроса
+
+Количественные предикаты
+Операции сравнения в секциях:
+- WHERE
+- HAVING
+можно расширить до многократного сравнения с использованием
+кванторов ANY и ALL.
+Это расширение используется при сравнении значений определённого столбца
+со значениями, возвращаемыми вложенным запросом (<подзапрос_столбца>).
+
+Оператор NOT не может использоваться с ANY и ALL!!!
+
+Квантор ANY.
+Квантор ANY, указанный после знака любой из операций
+сравнения, означает, что будет возвращено TRUE, если хотя бы для одного
+значения из подзапроса результат сравнения истинен!!!
+
+Рассмотрим использование квантора ANY с независимым подзапросом.
+Например, требуется вывести всю информацию об оплатах абонентам услуги
+с кодом, равным 4, за период до 2025 г., размер которых превышает
+хотя бы одно значение оплат этой же услуги за 2025 г.
+
+Соответствующий запрос будет выглядеть так:
+*/
+
+SELECT *
+FROM paysumma
+WHERE paysum > ANY (SELECT paysum
+                    FROM paysumma
+                    WHERE payyear = 2025
+                      AND serviceid = 4)
+
+---ANY означает «хотя бы один» (логическое ИЛИ).
+---x > значение1 OR x > значение2 OR x > значение3 OR ...
+  AND payyear < 2025
+  AND serviceid = 4
+ORDER BY payfactid;
+
+
+
+/*
+В этом примере вложенный запрос выполняется только раз, возвращая
+все значения столбца Paysum, для которых истинно условие Payyear = 2025
+и Serviceid = 4 (311.30, 160.00...).
+Затем значения, выбранные подзапросом, последовательно сравниваются
+со значением столбца Paysum для каждой строки!!! из таблицы Paysumma
+основного запроса. При первом обнаруженном совпадении сравнение
+прекращается, и соответствующая строка выводится.
+
+Условие «> ANY» равносильно утверждению «больше, чем минимальное
+из существующих», а условие «< ANY» — «меньше, чем максимальное
+из существующих».
+
+Становится очевидным, что эти условия можно записать
+иначе, используя агрегатные функции MIN и MAX.
+
+Предыдущий запрос можно переписать со скалярным подзапросом:
+*/
+
+SELECT *
+FROM paysumma
+WHERE paysum > (SELECT MIN(paysum)
+                FROM paysumma
+                WHERE payyear = 2025
+                  AND serviceid = 4)
+  AND payyear < 2025
+  AND serviceid = 4
+ORDER BY payfactid;
+
+/*
+Следует отметить, что использование сравнения «= ANY» эквивалентно
+использованию предиката IN.
+Например, для вывода всех данных о платежах
+тех абонентов, у которых есть хотя бы один платёж
+со значением, превышающим 2300, можно использовать следующие
+эквивалентные запросы:
+
+Эти запросы ищут платежи, номер лицевого счёта которых равен хотя бы
+одному номеру лицевого счёта из подзапроса, выбирающего Accountid тех
+платежей, где значение (Paysum) превышает 2300.
+*/
+
+SELECT *
+FROM paysumma
+WHERE accountid = ANY (SELECT accountid
+                       FROM paysumma
+                       WHERE paysum > 2300)
+ORDER BY accountid;
+
+--или
+
+SELECT *
+FROM paysumma
+WHERE accountid IN (SELECT accountid
+                    FROM paysumma
+                    WHERE paysum > 2300)
+ORDER BY accountid;
+
+/*
+Квантор ALL.
+Квантор всеобщности ALL, указанный после знака
+любой из операций сравнения, требует, чтобы результат сравнения был
+истинным для всех значений, возвращаемых подзапросом.
+
+Рассмотрим использование квантора ALL с независимым вложенным
+запросом.
+Например, требуется вывести всю информацию о ремонтных
+заявках, дата регистрации которых ранее даты регистрации всех заявок
+с кодом неисправности газового оборудования, равным 7.
+
+Соответствующий запрос:
+*/
+
+SELECT *
+FROM request
+WHERE incomingdate < ALL (SELECT incomingdate
+                          FROM request
+                          WHERE failureid = 7)
+ORDER BY requestid;
+
+/*
+Если требуется вывести всю информацию о ремонтных заявках, дата
+выполнения которых позднее даты выполнения всех заявок с кодом
+неисправности, равным 2, то запрос будет выглядеть так:
+
+В процессе выполнения данного запроса подзапросом формируется набор
+значений столбца Executiondate, взятых из строк, где Failureid = 2.
+В результате условие поиска внешнего запроса будет выглядеть
+следующим образом:
+Executiondate > ALL (24.10.2024, 10.08.2023, 11.10.2023, 14.09.2023).
+*/
+
+
+SELECT * FROM Request
+WHERE Executiondate > ALL (SELECT Executiondate
+                           FROM Request
+                           WHERE Failureid = 2)
+ORDER BY Requestid;
+
+/*
+Результат использования квантора ALL
+
+В НД не включены строки, где столбец Executiondate имеет NULL, так как
+проверка условия «NULL > ALL(...)» всегда возвращает результат FALSE,
+а выводятся только те строки, для которых условие поиска истинно.
+
+Условие «> ALL» равносильно утверждению «больше, чем максимальное»,
+а условие «< ALL» — «меньше, чем минимальное». Становится очевидным,
+что такие условия можно записать иначе, используя агрегатные функции
+MAX и MIN. Таким образом, предыдущий запрос можно переписать
+со скалярным подзапросом:
+*/
+
+SELECT *
+FROM request
+WHERE executiondate > (SELECT MAX(executiondate)
+                       FROM request
+                       WHERE failureid = 2)
+ORDER BY requestid;
+
+/*
+Следует отметить, что использование сравнения «<> ALL» эквивалентно
+использованию предиката NOT IN независимо от того, независимый или
+связанный подзапрос используется.
+
+Примером применения квантора ALL в секции HAVING может быть запрос,
+возвращающий название самой «популярной» услуги, т.е. за которую
+произведено наибольшее количество плат:
+*/
+
+SELECT s.servicenm, sum(p.paysum), count(*)
+FROM services s
+         JOIN paysumma p USING (serviceid)
+GROUP BY s.servicenm
+HAVING COUNT(*) >= ALL (SELECT COUNT(*)
+                        FROM paysumma
+                        GROUP BY serviceid);
+
+/*
+Рассмотрим использование связанного подзапроса с квантором ALL.
+Пусть требуется вывести наименования неисправностей газового
+оборудования,
+все ремонтные заявки с которыми зарегистрированы
+после 1 мая 2023 г. Соответствующий запрос:
+*/
+
+SELECT d.failurenm
+FROM disrepair d
+WHERE '01.05.2023' < ALL (SELECT r.incomingdate
+                          FROM request r
+                          WHERE d.failureid = r.failureid);
+
+
+SELECT d.failurenm
+FROM disrepair d
+WHERE TO_DATE('01.05.2023', 'DD.MM.YYYY') < ALL
+      (SELECT r.incomingdate
+       FROM request r
+       WHERE d.failureid = r.failureid);
+
+/*
+Поскольку в этом примере используется связанный подзапрос, он
+выполняется для каждой текущей строки из таблицы Disrepair (эта строка
+сохраняется во внешнем запросе под псевдонимом D).
+Вложенный запрос просматривает всю таблицу Request,
+чтобы найти строки, где значение столбца R.Failureid такое же,
+как значение столбца D.Failureid, и формирует набор значений столбца
+Incomingdate для текущей строки - кандидата.
+
+Затем анализируется условие поиска основного запроса,
+чтобы проверить, меньше ли значение '01.05.2023' всех значений столбца
+Incomingdate, полученных подзапросом.
+Если это так, то текущая строка-кандидат выбирается
+для вывода её из основного запроса!!!
+*/
+
+
+/*
+Следующий запрос со связанным подзапросом в секции HAVING позволяет
+определить тех абонентов, у кого максимальное значение платежа как
+минимум в 2.8 раза превышает среднее значение платежей остальных
+абонентов.
+*/
+
+SELECT P.AccountId
+FROM Paysumma P
+GROUP BY P.AccountId
+HAVING MAX(P.Paysum) >= ALL
+       (SELECT 2.8 * AVG(P1.Paysum)
+        FROM Paysumma P1
+        WHERE P.AccountId <> P1.AccountId);
+
+/*
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Внешний запрос: GROUP BY AccountId → для каждого AccountId:               │
+│                                                                             │
+│  AccountId = 1: MAX = 300                                                   │
+│      Подзапрос: средний платёж всех остальных (2,3,4) = 330                 │
+│      2.8 × 330 = 924 → 300 >= 924? FALSE → НЕ ВЫВОДИТ                       │
+│                                                                             │
+│  AccountId = 2: MAX = 70                                                    │
+│      Подзапрос: средний платёж всех остальных (1,3,4) = 390                 │
+│      2.8 × 390 = 1092 → 70 >= 1092? FALSE → НЕ ВЫВОДИТ                      │
+│                                                                             │
+│  AccountId = 3: MAX = 1100                                                  │
+│      Подзапрос: средний платёж всех остальных (1,2,4) = 101.25              │
+│      2.8 × 101.25 = 283.5 → 1100 >= 283.5? TRUE → ВЫВОДИТ                   │
+│                                                                             │
+│  AccountId = 4: MAX = 20                                                    │
+│      Подзапрос: средний платёж всех остальных (1,2,3) = 360                 │
+│      2.8 × 360 = 1008 → 20 >= 1008? FALSE → НЕ ВЫВОДИТ                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Строки таблицы Paysumma группируются внешним запросом по значениям
+столбца AccountId.
+Это делается с помощью секций:
+SELECT,
+FROM,
+GROUP BY.
+Получившиеся группы фильтруются секцией HAVING. В ней для каждой из
+групп вычисляется (с помощью функции MAX) максимум значений из столбца
+Paysum, которые находятся в строках этой группы.
+
+Внутренний запрос дважды проверяет среднее значение Paysum для всех
+строк, в которых значения столбца AccountId отличаются от значения
+этого столбца в текущей группе внешнего запроса. Следует обратить
+внимание, что в последней строке запроса приходится указывать два
+значения, взятые из разных AccountId. Поэтому в секции FROM из внешнего
+и внутреннего запросов приходится для таблицы Paysumma указывать два
+разных псевдонима.
+
+Эти псевдонимы затем используются в сравнении, расположенном
+в последней строке запроса. Цель их использования состоит в том,
+чтобы показать — обращение должно идти к значению столбца AccountId
+из текущей строки внутреннего подзапроса (P1.AccountId), а также
+к значению того же столбца, но на этот раз из текущей группы внешнего
+подзапроса (P.AccountId).
+
+
+Применение в одном запросе и квантора ANY, и ALL можно
+продемонстрировать в решении следующего кейса.
+Вывести всю информацию об оплатах абонентами услуги с кодом, равным 4,
+за период до 2025 г., размер которых превышает хотя бы одно значение
+оплат этой же услуги за 2025 г.
+и всю информацию о ремонтных заявках,
+дата регистрации которых ранее даты регистрации всех заявок с кодом
+неисправности газового оборудования, равным 7:
+*/
+
+
+SELECT *
+FROM paysumma
+         INNER JOIN request USING (accountid)
+WHERE paysum > ANY (SELECT MIN(paysum)
+                    FROM paysumma
+                    WHERE payyear = 2025
+                      AND serviceid = 4)
+  AND payyear < 2025
+  AND serviceid = 4
+  AND incomingdate < ALL (SELECT incomingdate
+                          FROM request
+                          WHERE failureid = 7)
+ORDER BY payfactid;
+
+/*
+При отсутствующих данных следует иметь в виду различие влияния на них
+кванторов ANY и ALL.
+Когда правильный подзапрос не возвращает результатов,
+квантор ALL автоматически принимает значение TRUE, а квантор ANY
+— FALSE.
+*/
+
+SELECT *
+FROM request
+WHERE executiondate > ANY (SELECT executiondate
+                           FROM request
+                           WHERE failureid = 4);
+
+--не возвращает выходных данных (в учебной базе нет заявок с
+-- неисправностью с кодом 4), в то время как запрос
+
+SELECT *
+FROM request
+WHERE executiondate > ALL (SELECT executiondate
+                           FROM request
+                           WHERE failureid = 4);
+
+/*
+Проверка существования результата запроса
+В SQL проверка существования результата запроса представляет собой
+логическое выражение
+
+[NOT] EXISTS (<подзапрос>)
+
+Результат условия считается истинным только тогда, когда результат
+выполнения <подзапрос> является непустым множеством, т.е. когда
+существует какая-либо строка в таблице, удовлетворяющая условию
+поиска секции WHERE вложенного запроса.
+
+Другими словами, EXISTS — это проверка, которая возвращает значение,
+равное TRUE или FALSE, в зависимости от наличия вывода из вложенного
+запроса.
+Она может работать автономно в секции SELECT и в условии
+поиска или в комбинации с другими логическими выражениями,
+использующими логические операции AND, OR и NOT.
+Она берёт вложенный запрос как аргумент и оценивает его:
+-как верный,   если тот производит любой вывод;
+-как неверный, если тот не делает этого.
+
+Этим она отличается от других проверок, где результат не может быть
+неизвестным.
+
+Простым примером применения EXISTS в секции SELECT может быть запрос,
+проверяющий, есть ли среди абонентов хотя бы один с ФИО Иванов И.И.:
+*/
+SELECT EXISTS
+(SELECT 1
+FROM Abonent
+WHERE Fio = 'Иванов И. И.');
+
+/*
+Данный запрос выдаст FALSE.
+Полезным запросом является запрос сравнения наборов данных,
+возвращаемых двумя запросами:
+*/
+
+SELECT CASE
+           WHEN NOT EXISTS
+               ((SELECT OVERLAY(phone PLACING '66' FROM 1)
+                 FROM abonent)
+                EXCEPT
+                (SELECT SUBSTR(phone, 1, 0) || '66' || SUBSTR(phone, 3)
+                 FROM abonent))
+               THEN 'Наборы данных совпадают'
+           ELSE 'Наборы данных не совпадают'
+           END;
+
+/*
+В данном случае наборы данных являются идентичными.
+
+Чаще всего EXISTS применяется в случаях, когда требуется найти
+значения, соответствующие основному условию, заданному в секции WHERE,
+и дополнительному условию, заключённому в подзапрос, являющийся
+аргументом предиката. Как правило, подзапрос ссылается на другую
+таблицу.
+
+Существует возможность с помощью следующего запроса решить, извлекать
+ли некоторые данные из таблицы Abonent, если хотя бы у одного из
+абонентов имеются непогашенные заявки на ремонт газового оборудования:
+*/
+
+SELECT accountid, fio
+FROM abonent
+WHERE EXISTS
+              (SELECT * FROM request WHERE executed IS FALSE);
+
+--или
+
+SELECT accountid, fio
+FROM abonent
+WHERE EXISTS (SELECT * FROM request WHERE executed = 'NO');
+
+/*
+В этих запросах независимый подзапрос выбирает все данные о непогашенных
+ремонтных заявках. Предикат EXISTS в условии поиска внешнего запроса
+«отмечает», что вложенным запросом был произведён некоторый вывод,
+и поскольку предикат EXISTS был одним в условии поиска, делает условие
+поиска основного запроса верным. Поскольку в таблице заявок имеются
+(EXISTS) строки с Executed, принимающим значение FALSE, то в НД
+представлены все строки таблицы Abonent.
+
+
+На практике часто встречается необходимость выборки или выполнения
+какого-либо действия в одной таблице в зависимости от факта возврата
+строк подзапроса из другой таблицы.
+Применение независимого скалярного подзапроса или подзапроса столбца
+*/
+
+SELECT accountid, fio
+FROM abonent
+WHERE EXISTS (SELECT 1 FROM request WHERE executed IS FALSE);
+
+/*
+Вместо табличного подзапроса и подсчёта числа строк,
+возвращаемых подзапросом
+*/
+
+SELECT accountid, fio
+FROM abonent
+WHERE 0 < (SELECT COUNT(*)
+           FROM request
+           WHERE executed = FALSE);
+/*позволяет существенно сократить объём выбираемых данных.*/
+
+
+/*
+Примером неправильного использования автономного подзапроса
+с предикатом EXISTS может быть такой запрос:
+*/
+
+SELECT serviceid, servicenm
+FROM services
+WHERE EXISTS (SELECT 1
+              FROM services
+              WHERE servicenm = 'Водоснабжение');
+
+/*
+которым предполагается выбор всей информации об услуге «Водоснабжение».
+Однако в результате выполнения запроса выводится информация обо всех
+услугах.
+
+В соотнесённом вложенном запросе предикат EXISTS оценивается отдельно
+для каждой строки таблицы, имя которой указано во внешнем запросе,
+т.е. алгоритм выполнения запроса с предикатом EXISTS и связанным
+подзапросом точно такой же, как и для всех запросов с соотнесёнными
+подзапросами в условии поиска (проверка существования или отсутствия
+связанных строк).
+Например, с помощью следующего запроса можно вывести
+коды неисправностей, которые возникали у газового оборудования
+нескольких абонентов:
+*/
+
+SELECT DISTINCT failureid
+FROM request out
+WHERE EXISTS (SELECT 1
+              FROM request inn
+              WHERE inn.failureid = out.failureid
+                AND inn.accountid <> out.accountid)
+ORDER BY failureid;
+
+/*
+Для каждой строки-кандидата внешнего запроса внутренний запрос
+находит строки, совпадающие со значением в столбце Failureid
+и соответствующие разным абонентам
+(условие AND Inn.Accountid <> Out.Accountid).
+
+Если любые такие строки найдены внутренним запросом, то это означает,
+что имеются два разных абонента, газовое оборудование которых имело
+текущую неисправность (неисправность в текущей строке-кандидате из
+внешнего запроса).
+
+Предикат EXISTS возвращает TRUE для текущей строки
+(результат выполнения подзапроса является непустым множеством), и код
+неисправности из таблицы, указанной во внешнем запросе,
+будет выведен.
+
+Если DISTINCT не указывать, то каждая из этих неисправностей будет
+выбираться для каждого абонента, у которого она произошла (у некоторых
+несколько раз).
+
+Как предикат EXISTS можно использовать во всех случаях, когда
+необходимо определить, имеется ли вывод из вложенного запроса. Поэтому
+можно применять предикат EXISTS и в соединении таблиц.
+
+Например, вывести все данные абонентов, имеющих заявки
+с неисправностью с кодом 2, можно так:
+*/
+
+SELECT a.*
+FROM abonent a
+WHERE EXISTS
+          (SELECT *
+           FROM request r
+           WHERE a.accountid = r.accountid
+             AND r.failureid = 2);
+
+
+/*
+Здесь в подзапросе используется проверка условия.
+
+С помощью следующего запроса можно вывести не только коды, но и названия
+неисправностей, которые возникали у газового оборудования нескольких
+абонентов:
+*/
+
+
+SELECT DISTINCT d.*
+FROM disrepair d,
+     request out
+WHERE EXISTS (SELECT 1
+              FROM request inn
+              WHERE inn.failureid = out.failureid
+                AND inn.accountid <> out.accountid)
+  AND d.failureid = out.failureid
+ORDER BY 1;
+
+/*
+В данном примере внешний запрос — это соединение таблицы Disrepair
+с таблицей Request.
+
+Использование NOT EXISTS указывает на инверсию результатов запроса.
+Следующий запрос иллюстрирует принцип извлечения из одной таблицы
+значений, которых нет в другой таблице (разность таблиц), с помощью
+предиката EXISTS:
+*/
+
+SELECT s.streetid
+FROM street s
+WHERE NOT EXISTS (SELECT 1
+                  FROM abonent a
+                  WHERE s.streetid = a.streetid);
+
+/*
+Запрос возвращает данные об улицах, на которых не проживают абоненты.
+
+Простая перестройка вышеприведённого запроса позволит извлечь улицы,
+присутствующие и в таблице Street, и в таблице Abonent (пересечение
+таблиц).
+
+Следующие два запроса содержат EXISTS в секции HAVING. В первом из них
+используется автономный подзапрос, а во втором — коррелированный.
+*/
+
+/*
+Вывод данных абонентов, чьи суммарные платежи за газ превышают 2000,
+при условии, что существует хотя бы одна заявка на ремонт, сделанная
+в 2024 году (этот подзапрос автономный и не зависит от основного
+запроса)
+*/
+
+SELECT a.accountid, a.fio, SUM(p.paysum) AS total_sum
+FROM abonent a
+         JOIN paysumma p USING (accountid)
+WHERE p.serviceid = (SELECT serviceid
+                     FROM services
+                     WHERE servicenm = 'Газоснабжение')
+GROUP BY a.accountid, a.fio
+HAVING SUM(p.paysum) > 2000
+   AND EXISTS (SELECT 1
+               FROM request r
+               WHERE EXTRACT(YEAR FROM r.incomingdate) = 2024)
+ORDER BY a.fio;
+
+
+/*
+Таким образом, запрос с использованием EXISTS в секции HAVING позволяет
+фильтровать группы данных, основываясь на существовании или отсутствии
+связанных данных в другой таблице.
+Это полезно, когда нужно комбинировать агрегатные функции с
+логическими проверками наличия данных в других таблицах.
+
+В выражениях операции CASE можно использовать подзапросы, что позволяет
+получить информацию об особенной форме.
+
+Например, следующий запрос со связанным подзапросом в секции SELECT
+выводит для каждой улицы её идентификатор, если на ней проживает
+хотя бы один абонент, и наименование улицы в противном случае:
+*/
+
+
+SELECT
+    CASE
+        WHEN EXISTS (SELECT 1 FROM Abonent A
+                     WHERE A.Streetid = S.Streetid)
+            THEN CAST(S.Streetid AS TEXT)
+        ELSE S.Streetnm
+        END AS "Улица"
+FROM Street S
+ORDER BY 1;
+
+/*
+Рассмотрим примеры применения предиката EXISTS в случае, когда
+необходимо найти значения, соответствующие основному условию,
+заданному в секции WHERE, и дополнительному условию,
+заключённому в подзапрос, являющийся аргументом предиката.
+Подобные запросы могут использоваться уже для анализа данных.
+
+
+Пусть необходимо найти номер лицевого счёта абонентов,
+которые подавали заявки на ремонт газового оборудования
+с неисправностью «Течёт из водогрейной колонки» (код равен 3),
+и которые при этом подавали более четырёх заявок.
+Для решения такой задачи построим следующий запрос,
+в котором первое условие задаётся предикатом EXISTS со вложенным
+коррелированным запросом, а второе условие с секцией HAVING следует
+после вложенного запроса:
+*/
+
+SELECT accountid
+FROM request r
+WHERE EXISTS (SELECT accountid
+              FROM request
+              WHERE failureid = 3
+                AND accountid = r.accountid)
+GROUP BY accountid
+HAVING COUNT(requestid) > 4;
+
+/*
+Построим ещё один запрос, который выведет наименования неисправностей
+газового оборудования, указанных в ремонтных заявках, поданных
+абонентом с ФИО Аксенов С.А.
+*/
+
+SELECT failurenm
+FROM disrepair d
+WHERE EXISTS (SELECT 1
+              FROM request r
+              WHERE d.failureid = r.failureid
+                AND r.accountid = (SELECT accountid
+                                   FROM abonent
+                                   WHERE fio = 'Аксенов С. А.'));
+
+
+/*
+Предикат EXISTS нельзя использовать в случае, если вложенный запрос
+возвращает значение агрегатной функции.
+Предикат EXISTS применяется также в запросах INSERT, UPDATE, DELETE
+и условном операторе IF.
+
+
+С помощью предиката NOT EXISTS можно реализовать стандартную операцию
+реляционной алгебры — деление.
+
+Пусть требуется найти абонентов, которые оплачивали все услуги.
+Используя принцип построения запросов с двойным отрицанием,
+можно преобразовать задание таким образом: отобрать абонентов из таблицы Paysumma (делимое),
+для которых не существует тех услуг из таблицы Services (делитель),
+для которых нет плат в таблице Paysumma для этого абонента и этой
+услуги.
+
+С использованием предиката проверки на существование это задание
+реализуется следующим запросом:
+*/
+
+SELECT DISTINCT p.accountid
+FROM paysumma p
+WHERE NOT EXISTS
+          (SELECT 1
+           FROM services s
+           WHERE NOT EXISTS
+                     (SELECT 1
+                      FROM paysumma p1
+                      WHERE p1.accountid = p.accountid
+                        AND p1.serviceid = s.serviceid))
+ORDER BY p.accountid;
+
+/*
+Решение данной задачи, основанное на группировке по номеру лицевого
+счёта абонента с подсчётом уникальных кодов оплаченных им услуг и
+отборе только тех абонентов, у которых это количество равно общему
+числу услуг:
+*/
+
+SELECT accountid
+FROM paysumma
+GROUP BY accountid
+HAVING COUNT(DISTINCT serviceid) = (SELECT COUNT(serviceid)
+                                    FROM services)
+ORDER BY accountid;
+
+
+/*
+Для получения такого же результата можно отобрать абонентов, для
+которых разность между таблицами Services и Paysumma не содержит строк:
+*/
+
+SELECT DISTINCT p.accountid
+FROM paysumma p
+WHERE serviceid = ALL (SELECT serviceid
+                       FROM services s
+                       WHERE serviceid NOT IN (SELECT serviceid
+                                               FROM paysumma p1
+                                               WHERE p1.accountid = p.accountid
+                                                 AND p1.serviceid = s.serviceid))
+ORDER BY accountid;
+
+
+/*
+Полу-соединение таблиц в SQL можно также реализовать
+с помощью подзапроса или оператора EXISTS.
+Например, вывести абонентов, имеющих заявки
+с неисправностью с идентификатором 2:
+*/
+
+SELECT DISTINCT a.*---r.*
+FROM abonent a
+---left join request r on a.accountid = r.accountid
+WHERE EXISTS (SELECT 1
+              FROM request r
+              WHERE a.accountid = r.accountid
+                AND r.failureid = 2);
+
+/*
+Список выбора содержит столбцы только из таблицы Abonent.
+Это и есть характерная особенность операции полу-соединения.
+Подзапрос внутри условия WHERE проверяет наличие строк в таблице
+Request, где AccountID совпадает с AccountID из Abonent и R.Failureid
+равно 2. Если подзапрос возвращает хотя бы одну строку, то условие
+EXISTS будет истинным, и соответствующая строка из Abonent будет
+включена в результирующий набор.
+
+Операция полу-соединения обычно применяется в распределённой обработке
+запросов, чтобы сократить объём передаваемых данных.
+
+Таким образом, предикат EXISTS является мощным инструментом
+для проверки существования данных, позволяя создавать эффективные
+и производительные запросы для сложных условий фильтрации.
+Он особенно полезен в ситуациях, когда необходимо проверить наличие
+или отсутствие связанных строк в других таблицах!!!
+
+В заключение рассмотрения вложенных запросов необходимо
+дополнительно обратить внимание на особенности применения
+количественных предикатов и предиката существования при наличии
+отсутствующих данных.
+
+Так как при обработке в следующих запросах (вывести всю информацию
+об абонентах, число символов в ФИО которых меньше числа символов
+в ФИО любого абонента, проживающего на улице с номером 3),
+отсутствуют NULL, то оба эти запроса вернут одинаковые результаты.
+
+*/
+
+
+SELECT *
+FROM abonent
+WHERE LENGTH(fio) < ANY (SELECT LENGTH(fio)
+                         FROM abonent
+                         WHERE streetid = 3);
+
+SELECT *
+FROM abonent a
+WHERE NOT EXISTS (SELECT 1
+                  FROM abonent d
+                  WHERE LENGTH(a.fio) >= LENGTH(d.fio)
+                    AND streetid = 3);
+
+/*
+При наличии NULL, как при обработке в двух других запросах,
+получаются разные результаты.
+*/
+
+SELECT *
+FROM abonent
+WHERE phone < ANY (SELECT phone
+                   FROM abonent
+                   WHERE accountid = '005488');
+
+SELECT *
+FROM abonent a
+WHERE NOT EXISTS (SELECT 1
+                  FROM abonent d
+                  WHERE a.phone >= d.phone
+                    AND accountid = '005488');
+
+/*
+Это является следствием того, что EXISTS всегда принимает значения
+TRUE или FALSE и никогда UNKNOWN.
+
+В запросе с ANY во внешнем запросе, когда выбирается столбец
+Phone с NULL, предикат принимает значение UNKNOWN и строка,
+так же, как и в случае, когда результатом сравнения будет FALSE,
+не включается в выборку. Во втором же варианте запроса, когда во
+внешнем запросе выбирается строка с NULL в столбце Phone,
+предикат, используемый в подзапросе, имеет значение UNKNOWN.
+Поэтому при выполнении подзапроса не будет получено ни одной строки,
+в результате чего оператор NOT EXISTS примет значение TRUE,
+и, следовательно, данная строка с NULL попадает в выборку внешнего
+запроса.
+
+Таким образом, при отсутствии NULL предикат EXISTS может быть
+использован вместо ANY и ALL.
+
+Также вместо COUNT(*) в секции SELECT могут быть использованы те же
+самые подзапросы с использованием EXISTS и NOT EXISTS:
+*/
+
+SELECT *
+FROM abonent a
+WHERE 1 > (SELECT COUNT(*)
+           FROM abonent d
+           WHERE LENGTH(a.fio) >= LENGTH(d.fio)
+             AND accountid = '005488');
+
+SELECT *
+FROM abonent a
+WHERE NOT EXISTS (SELECT fio
+                  FROM abonent d
+                  WHERE LENGTH(a.fio) >= LENGTH(d.fio)
+                    AND accountid = '005488');
+
+/*
+Выбор между независимыми и зависимыми подзапросами зависит от задачи,
+которую требуется решить, и от данных, с которыми придётся работать.
+Вот основные различия и сценарии использования для каждого типа
+подзапросов.
+
+
+Независимые подзапросы выполняются один раз и не зависят от
+внешнего запроса. Они могут быть использованы в качестве источника
+данных, для сравнения или в качестве аргумента функции во внешнем
+запросе.
+
+Сценарии использования:
+1.получение фиксированного набора данных, когда нужно получить
+конкретный набор данных, который не зависит от каждой строки
+внешнего запроса. Например, выборка всех абонентов, чья сумма
+платежей ниже средней по компании;
+
+2.использование в качестве статического значения, например, когда
+нужно сравнить значение в каждой строке основного запроса с
+результатом подзапроса, который возвращает единственное значение
+(например, среднее или максимальное значение);
+
+3.независимые подзапросы могут быть использованы в FROM-секции
+в качестве источника данных для создания временной таблицы,
+которая затем используется в основном запросе.
+
+*/
+
+---2
+SELECT accountid, MAX(paysum) AS max_pay
+FROM paysumma
+GROUP BY accountid
+HAVING MAX(paysum) > (SELECT AVG(paysum) FROM paysumma);
+--                    ↑ независимый подзапрос (одно число)
+
+
+---3
+SELECT serviceid, total
+FROM (SELECT serviceid, SUM(paysum) AS total
+      FROM paysumma
+      GROUP BY serviceid) AS subquery   -- ↑ независимый подзапрос
+WHERE total > 10000;
+
+/*
+Коррелированные подзапросы выполняются повторно для каждой строки
+внешнего запроса, и результат подзапроса может различаться в зависимости
+от текущей строки внешнего запроса. Они используют значения из внешнего
+запроса для выполнения своих условий.
+
+Сценарии использования:
+1.проверка условий для каждой строки: когда нужно проверить условие
+для каждой строки основного запроса, используя данные из другой
+таблицы.
+Например, выборка абонентов, для которых сумма платежей
+меньше, чем было начислено;
+
+2.возвращение значения, зависящего от каждой строки: когда нужно
+вернуть значение для каждой строки основного запроса, которое
+зависит от какого-то условия в другой таблице. Например, выборка
+имени сотрудника и имени его непосредственного руководителя, где
+руководитель определяется для каждого сотрудника индивидуально;
+
+3.коррелированные подзапросы часто используются с EXISTS, IN, ANY, ALL
+для проверки наличия, соответствия или сравнения значений в зависимости
+от каждой строки основного запроса.
+
+
+Общие выводы:
+
+коррелированные подзапросы могут существенно снизить
+производительность!!!!
+Особенно на больших объёмах данных, поскольку
+они выполняются многократно.
+Всегда стоит искать возможности
+оптимизации, например, использование соединений вместо
+коррелированных подзапросов, если это возможно!!!;
+
+иногда коррелированные подзапросы могут сделать SQL-запрос сложным
+для понимания и поддержки. Важно стремиться к написанию чистого,
+хорошо комментированного кода, особенно при использовании сложных
+подзапросов!!!
+
+Окончательный выбор между независимыми и коррелированными подзапросами
+зависит от конкретной задачи и требований к производительности.
+В некоторых случаях можно использовать оба подхода для достижения
+одного и того же результата, но с различиями в эффективности
+и читаемости кода.
+*/
+
+
+/*
+Составные запросы и операции над множествами результатов.
+Рекурсивные и коррелированные подзапросы в секции WITH
+Составные запросы и операции над множествами результатов
+
+Ранее рассмотренные SQL-запросы формировали один результирующий набор
+строк. Даже при соединении нескольких таблиц результат представлял
+собой единое множество.
+Однако в некоторых задачах требуется объединить результаты нескольких
+отдельных запросов SELECT в один итоговый набор.
+
+Для таких случаев в SQL предусмотрены операции над множествами
+результатов запросов.
+Каждый запрос SELECT возвращает множество строк, и SQL предоставляет
+возможность объединять эти множества с помощью следующих операций:
+
+UNION — объединение с удалением дубликатов;
+UNION ALL — объединение с сохранением дубликатов;
+INTERSECT — пересечение;
+EXCEPT — разность.
+
+Запрос, содержащий такие операции, называется составным, а каждый
+отдельный запрос внутри него — составляющим!!!
+
+Иногда составные запросы называют вертикальными объединениями,
+поскольку они формируют результат за счёт последовательного добавления
+строк, а не расширения столбцов, как это происходит при обычных JOIN.
+
+Общий синтаксис составного запроса может быть представлен в следующем
+виде:
+
+
+SELECT ...
+Операция_1
+SELECT ...
+[Операция_2
+SELECT ...
+...];
+
+Операции с наборами данных UNION, EXCEPT и INTERSECT выполняются
+сверху вниз (слева направо), но INTERSECT имеет более высокий
+приоритет, чем UNION и EXCEPT. При необходимости изменить порядок
+выполнения операций можно, используя скобки.
+
+Чтобы выполнить составной запрос, все составляющие SELECT запросы
+должны быть согласованы по структуре:
+
+1.одинаковое число столбцов в каждом SELECT;
+2.совместимость типов данных по соответствующим позициям;
+3.имена столбцов в результирующем наборе определяются по первому
+SELECT;
+4.секция ORDER BY может быть указана только в последнем запросе
+(или после всего составного выражения);
+5.точка с запятой «;» ставится только после последнего SELECT.
+Её отсутствие в промежуточных запросах означает продолжение
+выражения.
+
+В PostgreSQL столбцы в соответствующих позициях могут иметь разные
+типы, но эти типы должны быть совместимы. Если требуется дать
+псевдоним столбцам, то следует делать это для списка столбцов в самом
+верхнем запросе. Псевдонимы в других участвующих в операции выборках
+разрешены и могут быть даже полезными, но они не будут распространяться
+на уровне операции!!!
+
+Таким образом, составные запросы позволяют эффективно объединять,
+пересекать и фильтровать результаты нескольких SELECT-операций,
+расширяя возможности обработки данных в SQL,
+и в PostgreSQL в частности.
+
+
+Объединение
+Объединение — это операция SQL, используемая для объединения
+результирующих наборов двух или более запросов SELECT в единый
+результирующий набор. При получении данных из таблиц БД необходимость
+в объединении результатов двух или более запросов в одну таблицу
+реализуется с помощью оператора UNION. UNION — это оператор,
+осуществляющий операцию объединения. Он объединяет вывод двух или
+более запросов в единый набор строк и столбцов и имеет вид:
+
+Запрос X
+UNION [ALL]
+Запрос Y
+[UNION [ALL]]
+Запрос Z...;
+
+Объединение таблиц с помощью оператора UNION отличается от вложенных
+запросов и соединений таблиц тем, что в нём ни один из двух (или
+больше) запросов не управляет другим запросом.
+Все запросы выполняются
+независимо друг от друга, а уже их вывод объединяется.
+
+Например, необходимо вывести ФИО абонентов и исполнителей ремонтных
+заявок, фамилии которых начинаются на букву «Ш». Для этого можно
+использовать запрос:
+
+Следует отметить,
+что результат запроса в PostgreSQL упорядочен по ФИО.
+*/
+
+SELECT Fio AS "ФИО"
+FROM Abonent
+WHERE Fio LIKE 'Ш%'
+UNION
+SELECT Fio
+FROM Executor
+WHERE Fio LIKE 'Ш%';
+
+/*
+Чтобы включить все строки в вывод запроса, следует указать UNION ALL
+или в список выборки SELECT добавить дополнительный столбец с
+константой.
+
+Если бы, например, существовал не только исполнитель с ФИО
+Школьников С.М., но и абонент с такими же ФИО, и вместо UNION
+использовался UNION ALL, то строка с ФИО Школьников С.М. была бы
+выведена дважды.
+
+Добавление в список выборки столбца с константой, кроме того,
+позволяет различать строки результата:
+*/
+
+SELECT fio AS "ФИО", 'Абонент' AS "Кто"
+FROM abonent
+WHERE fio LIKE '%'
+UNION
+SELECT fio, 'Слесарь'
+FROM executor
+WHERE fio LIKE '%';
+
+/*
+Если требуется вывести одним запросом больше столбцов, чем другим,
+то можно создавать дополнительные столбцы искусственно, например
+*/
+
+SELECT fio AS "ФИО", 'Абонент' AS "Кто", phone
+FROM abonent
+WHERE fio LIKE '%'
+UNION
+SELECT fio, 'Слесарь', NULL
+FROM executor
+WHERE fio LIKE '%';
+
+----ИЛИ ТАК:
+
+SELECT CASE
+           WHEN phone IS NULL THEN fio || ' - абонент, нет телефона'
+           ELSE fio || ' - абонент, телефон: ' || phone
+           END AS "ФИО, кто, телефон"
+FROM abonent
+WHERE fio LIKE '%'
+UNION
+SELECT fio || ' - слесарь'
+FROM executor
+WHERE fio LIKE '%';
+
+/*
+Операторы UNION и UNION ALL могут быть скомбинированы,
+чтобы удалять одни дубликаты, не удаляя других.
+Объединение запросов
+
+(Запрос X
+UNION ALL
+Запрос Y)
+UNION
+Запрос Z;
+
+не обязательно даст те же результаты,
+что и объединение запросов
+
+Запрос X
+UNION ALL
+(Запрос Y
+UNION
+Запрос Z);
+
+так как дублирующиеся строки удаляются при использовании
+UNION без ALL.
+
+Результаты выполнения промежуточных запросов, участвующих в объединении,
+упорядочивать запрещено, однако результирующий набор можно
+отсортировать, указывая порядковые номера возвращаемых элементов.
+Например, объединить в одну таблицу информацию об услугах и
+неисправностях газового оборудования, а результат отсортировать по
+значениям второго выводимого столбца в обратном алфавитном порядке
+можно с помощью запроса
+*/
+
+
+SELECT failureid, failurenm
+FROM disrepair
+UNION ALL
+SELECT serviceid, servicenm
+FROM services
+ORDER BY 2 DESC;
+
+SELECT *
+FROM disrepair
+UNION ALL
+SELECT *
+FROM services
+ORDER BY 2 DESC;
+
+/*
+В объединяемых запросах можно использовать одну и ту же таблицу.
+
+Пусть, например, требуется вывести первые 10 значений начислений
+за 2025 г., уменьшенные на 5%,
+если значение меньше 560, на 10%,
+если значение от 600 до 900, и уменьшенные на 20%, если значение
+больше 900.
+Вывести также процент уменьшения, код начисления, прежнее
+и новое значения начислений.
+Запрос будет выглядеть так:
+
+*/
+
+SELECT accountid,
+       ' 5%'             AS "Снижение",
+       nachislfactid,
+       nachislsum        AS "Old_Sum",
+       nachislsum * 0.95 AS "New_Sum"
+FROM nachislsumma
+WHERE nachislsum < 560
+  AND nachislyear = 2025
+UNION
+SELECT accountid,
+       ' 10%',
+       nachislfactid,
+       nachislsum,
+       nachislsum * 0.90
+FROM nachislsumma
+WHERE (nachislsum BETWEEN 600 AND 900)
+  AND nachislyear = 2025
+UNION
+SELECT accountid,
+       ' 20%',
+       nachislfactid,
+       nachislsum,
+       nachislsum * 0.80
+FROM nachislsumma
+WHERE nachislsum > 900
+  AND nachislyear = 2025
+ORDER BY 1, 2
+    FETCH NEXT 10 ROWS ONLY;
+
+
+/*
+При использовании объединения запросов с одной и той же таблицей
+в PostgreSQL в некоторых случаях полезно проанализировать возможность
+решить задачу с помощью функций секции GROUP BY.
+
+Например, пусть требуется вывести средние значения плат по услугам
+и абонентам и средние значения плат по услугам.
+Эта задача может быть решена двумя способами: с помощью объединения
+запросов оператором UNION и с использованием функции ROLLUP.
+*/
+
+/*
+Запрос с объединением UNION:
+*/
+
+
+SELECT Serviceid, NULL AS Accountid, ROUND(AVG(Paysum), 2)
+FROM Paysumma
+GROUP BY Serviceid
+UNION
+SELECT Serviceid, Accountid, ROUND(AVG(Paysum), 2)
+FROM Paysumma
+GROUP BY Serviceid, Accountid
+UNION
+SELECT NULL, NULL, ROUND(AVG(Paysum), 2)
+FROM Paysumma
+ORDER BY 1, 2;
+
+/*
+Используя функцию ROLLUP или GROUPING SETS (см. лекц. 3.5), можно
+значительно короче написать аналогичный запрос:
+*/
+
+
+SELECT Serviceid, Accountid, ROUND(AVG(Paysum), 2)
+FROM Paysumma
+GROUP BY ROLLUP (Serviceid, Accountid)
+ORDER BY 1, 2;
+
+--или
+
+SELECT Serviceid, Accountid, ROUND(AVG(Paysum), 2)
+FROM Paysumma
+GROUP BY GROUPING SETS ((Serviceid, Accountid), (Serviceid), ())
+ORDER BY 1, 2;
+
+/*
+В данных запросах столбцы с функцией GROUPING позволяют определить
+строки итогов (это может потребоваться для обработки значений NULL
+в основных столбцах итоговых строк). В отличие от предыдущего запроса
+с UNION, запросы с ROLLUP или GROUPING SETS выведут дополнительно
+строку общего итога — среднее значение оплат по таблице Paysumma.
+*/
+
+/*315*/
+
 
