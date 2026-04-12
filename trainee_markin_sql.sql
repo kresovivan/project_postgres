@@ -9319,8 +9319,10 @@ ORDER BY 1, 2
 в PostgreSQL в некоторых случаях полезно проанализировать возможность
 решить задачу с помощью функций секции GROUP BY.
 
-Например, пусть требуется вывести средние значения плат по услугам
-и абонентам и средние значения плат по услугам.
+Например, пусть требуется
+вывести средние значения плат по услугам
+и абонентам
+и средние значения плат по услугам.
 Эта задача может быть решена двумя способами: с помощью объединения
 запросов оператором UNION и с использованием функции ROLLUP.
 */
@@ -9343,7 +9345,7 @@ FROM Paysumma
 ORDER BY 1, 2;
 
 /*
-Используя функцию ROLLUP или GROUPING SETS (см. лекц. 3.5), можно
+Используя функцию ROLLUP или GROUPING SETS, можно
 значительно короче написать аналогичный запрос:
 */
 
@@ -9363,10 +9365,316 @@ ORDER BY 1, 2;
 /*
 В данных запросах столбцы с функцией GROUPING позволяют определить
 строки итогов (это может потребоваться для обработки значений NULL
-в основных столбцах итоговых строк). В отличие от предыдущего запроса
-с UNION, запросы с ROLLUP или GROUPING SETS выведут дополнительно
-строку общего итога — среднее значение оплат по таблице Paysumma.
+в основных столбцах итоговых строк).
+В отличие от предыдущего запроса с UNION, запросы с ROLLUP
+или GROUPING SETS выведут дополнительно строку общего итога —
+среднее значение оплат по таблице Paysumma.
 */
+
+/*
+Приведём ещё один пример. Допустим, нужно в одном запросе вывести
+средние значения оплат по услугам и абонентам, средние значения оплат
+по услугам и средние значения оплат по абонентам. Традиционное
+решение:*/
+
+SELECT CAST(serviceid AS TEXT) AS "Услуга",
+       'услуга'                AS "По",
+       ROUND(AVG(paysum), 2)   AS "Средняя_Оплата"
+FROM paysumma
+GROUP BY serviceid
+UNION
+SELECT 'по абоненту', accountid, ROUND(AVG(paysum), 2)
+FROM paysumma
+GROUP BY accountid
+UNION
+SELECT CAST(serviceid AS TEXT), accountid, ROUND(AVG(paysum), 2)
+FROM paysumma
+GROUP BY serviceid, accountid
+ORDER BY 1, 2;
+
+---Более простое решение с помощью функции CUBE (см. лекц. 3.5):
+
+SELECT Serviceid, Accountid, ROUND(AVG(Paysum), 2)
+FROM Paysumma
+GROUP BY CUBE(Serviceid, Accountid)
+ORDER BY 1, 2;
+
+/*
+Объединения результатов нескольких запросов в один результирующий набор
+разрешены и внутри подзапросов. Например, требуется вывести данные об
+оплатах услуги с кодом, равным 1, по абонентам, фамилия которых
+начинается с буквы «М», и по абонентам, которые подавали заявки
+с неисправностью газового оборудования с кодом, равным 1.
+Выполняем запрос:
+*/
+
+SELECT accountid,
+       fio,
+       paysum,
+       paydate,
+       serviceid
+FROM paysumma
+         JOIN abonent USING (accountid)
+WHERE accountid IN (SELECT accountid
+                    FROM abonent
+                    WHERE fio LIKE 'М%'
+                    UNION
+                    SELECT accountid
+                    FROM request
+                    WHERE failureid = 1)
+  AND serviceid = 1
+ORDER BY CASE WHEN fio LIKE 'М%' THEN fio ELSE accountid END DESC;
+
+
+/*
+Часто полезна операция объединения двух запросов, в которой второй
+запрос выбирает строки, исключённые первым.
+Такая операция называется внешним объединением.
+Рассмотрим следующий пример.
+Требуется вывести список ремонтных заявок с указанием ФИО исполнителей
+тех заявок, которым назначен исполнитель, но при этом не отбрасывая и заявки,
+которым исполнитель не назначен.
+Если заявка не принята к исполнению, то вместо ФИО исполнителя выводить
+«Неизвестен». Можно получить желаемые сведения, сформировав объединение
+двух запросов, один из которых выполняет выборку заявок с ФИО их исполнителей,
+а второй выбирает заявки с NULL в столбце Executorid:
+*/
+
+SELECT requestid AS "Номер заявки",
+       accountid AS "Лицевой счет",
+       fio       AS "ФИО исполнителя"
+FROM executor
+         NATURAL JOIN request
+
+UNION
+
+SELECT requestid,
+       accountid,
+       'Неизвестен'
+FROM request
+WHERE executorid IS NULL
+ORDER BY 1;
+
+
+/*
+В следующем примере создан CTE с псевдонимом Nach к таблице Nachislsumma.
+Затем с помощью основного запроса, состоящего из объединения оператором
+UNION двух запросов, запрашиваются все данные начислений со значениями
+Nachislsum > 2300 и со значениями Nachislsum < 650:
+*/
+
+WITH nach AS (SELECT *
+              FROM nachislsumma)
+SELECT *
+FROM nach
+WHERE nachislsum > 2300
+
+UNION
+
+SELECT *
+FROM nach
+WHERE nachislsum < 650
+ORDER BY 4;
+
+/*
+В качестве очередного примера приведём запрос для вывода в виде отчёта
+(сводной таблицы) суммы значений плат каждым абонентом в разрезе услуг
+При этом должны быть выведены не только суммарные
+значения по каждому абоненту, но и по каждой услуге. Для формирования
+такого отчёта можно использовать следующий запрос, в котором с помощью
+оператора UNION ALL выводится требуемая итоговая строка:
+*/
+
+WITH serv AS (SELECT accountid, serviceid, SUM(paysum) AS s
+              FROM paysumma
+              GROUP BY accountid, serviceid),
+
+     totals AS (SELECT SUM(CASE WHEN serviceid = 1 THEN paysum ELSE 0 END) AS газ,
+                       SUM(CASE WHEN serviceid = 2 THEN paysum ELSE 0 END) AS электр,
+                       SUM(CASE WHEN serviceid = 3 THEN paysum ELSE 0 END) AS тепло,
+                       SUM(CASE WHEN serviceid = 4 THEN paysum ELSE 0 END) AS вода,
+                       SUM(paysum)                                         AS всего
+                FROM paysumma)
+
+SELECT a.accountid,
+       a.fio,
+       COALESCE(s1.s, 0)                                                             AS "Газ",
+       COALESCE(s2.s, 0)                                                             AS "Электр.",
+       COALESCE(s3.s, 0)                                                             AS "Тепло",
+       COALESCE(s4.s, 0)                                                             AS "Вода",
+       COALESCE(s1.s, 0) + COALESCE(s2.s, 0) + COALESCE(s3.s, 0) + COALESCE(s4.s, 0) AS "ВСЕГО"
+FROM abonent a
+         LEFT JOIN serv s1 ON a.accountid = s1.accountid AND s1.serviceid = 1
+         LEFT JOIN serv s2 ON a.accountid = s2.accountid AND s2.serviceid = 2
+         LEFT JOIN serv s3 ON a.accountid = s3.accountid AND s3.serviceid = 3
+         LEFT JOIN serv s4 ON a.accountid = s4.accountid AND s4.serviceid = 4
+UNION ALL
+SELECT 'ИТОГО' AS accountid,
+       ''      AS fio,
+       газ,
+       электр,
+       тепло,
+       вода,
+       всего
+FROM totals
+ORDER BY 1;
+
+
+/*
+Следующий пример запроса на объединение демонстрирует вывод простых
+чисел от 2 до 1000 с использованием CTE:
+*/
+
+
+WITH number AS (SELECT GENERATE_SERIES(3, 1000, 2) AS nm),
+
+     primer AS (SELECT nm
+                FROM number
+                WHERE NOT EXISTS (SELECT 1
+                                  FROM number n
+                                  WHERE n.nm > 2
+                                    AND n.nm < number.nm
+                                    AND number.nm % n.nm = 0))
+
+SELECT 2 AS простые_числа_от_2_до_1000
+UNION ALL
+SELECT *
+FROM primer;
+
+/*
+Этот метод основан на алгоритме, который проверяет каждое число
+на делимость на все меньшие простые числа.
+
+В заключение рассмотрения оператора UNION стоит привести
+запрос, возвращающий данные, аналогичные запросу с обратным
+INNER JOIN
+*/
+
+SELECT e.fio, r.requestid
+FROM executor e
+         LEFT JOIN request r USING (executorid)
+WHERE r.executorid IS NULL
+
+UNION ALL
+
+SELECT e.fio, r.requestid
+FROM executor e
+         RIGHT JOIN request r USING (executorid)
+WHERE e.executorid IS NULL;
+
+/*
+Для вычисления разности наборов данных.
+СУБД PostgreSQL предоставляет специальный оператор EXCEPT,
+имеющий вид:
+
+
+Вычитание
+Для вычисления разности наборов данных СУБД
+PostgreSQL предоставляет специальный оператор EXCEPT, имеющий вид:
+
+Запрос X
+EXCEPT [ALL]
+Запрос Y
+[EXCEPT [ALL]
+Запрос Z...];
+
+Результатом действия оператора EXCEPT являются строки, оставшиеся
+после вычитания строк, возвращённых вторым запросом, из строк,
+возвращённых первым.
+
+Выше был рассмотрен пример нахождения кодов улиц, на которых
+не проживают абоненты, и приведена реализация запроса
+с использованием подзапроса и проверки на членство в наборе данных.
+Данный пример также был рассмотрен выше, где была приведена
+реализация с использованием предиката EXISTS.
+В PostgreSQL аналогичный запрос может быть реализован более
+просто с использованием оператора EXCEPT:
+*/
+
+SELECT streetid
+FROM street
+EXCEPT
+SELECT streetid
+FROM abonent;
+
+/*
+Следующий запрос позволяет вывести список номеров лицевых счетов
+всех абонентов, которые не имеют непогашенных заявок:
+*/
+
+
+SELECT accountid AS "HLC"
+FROM abonent
+EXCEPT
+SELECT accountid
+FROM request
+WHERE executed = FALSE;
+
+
+SELECT fio, requestid
+FROM executor
+         FULL JOIN request USING (executorid)
+EXCEPT
+SELECT fio, requestid
+FROM executor
+         INNER JOIN request USING (executorid);
+
+/*
+Пересечение
+Система управления БД PostgreSQL позволяет реализовывать операцию
+пересечения наборов данных и предоставляет для этих
+целей оператор INTERSECT, имеющий вид:
+
+Запрос X
+INTERSECT [ALL]
+Запрос Y
+[INTERSECT [ALL]
+Запрос Z...];
+
+Оператор INTERSECT возвращает строки, извлекаемые обоими запросами,
+т.е. строки, которые имеются и в одной, и в другой таблице.
+Предположим, необходимо вывести информацию об абонентах, подававших
+ремонтные заявки
+
+Второе изображение:
+
+Необходимо отметить возможность сочетания рассмотренных операций
+с наборами данных. Пусть требуется найти абонентов, у которых либо
+погашена заявка, либо они не имеют заявок вообще, и добавить к этому
+списку всех исполнителей, которым ещё не назначены заявки. Для решения
+такой задачи можно применить сочетание операторов UNION и EXCEPT
+следующим образом:
+*/
+
+(SELECT accountid, 'Абонент' AS "Кто"
+ FROM abonent
+ EXCEPT
+ SELECT accountid, 'Абонент'
+ FROM request
+ WHERE executed = FALSE)
+UNION
+(SELECT executorid::TEXT, 'Слесарь'
+ FROM executor
+ EXCEPT
+ SELECT executorid::TEXT, 'Слесарь'
+ FROM request
+ WHERE executed = TRUE)
+ORDER BY 1;
+
+/*
+Здесь:
+1.EXCEPT в первой части находит абонентов без непогашенных заявок;
+2.EXCEPT во второй части выбирает исполнителей без заявок;
+3.UNION объединяет результаты, удаляя дубликаты;
+Для управления очередью обработки используются круглые скобки.
+*/
+
+
+
+
+
+
+
 
 /*315*/
 
