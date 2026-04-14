@@ -951,7 +951,7 @@ SELECT * FROM Request
 WHERE Incomingdate::TEXT NOT SIMILAR TO '2023 %';
 
 /*Регулярные выражения, помимо использования в секции WHERE, могут применяться в ограничении
-CHECK запросов на создание домена и таблицы БД (см. лекц. 6.1) и в логическом
+CHECK запросов на создание домена и таблицы БД и в логическом
 условии оператора ветвления IF.
 Также в PostgreSQL регулярные выражения могут
 использоваться в качестве аргументов функции SUBSTRING
@@ -1447,7 +1447,7 @@ SELECT PG_TYPEOF('postgres');
 При этом выражение может быть сколь угодно сложным.
 Агрегатные функции могут использоваться:
 1) сами по себе для вывода результирующего значения;
-2) с группировкой по столбцам для получения результирующих значений в каждой группе (см. лекц. 3.5).
+2) с группировкой по столбцам для получения результирующих значений в каждой группе
 Для функций SUM и AVG столбец должен содержать числовые значения. Специальная функция COUNT (*) служит для подсчета
 всех без исключения строк в таблице (включая дубликаты). Результатом функции COUNT не может быть NULL.
 Она может вернуть только натуральное число (положительное целое) или ноль. Все другие агрегатные функции
@@ -2083,8 +2083,7 @@ GROUP BY [[ALL] | DISTINCT] <элемент_группировки> [, ...]
 функции. Агрегатная функция берет столбец значений и
 возвращает одно значение (агрегатный показатель). В
 качестве агрегатных функций используются COUNT, SUM,
-MIN, MAX, AVG, STRING_AGG и EVERY, рассмотренные в
-предыдущей лекции. Секция GROUP BY указывает, что
+MIN, MAX, AVG, STRING_AGG и EVERY. Секция GROUP BY указывает, что
 результаты запроса следует разделить на группы,
 применить агрегатную функцию по отдельности к каждой
 группе и получить для каждой группы одну строку
@@ -7547,15 +7546,32 @@ ORDER BY t."Долг";
 */
 
 
-SELECT SUM(CASE WHEN "Сальдо" > 0 THEN "Сальдо" ELSE 0 END)      AS "Переплата",
-       SUM(CASE WHEN "Сальдо" < 0 THEN ABS("Сальдо") ELSE 0 END) AS "Долг"
-FROM (SELECT P.Accountid,
-             (SUM(P.Paysum) - (SELECT SUM(N.Nachislsum)
-                               FROM Nachislsumma N
-                               WHERE N.Accountid = P.Accountid
-                               GROUP BY N.Accountid)) AS "Сальдо"
-      FROM Paysumma AS P
-      GROUP BY P.Accountid) t;
+SELECT
+	SUM(CASE WHEN "Сальдо" > 0 THEN "Сальдо" ELSE 0 END) AS "Переплата"
+	,
+	SUM(CASE WHEN "Сальдо" < 0 THEN ABS("Сальдо") ELSE 0 END) AS "Долг"
+FROM
+	(
+		SELECT
+			P.Accountid
+			,
+		(
+				SUM(P.Paysum) - (
+					SELECT
+						SUM(N.Nachislsum)
+					FROM
+						Nachislsumma N
+					WHERE
+						N.Accountid = P.Accountid
+					GROUP BY
+						N.Accountid
+				)
+			) AS "Сальдо"
+		FROM
+			Paysumma AS P
+		GROUP BY
+			P.Accountid
+	) t;
 
 /*
 Коррелированный подзапрос в секции FROM применяется с помощью
@@ -7580,16 +7596,27 @@ FROM (SELECT P.Accountid,
 можно использовать такой запрос:
 */
 
-SELECT a.accountid,
-       fio,
-       last_request.*
-FROM abonent a
-         INNER JOIN LATERAL
-    (SELECT *
-     FROM request r
-     WHERE accountid = a.accountid
-     ORDER BY r.incomingdate DESC
-     LIMIT 1) AS last_request ON TRUE;
+SELECT
+	a.accountid
+	,
+	fio
+	,
+	last_request.*
+FROM
+	abonent a
+INNER JOIN LATERAL
+    (
+		SELECT
+			*
+		FROM
+			request r
+		WHERE
+			accountid = a.accountid
+		ORDER BY
+			r.incomingdate DESC
+		LIMIT 1
+	) AS last_request ON
+	TRUE;
 
 
 /*
@@ -9391,7 +9418,7 @@ FROM paysumma
 GROUP BY serviceid, accountid
 ORDER BY 1, 2;
 
----Более простое решение с помощью функции CUBE (см. лекц. 3.5):
+---Более простое решение с помощью функции CUBE:
 
 SELECT Serviceid, Accountid, ROUND(AVG(Paysum), 2)
 FROM Paysumma
@@ -11180,7 +11207,8 @@ LEAD(<выражение> [ [, <смещение> [, <значение_по_ум
 
 Функция LAG внутри «окна» ищет значение <выражения> для строки,
 которая находится выше текущей на <смещение> строк (по умолчанию
-<смещение> равно 1). Функция LEAD внутри «окна» ищет значение
+<смещение> равно 1).
+Функция LEAD внутри «окна» ищет значение
 <выражения> для строки, которая находится ниже текущей на <смещение>
 строк. В случае, когда <смещение> выходит за пределы «окна»,
 возвращается <значение_по_умолчанию> (по умолчанию NULL).
@@ -11191,12 +11219,2002 @@ LEAD(<выражение> [ [, <смещение> [, <значение_по_ум
 Модифицируем запрос, выводящий суммы значений начислений для каждого
 абонента, дополнив его вычислением различных наилучших функций:
 
+*/
+
+SELECT n.accountid,
+       SUM(n.nachislsum),
+       FIRST_VALUE(SUM(n.nachislsum)) OVER (ORDER BY SUM(n.nachislsum)),
+       LAST_VALUE(SUM(n.nachislsum)) OVER (ORDER BY SUM(n.nachislsum)),
+       NTH_VALUE(SUM(n.nachislsum), 2) OVER (ORDER BY SUM(n.nachislsum)),
+       LAG(SUM(n.nachislsum)) OVER (ORDER BY SUM(n.nachislsum)),
+       LEAD(SUM(n.nachislsum)) OVER (ORDER BY SUM(n.nachislsum))
+FROM nachislsumma n
+GROUP BY n.accountid
+ORDER BY SUM(n.nachislsum);
+
+/*
+В приведённом примере «окно» для каждой строки содержит значения
+сумм от самой минимальной до суммы, не превышающей сумму в текущей
+строке.
+
+функция FIRST_VALUE возвращает значение первой суммы из «окна»,
+т.е. наименьшей суммы, которая для всех строк одинаковая;
+
+функция LAST_VALUE возвращает значение последней суммы из «окна»,
+т.е. суммы, равной сумме в текущей строке!!!;
+
+функция NTH_VALUE возвращает значение второй суммы из «окна»,
+которое одинаково для всех строк, кроме первой (для первой строки
+«окно» содержит только одну строку, поэтому второе значение
+возвращает NULL);
+
+функция LAG возвращает значение предыдущей суммы из «окна» для
+текущей строки, т.е. предыдущую меньшую по величине сумму
+отсортированного ряда (для первой строки «окно» содержит только
+одну строку, поэтому предыдущее значение возвращает NULL);
+
+функция LEAD возвращает значение следующей суммы из «окна» для
+текущей строки, т.е. следующую по величине сумму отсортированного
+ряда (для последней строки «окно» не содержит следующего по величине
+значения, поэтому возвращается NULL).
+
+Во всех рассмотренных выше примерах запросов оконные функции
+применялись в секции SELECT.
+В качестве примеров использования оконных функций в секции
+ORDER BY могут быть следующие простые запросы:
+
+*/
+SELECT -- нумерация строк в соответствии с определённым порядком
+*, ROW_NUMBER() OVER (ORDER BY Accountid DESC) AS row_number
+FROM Paysumma;
+
+SELECT -- присвоение ранга значениям в определённом порядке
+*, RANK() OVER (ORDER BY Accountid DESC) AS Accountid_rank
+FROM Paysumma;
+
+SELECT -- присвоение ранга значениям в определённом порядке
+*, DENSE_RANK() OVER (ORDER BY Accountid) AS Accountid_dense_rank
+FROM Paysumma;
+
+SELECT -- разбиение результата на указанное количество групп
+-- в определённом порядке
+*, NTILE(4) OVER (ORDER BY Accountid DESC) AS Quartile
+FROM Paysumma;
+
+
+/*
+В последнем запросе функция NTILE() принимает целое число и пытается
+разделить окно на несколько сбалансированных сегментов, указывая,
+к какому сегменту относится каждая строка.
+
+Это лишь несколько примеров использования оконных функций с секцией
+ORDER BY. Каждая из этих функций предлагает различные способы анализа
+и классификации данных в рамках запроса.
+
+Агрегатные и статистические функции.
+В СУБД PostgreSQL
+поддерживаются различные виды функций, бóльшая часть из которых
+может использоваться как в качестве агрегирующих функций, так и в
+качестве аналитических.
+Например, для расчёта основных агрегатов платежей в разрезе услуг
+можно применять агрегатные аналитические функции, указав опцию OVER:
+*/
+
+SELECT DISTINCT serviceid,
+                AVG(paysum) OVER (PARTITION BY serviceid),
+                SUM(paysum) OVER (PARTITION BY serviceid),
+                MIN(paysum) OVER (PARTITION BY serviceid),
+                MAX(paysum) OVER (PARTITION BY serviceid),
+                COUNT(payfactid) OVER (PARTITION BY serviceid)
+FROM paysumma
+ORDER BY serviceid;
+
+/*
+Ниже перечислены некоторые статистические функции с указанием их
+форматов и кратким описанием.
+
+CORR(числовое_выражение1, числовое_выражение2) [OVER (выражение)] —
+коэффициент корреляции множества пар численных выражений.
+В статистическом смысле корреляция — это степень связи между
+переменными.
+
+Связь между переменными означает, что значение одной
+переменной можно в определённой степени предсказать по значению
+другой.
+Коэффициент корреляции представляет степень корреляции
+в виде числа в диапазоне от −1 (высокая обратная корреляция) до 1
+(высокая корреляция).
+Значение 0 соответствует отсутствию корреляции.
+Например, следующий запрос позволяет вычислить общий коэффициент
+корреляции между значениями начислений и платежей:
+использование функции как агрегирующей:
+ */
+
+SELECT CORR(nachislsum, paysum) AS "Корреляция"
+FROM nachislsumma n
+         JOIN paysumma p USING (accountid, serviceid)
+WHERE nachislmonth = paymonth
+  AND nachislyear = payyear;
+
+
+/*
+Идеальная прямая связь:
+каждый платёж точно равен начислению (долгов нет).
+*/
+SELECT CORR(nachislsum, paysum) AS "Корреляция",
+       sum(nachislsum),
+       sum(paysum)
+FROM nachislsumma n
+         JOIN paysumma p USING (accountid, serviceid)
+WHERE nachislmonth = paymonth
+  AND nachislyear = payyear;
+
+--использование функции как аналитической:
+
+SELECT DISTINCT serviceid,
+                CORR(nachislsum, paysum)
+                OVER (PARTITION BY serviceid) AS "Корреляция"
+FROM nachislsumma n
+         JOIN paysumma p USING (accountid, serviceid)
+WHERE nachislmonth = paymonth
+  AND nachislyear = payyear
+ORDER BY serviceid;
+
+/*
+COVAR_POP(числовое_выражение1, числовое_выражение2) — ковариация
+совокупности множества пар числовых выражений;
+
+COVAR_SAMP(числовое_выражение1, числовое_выражение2) — выборочная
+ковариация набора пар числовых выражений;
+Ковариация — это статистическая мера, показывающая направление
+линейной зависимости между двумя случайными величинами.
+
+CUME_DIST(выражение1, ..., выражениеN) WITHIN GROUP (ORDER BY
+выражение1, ..., выражениеN) — кумулятивное распределение значений
+в группе значений.
+Функция всегда возвращает число, которое > 0 и ≤ 1.
+Это число представляет относительную «позицию» строки в группе из N
+строк. В группе из трёх строк, например, возвращаются следующие
+значения кумулятивного распределения: 1/3, 2/3 и 3/3.
+Пример группы из пяти строк:
+*/
+
+SELECT x, CUME_DIST() OVER w
+FROM (SELECT GENERATE_SERIES(1, 5) AS x) t
+WINDOW w AS (ORDER BY x);
+
+/*
+Запрос вычисляет кумулятивное распределение для набора целых чисел
+от 1 до 5, упорядоченных по возрастанию. Кумулятивное распределение
+показывает долю строк в окне (в данном случае, во всём наборе данных),
+значение которых меньше или равно текущему значению. Детали запроса:
+
+(SELECT GENERATE_SERIES(1,5) AS X) создаёт временную таблицу
+с одной колонкой X, содержащей 5 строк: 1, 2, 3, 4, 5;
+
+WINDOW W AS (ORDER BY X): определяет окно вычислений W. Окно
+включает все строки из подзапроса, упорядоченные по возрастанию
+значения X. Так как PARTITION BY отсутствует, все 5 строк считаются
+одной партицией;
+
+CUME_DIST() OVER W: вычисляет функцию кумулятивного распределения
+для каждой строки в рамках окна W.
+
+
+Этот конкретный запрос является демонстрационным, наглядно
+показывающим, как работает функция CUME_DIST() на простейшем
+упорядоченном наборе данных.
+
+В реальных задачах CUME_DIST используется
+для анализа распределения данных (например, «Какие 20% услуг дают 80%
+выручки?» — правило Парето), определения перцентилей, ранжирования
+и сравнения позиций значений внутри группы. Применение CUME_DIST
+для анализа правила «25% услуг → 75% выручки»
+*/
+
+
+WITH servicerevenue AS (SELECT s.serviceid,
+                               s.servicenm                                    AS "Название услуги",
+                               SUM(p.paysum)                                  AS "Выручка",
+                               CUME_DIST() OVER (ORDER BY SUM(p.paysum) DESC) AS "CumeDist",
+                               SUM(SUM(p.paysum)) OVER (ORDER BY SUM(p.paysum) DESC) /
+                               SUM(SUM(p.paysum)) OVER ()                     AS "CumulativeRevenueShare"
+                        FROM paysumma p
+                                 JOIN services s ON p.serviceid = s.serviceid
+                        GROUP BY s.serviceid, s.servicenm),
+     paretoanalysis AS (SELECT serviceid,
+                               "Название услуги",
+                               "Выручка",
+                               "CumeDist",
+                               "CumulativeRevenueShare",
+                               CASE WHEN "CumeDist" <= 0.25 THEN 1 ELSE 0 END AS "Top20Percent"
+                        FROM servicerevenue)
+SELECT (SELECT SUM("Выручка") FROM paretoanalysis WHERE "Top20Percent" = 1) AS "Выручка топ 25%",
+       (SELECT SUM("Выручка") FROM paretoanalysis)                          AS "Общая выручка",
+       ROUND((SELECT SUM("Выручка") FROM paretoanalysis WHERE "Top20Percent" = 1) /
+             (SELECT SUM("Выручка") FROM paretoanalysis) * 100, 2)          AS "Доля выручки топ 25% (%)",
+       (SELECT STRING_AGG("Название услуги", ', ' ORDER BY "Выручка" DESC)
+        FROM paretoanalysis
+        WHERE "Top20Percent" = 1)                                           AS "Топ услуги"
+FROM paretoanalysis
+WHERE "Top20Percent" = 1
+GROUP BY "Top20Percent"
+LIMIT 1;
+
+
+WITH servicerevenue AS (SELECT s.servicenm                                            AS "Название услуги",
+                               SUM(p.paysum)                                          AS "Выручка",
+                               CUME_DIST() OVER (ORDER BY SUM(p.paysum) DESC) <= 0.25 AS is_top25
+                        FROM paysumma p
+                                 JOIN services s ON p.serviceid = s.serviceid
+                        GROUP BY s.servicenm)
+
+SELECT SUM("Выручка") FILTER (WHERE is_top25)                                              AS "Выручка топ 25%",
+       SUM("Выручка")                                                                      AS "Общая выручка",
+       ROUND(SUM("Выручка") FILTER (WHERE is_top25) / SUM("Выручка") * 100,
+             2)                                                                            AS "Доля выручки топ 25% (%)",
+       STRING_AGG("Название услуги", ', ' ORDER BY "Выручка" DESC) FILTER (WHERE is_top25) AS "Топ услуги"
+FROM servicerevenue;
 
 
 
+
+
+----Какие услуги дают 80% выручки?
+/*
+Выручка (%)
+  100 |                                 ●
+   90 |                            ●
+   80 |                       ●
+   70 |                  ●
+   60 |             ●
+   50 |        ●
+   40 |   ●
+   30 |  ●
+   20 | ●
+   10 |●
+    0 └────────────────────────────────────
+       0%    25%    50%    75%    100%
+                 Услуги (%)
+ ● — фактические точки
+   - - - — идеальное равномерное распределение (линия 45°)
+
+
+Итог одной фразой
+Ваш бизнес сильно зависит от одной услуги (Serviceid=3),
+которая даёт больше половины всей выручки.
+Это одновременно и сила (ясный лидер),
+и риск (если с этой услугой будут проблемы, потеряете >50% дохода).
+*/
+
+WITH service_revenue AS (
+    SELECT Serviceid, SUM(Paysum) AS total_revenue
+    FROM Paysumma
+    GROUP BY Serviceid
+),
+     ranked AS (
+         SELECT Serviceid, total_revenue,
+                SUM(total_revenue) OVER (ORDER BY total_revenue DESC) AS running_total,
+                SUM(total_revenue) OVER () AS grand_total,
+                CUME_DIST() OVER (ORDER BY total_revenue DESC) AS cume_dist
+         FROM service_revenue
+     )
+SELECT Serviceid, total_revenue,
+       ROUND(cume_dist::numeric * 100, 2) AS cume_percent,
+       ROUND((running_total / grand_total)::numeric * 100, 2) AS revenue_percent
+FROM ranked
+ORDER BY total_revenue DESC;
+
+
+/*
+
+STDDEV ([DISTINCT|ALL] выражение) — стандартное отклонение
+списка чисел;
+
+VARIANCE(выражение) — дисперсия набора чисел;
+
+VAR_POP(выражение) — дисперсия совокупности множества чисел;
+
+VAR_SAMP(выражение) — выборочная дисперсия набора чисел.
+
+В заключение изучения запроса SELECT разберём решение достаточно
+важной практической и аналитической задачи. Будем считать, что если
+ремонтная заявка не выполнена (столбец Executiondate содержит NULL),
+то она является открытой на следующий день её регистрации.
+
+Разработаем запрос для подсчёта количества абонентов с открытыми заявками
+помесячно. Будем учитывать только заявки, которые были открыты более
+одного дня.
+Например, если заявка зарегистрирована в феврале и
+выполнена в июне, то абонент с такой заявкой должен войти в число
+абонентов с открытыми заявками во всех месяцах с февраля по июнь
+включительно.
+В качестве анализируемого (отчётного) периода примем
+месяц регистрации самой первой заявки
+по месяц регистрации последней заявки.
+
+Результат должен быть представлен в виде: год, месяц, число абонентов
+с открытыми заявками, номера лицевых счетов этих абонентов и номера
+соответствующих заявок.
+
+Решение задачи разобьём на следующие шаги.
+
+Шаг 1. Определение первой и последней дат отчётного периода:
+*/
+
+WITH first_date AS (SELECT DATE_TRUNC('MONTH', MIN(incomingdate)) AS first_day
+                    FROM request),
+     last_date AS (SELECT COALESCE(MAX(executiondate), CURRENT_DATE) AS last_day
+                   FROM request);
+/*
+Здесь создаются временные таблицы First_date и Last_date, в которых
+определяется первая и последняя даты учёта заявок соответственно.
+Первая вычисляется как первое число месяца регистрации самой ранней
+заявки (DATE_TRUNC('MONTH', MIN(Incomingdate))),
+а последняя — 31 декабря года, в котором зарегистрирована самая поздняя заявка
+(DATE_TRUNC('YEAR', MAX(Incomingdate)) + INTERVAL '1 YEAR' -
+INTERVAL '1 DAY').
+
+Месяц даты регистрации первой заявки является
+первым месяцем в формируемой динамически таблице месяцев, пока не
+будет достигнут месяц регистрации последней заявки (шаг 3). Например,
+если последняя заявка открыта в 2024 г., то Last_day будет 31 декабря
+2024 г.
+*/
+
+
+Generate_dates AS (
+SELECT GENERATE_SERIES((SELECT First_day FROM First_date),
+(SELECT Last_day FROM Last_date),
+'1 MONTH'::INTERVAL) AS Month
+)
+
+/*
+На этом шаге создаётся временная таблица Generate_dates, которая
+генерирует все месяцы в диапазоне от первой (First_day) до последней
+(Last_day) дат, определённых на предыдущем шаге. Для этого используется
+функция GENERATE_SERIES. Эта операция необходима для получения всех
+месяцев анализируемого периода (шаг 3), включая и те, в которых
+не подавались заявки на ремонт, так как в этих месяцах могут
+оставаться невыполненными ранее зарегистрированные заявки.
+
+Шаг 3. Поиск всех заявок, которые открыты более одного дня и были
+открыты в каждом месяце из Request
+
+*/
+
+Open_requests AS (
+SELECT
+Requestid,
+Accountid,
+DATE_TRUNC('MONTH', Incomingdate)::DATE AS Start_month,
+DATE_TRUNC('MONTH', COALESCE(Executiondate, CURRENT_DATE))::DATE AS End_month
+FROM Request
+WHERE COALESCE(Executiondate, CURRENT_DATE) > Incomingdate + INTERVAL '1 DAY'
+)
+
+/*
+Для каждой заявки, открытой более одного дня, выдаёт её идентификатор,
+номер лицевого счёта абонента, дату начала месяца для даты подачи
+заявки и дату конца месяца для даты выполнения заявки или текущей
+даты, если заявка ещё не выполнена.
+
+Шаг 4. Нахождение всех заявок, которые были открыты в каждом месяце
+из Generate_dates, исключая заявки, которые были закрыты в том же
+месяце, когда были открыты:
+*/
+
+
+Month_requests AS (
+SELECT
+Month,
+Requestid,
+Accountid
+FROM Generate_dates
+JOIN Open_requests ON Month BETWEEN Start_month AND End_month
+WHERE (Start_month != End_month OR End_month IS NULL)
+)
+
+/*
+Соединяет таблицы Generate_dates и Open_requests по условию, что месяц
+из Generate_dates находится между началом и концом месяца заявки из
+Open_requests, отсекая заявки, закрытые в месяце регистрации.
+
+Шаг 5. Основной запрос собирает конечные результаты, подсчитывает
+количество уникальных абонентов с открытыми заявками и выводит их
+идентификаторы:
 */
 
 
 
-/*357*/
+ELECT
+EXTRACT(YEAR FROM M.Month) AS "Год",
+TO_CHAR(M.Month, 'TMMonth') AS "Месяц",
+COUNT(DISTINCT O.Accountid) AS "Абонентов",
+ARRAY_AGG(DISTINCT O.Accountid) AS "Абоненты",
+ARRAY_AGG(DISTINCT O.Requestid) AS "Заявки"
+FROM Generate_dates M
+LEFT JOIN Month_requests O USING(Month)
+GROUP BY M.Month
+ORDER BY M.Month;
+
+/*
+Основной запрос:
+
+выбирает год,
+название месяца,
+количество уникальных абонентов с открытыми заявками,
+массив уникальных идентификаторов абонентов
+и массив уникальных идентификаторов заявок;
+
+выполняет левое соединение (LEFT JOIN) таблиц Generate_dates
+и Month_requests;
+
+группирует данные по названию месяца, чтобы получить результаты
+для каждого месяца;
+
+сортирует результаты по месяцу.
+
+Этот запрос генерирует отчёт, который показывает количество абонентов
+с открытыми заявками по месяцам, а также идентификаторы абонентов
+и заявок, которые были открыты в каждый месяц.
+
+Полный текст запроса:
+*/
+
+WITH
+    First_date AS (
+        SELECT DATE_TRUNC('MONTH', MIN(Incomingdate)) AS First_day
+        FROM Request
+    ),
+    Last_date AS (
+        SELECT COALESCE(MAX(Executiondate), CURRENT_DATE) AS Last_day
+        FROM Request
+    ),
+    Generate_dates AS (
+        SELECT GENERATE_SERIES(
+                       (SELECT First_day FROM First_date),
+                       (SELECT Last_day FROM Last_date),
+                       '1 MONTH'::INTERVAL
+               ) AS Month
+    ),
+
+    Open_requests AS (
+        SELECT Requestid, Accountid,
+               DATE_TRUNC('MONTH', Incomingdate) AS Start_month,
+               DATE_TRUNC('MONTH', COALESCE(Executiondate, CURRENT_DATE)) AS End_month
+        FROM Request
+        WHERE COALESCE(Executiondate, CURRENT_DATE) > Incomingdate + INTERVAL '1 DAY'
+    ),
+    Month_requests AS (
+        SELECT Month, Requestid, Accountid
+        FROM Generate_dates
+                 JOIN Open_requests ON Month BETWEEN Start_month AND End_month
+        WHERE (Start_month != End_month OR End_month IS NULL)
+    )
+
+SELECT
+    EXTRACT(YEAR FROM M.Month) AS "Год",
+    TO_CHAR(M.Month, 'TMMonth') AS "Месяц",
+    COUNT(DISTINCT O.Accountid) AS "Абонентов",
+    ARRAY_AGG(DISTINCT O.Accountid) AS "Абоненты",
+    ARRAY_AGG(DISTINCT O.Requestid) AS "Заявки"
+FROM Generate_dates M
+         LEFT JOIN Month_requests O USING(Month)
+GROUP BY M.Month
+ORDER BY M.Month;
+
+/*
+Этот запрос учитывает заявки, которые были открыты как минимум два дня
+и оставались открытыми в течение нескольких месяцев, исключая заявки,
+которые были открыты и закрыты в тот же месяц. Он использует DISTINCT
+для устранения дублирования данных при агрегировании идентификаторов
+абонентов и заявок в основном результате.
+
+Подводя итоги изучения функций для анализа данных, следует подчеркнуть
+важность понимания типов задач, которые можно решать с их помощью,
+а не особенностей их применения.
+*/
+
+
+
+/*
+Рекомендуемые практики построения SQL-запросов
+Чтение и анализ планов выполнения запросов
+В PostgreSQL для оценки производительности SQL-запросов и выявления
+узких мест используется команда EXPLAIN, которая показывает план
+выполнения запроса, составленный оптимизатором.
+План выполнения запроса — это пошаговый алгоритм, который СУБД использует для
+обработки SQL-запроса, включая структуру операций, циклы выполнения
+и прочее.
+Понимание этого плана критически важно:
+
+1.для выявления «узких мест» производительности;
+
+2.оптимизации медленных запросов;
+
+3.прогнозирования поведения системы при увеличении нагрузки.
+
+Сокращённый формат команды:
+
+EXPLAIN
+{SELECT ...
+| INSERT ...
+| UPDATE ...
+| DELETE ...
+| MERGE ...
+| CREATE TABLE ...
+| EXECUTE ...};
+
+PostgreSQL отображает план в виде дерева операций, где:
+-нижние строки — это источники данных (например, Seq Scan, Index Scan);
+-верхние — это надстройки над результатом (например, Join, Sort,
+Aggregate и т.д.).
+
+Каждая операция использует результат из предыдущих (нижних) операций.
+Поэтому план выполнения EXPLAIN нужно читать снизу вверх — сначала
+анализируются:
+-источники данных,
+-затем операции объединения и сортировки.
+
+*/
+
+EXPLAIN
+SELECT serviceid, COUNT(*) AS cnt
+FROM paysumma
+WHERE payyear = 2024
+GROUP BY serviceid
+ORDER BY cnt DESC;
+
+---то результат может быть следующим:
+/*
+Sort (cost=2.15..2.16 rows=4 width=12)
+Sort Key: (count(*)) DESC
+-> HashAggregate (cost=2.07..2.11 rows=4 width=12)
+Group Key: serviceid
+-> Seq Scan on paysumma (cost=0.00..1.96 rows=22 width=4)
+Filter: ((payyear)::smallint = 2024)
+
+
+Если указать EXPLAIN ANALYZE, PostgreSQL не только построит план,
+но и выполнит запрос, отразив в выводе фактические метрики
+выполнения.
+
+Сокращённый формат команды:
+
+EXPLAIN ANALYZE
+{SELECT ...
+| INSERT ...
+| UPDATE ...
+| DELETE ...
+| MERGE ...
+| CREATE TABLE ...
+| EXECUTE ...};
+
+Результат выполнения этой команды предоставляет детальную информацию:
+1.о последовательности операций, выполняемых для обработки запроса;
+2.методах доступа к данным;
+2.стратегиях соединения таблиц;
+3.плановом и фактическом времени выполнения каждой операции;
+4.количестве строк, обработанных на каждом шаге;
+5.объёме памяти, использованном для выполнения операций.
+
+Вывод EXPLAIN ANALYZE представляет дерево операций, где каждая строка
+соответствует отдельному этапу выполнения — например, методу доступа
+к данным: последовательному сканированию таблицы (Seq Scan) или
+использованию индекса (Index Scan); стратегии соединения таблиц
+(Nested Loop, Hash Join, Merge Join) и др.
+
+План показывает как оценочную стоимость, так и фактическое время
+выполнения. Чтение плана позволяет сравнивать оценочные значения
+(до выполнения) и фактические показатели (после выполнения), чтобы
+обнаружить неэффективные операции, неверные статистики или
+необходимость создания индексов.
+
+EXPLAIN ANALYZE является важным инструментом не только для оптимизации
+запросов, но и для более глубокого понимания того, как СУБД выполняет
+SQL-операции.
+
+
+Типовая структура вывода содержит следующие ключевые элементы:
+
+тип операции (Seq Scan, Index Scan, Hash Join и др.);
+
+целевой объект (таблица или индекс, к которому применяется операция);
+
+условия фильтрации (Filter, Index Cond);
+
+планируемые показатели (cost, rows, width);
+
+фактические показатели (actual time, rows, loops).
+
+
+=============================================================================
+Основные элементы строки плана выполнения PostgreSQL
+=============================================================================
+| №  | Операция           | Описание                                                    |
+|----|--------------------|-------------------------------------------------------------|
+| 1  | Seq Scan           | Последовательное чтение всех строк таблицы                  |
+| 2  | Index Scan         | Чтение строк через индекс                                   |
+| 3  | Bitmap Index Scan  | Получение множества позиций строк по индексу                |
+| 4  | Bitmap Heap Scan   | Чтение самих строк по результатам Bitmap Index Scan         |
+| 5  | CTE Scan           | Чтение данных из ранее выполненного WITH выражения          |
+| 6  | SubPlan / InitPlan | Выполнение подзапроса (однократно или построчно)            |
+| 7  | Materialize        | Буферизация подзапроса или промежуточного результата        |
+| 8  | Hash               | Создание хеш-таблицы из результатов для Hash Join           |
+| 9  | Sort               | Сортировка строк (в памяти или во временных файлах)         |
+| 10 | Nested Loop        | Соединение строк по вложенному циклу                        |
+| 11 | Hash Join          | Соединение таблиц по хеш-таблице по ключу                   |
+| 12 | Merge Join         | Сортированное соединение по ключу                           |
+| 13 | Aggregate          | Группировка с использованием сортировки                     |
+| 14 | HashAggregate      | Группировка с использованием хеша (быстрее при малых группах)|
+| 15 | WindowAgg          | Вычисление оконных функций                                  |
+| 16 | Limit              | Ограничение числа результатов                               |
+=============================================================================
+
+Чтение плана:
+- нижние операции (1-5) — источники данных
+- операции 6-9 — подготовка и буферизация промежуточных результатов
+- операции 10-12 — соединения
+- операции 13-16 — агрегации и постобработка
+
+Ключевые метрики:
+- cost (планируемая стоимость)
+- rows (планируемое количество строк)
+- actual time (фактическое время выполнения)
+- loops (количество повторений операции)
+
+
+=============================================================================
+Основные ключевые метрики для анализа (часть 1)
+=============================================================================
+| Метрика                     | Описание                                                    |
+|-----------------------------|-------------------------------------------------------------|
+| actual time = start..end    | Фактическое время начала и окончания выполнения операции    |
+|                             | (в миллисекундах)                                           |
+| cost = start..end           | Плановая (оценочная) стоимость (условные единицы            |
+|                             | планирования). Состоит из стартовой и общей стоимости       |
+|                             | (startup cost и total cost)                                 |
+| rows                        | Ожидаемое количество строк, которое вернёт операция         |
+|                             | (на основе статистики)                                      |
+| actual rows                 | Фактическое число возвращённых строк                        |
+| width                       | Оценочный средний размер одной строки (в байтах)            |
+=============================================================================
+| loops                       | Количество повторений операции на данном этапе              |
+|                             | (важно для вложенных циклов и подзапросов)                  |
+| Filter                      | Условие фильтрации                                          |
+| Rows Removed by Filter      | Сколько строк отфильтровано локально на этом этапе          |
+| Group Key                   | Ключ группировки                                            |
+| Sort Key                    | Ключ сортировки                                             |
+| Sort Method                 | Способ сортировки (quicksort, external merge,               |
+|                             | top-N heapsort)                                             |
+| Memory Usage                | Объём используемой памяти (в KB), если операция выполнена   |
+|                             | в памяти                                                    |
+| Batches / Buckets           | Для Hash и Hash Join: число пакетов (если не поместился     |
+|                             | в память), количество корзин (хеш-таблица)                  |
+| Planning Time               | Время построения плана запроса (в миллисекундах)            |
+| Execution Time              | Общее время выполнения запроса (в миллисекундах)            |
+=============================================================================
+
+
+
+Как интерпретировать результаты:
+
+сравнить ожидаемое (cost/rows) с фактическим (actual rows/loops) —
+большие расхождения сигнализируют о неточной статистике;
+
+следить за loops — особенно при вложенных подзапросах, loops > 1
+может означать избыточную работу;
+
+оценить Execution Time и Planning Time — полезно при сложных
+запросах и CTE;
+
+проверить Rows Removed by Filter — если много, возможно стоит
+пересмотреть фильтрацию.
+
+Если выполнить следующую команду:
+*/
+
+---Если выполнить следующую команду:
+
+EXPLAIN ANALYZE
+SELECT serviceid, COUNT(*) AS cnt
+FROM paysumma
+WHERE payyear = 2024
+GROUP BY serviceid
+ORDER BY cnt DESC;
+
+---то результат может быть такой:
+/*
+Sort  (cost=1.54..1.55 rows=4 width=12) (actual time=0.087..0.088 rows=4 loops=1)
+  Sort Key: (count(*)) DESC
+  Sort Method: quicksort  Memory: 25kB
+  ->  HashAggregate  (cost=1.51..1.53 rows=4 width=12) (actual time=0.067..0.068 rows=4 loops=1)
+        Group Key: serviceid
+        Batches: 1  Memory Usage: 24kB
+        ->  Seq Scan on paysumma  (cost=0.00..1.46 rows=22 width=4) (actual time=0.044..0.051 rows=22 loops=1)
+              Filter: ((payyear)::smallint = 2024)
+              Rows Removed by Filter: 55
+Planning Time: 0.128 ms
+Execution Time: 0.169 ms
+
+
+Время планирования запроса (Planning Time) 0.128 мс,
+а время его полного выполнения (Execution Time) 0.169 мс.
+
+Выбрано последовательное сканирование (Seq Scan), так как индекса нет
+по Payyear!!!
+Seq Scan означает, что PostgreSQL читает всю таблицу
+последовательно целиком, проверяя каждую строку.
+Этот метод выгоден при:
+-малом объёме таблицы;
+-отсутствии ограничивающих условий (WHERE);
+-необходимости прочитать значительную часть строк.
+
+Индексное сканирование (Index Scan) применяется, когда запрос
+содержит условия по индексируемым столбцам.
+Индекс позволяет быстро найти нужные строки, не просматривая всю таблицу.
+Однако при большом числе подходящих записей PostgreSQL
+может предпочесть Seq Scan.
+
+Понимание различий между типами сканирования и соединений помогает
+интерпретировать планы выполнения и принимать решения по оптимизации:
+-стоит ли создавать индекс,
+-менять структуру запроса или обновить статистику.
+
+
+Для каждой строки проверяется Payyear = 2024. Фильтрация по этому
+условию привела к отбору 22 строк из 77 (55 были отфильтрованы).
+Фактическое время выполнения сканирования — от 0.044 до 0.051 мс.
+
+
+Операция HashAggregate группирует строки по Serviceid и подсчитывает
+количество (COUNT(*)).
+Результат: 4 группы (по 4 разным Serviceid),
+по одной строке на каждую.
+Метод: хеш-агрегация — строится в
+оперативной памяти.
+Время выполнения менее 0.068 мс.
+
+Операция Sort упорядочивает результат агрегации по убыванию Cnt
+методом быстрой сортировки в памяти.
+Число строк 4.
+*/
+
+/*
+Рассмотрим следующий запрос, объединяющий таблицы Abonent и Paysumma
+по столбцу Accountid:
+*/
+
+EXPLAIN ANALYZE
+SELECT Fio
+FROM Abonent NATURAL JOIN Paysumma;
+
+---Фрагмент плана может выглядеть так:
+/*
+QUERY PLAN
+Hash Join (cost=1.27..3.31 rows=77 width=58) (actual time=0.031..0.050 rows=77 loops=1)
+   Hash Cond: ((paysumma.accountid)::text = (abonent.accountid)::text)
+     -> Seq Scan on paysumma (cost=0.00..1.77 rows=77 width=7) (actual time=0.013..0.015 rows=77 loops=1)
+     -> Hash (cost=1.12..1.12 rows=12 width=86) (actual time=0.012..0.012 rows=12 loops=1)
+           Buckets: 1024 Batches: 1 Memory Usage: 9kB
+               -> Seq Scan on abonent (cost=0.00..1.12 rows=12 width=86) (actual time=0.006..0.007 rows=12 loops=1)
+Planning Time: 0.131 ms
+Execution Time: 0.069 ms
+
+
+
+План построен за 0.131 мс, выполнен за 0.069 мс.
+
+PostgreSQL использовал Hash Join между таблицами Paysumma и Abonent,
+так как обе прочитаны полностью через Seq Scan.
+Это типичный и эффективный план для небольших таблиц
+или при отсутствии подходящих индексов.
+Затем из этих данных создаётся хеш-таблица:
+
+Buckets: 1024 Batches: 1 Memory Usage: 9kB.
+
+Каждая строка из Paysumma сопоставляется (Hash Join) с хеш-таблицей
+Abonent по полю Accountid.
+
+Так как Abonent содержит 12 строк, а Paysumma — 77, результатом
+соединения стали все 77 строк (у каждой строки Paysumma нашёлся
+соответствующий Abonent).
+*/
+
+
+
+--Тот же запрос с LIMIT:
+EXPLAIN ANALYZE
+SELECT Fio
+FROM Abonent NATURAL JOIN Paysumma
+LIMIT 5;
+
+/*
+Limit (cost=0.15..0.62 rows=5 width=58) (actual time=0.047..0.052 rows=5 loops=1)
+-> Nested Loop (cost=0.15..7.44 rows=77 width=58) (actual time=0.046..0.052 rows=5 loops=1)
+-> Seq Scan on paysumma (cost=0.00..1.77 rows=77 width=7) (actual time=0.015..0.016 rows=5 loops=1)
+-> Memoize (cost=0.15..0.32 rows=1 width=86) (actual time=0.007..0.007 rows=1 loops=5)
+Cache Key: paysumma.accountid
+Cache Mode: logical
+Hits: 3 Misses: 2 Evictions: 0 Overflow: 0 Memory Usage: 1kB
+-> Index Scan using abonent_pkey on abonent (cost=0.14..0.31 rows=1 width=86) (actual time=0.013..0.013 rows=1 loops=2)
+Index Cond: ((accountid)::text = (paysumma.accountid)::text)
+Planning Time: 0.144 ms
+Execution Time: 0.076 ms
+
+
+
+1.Index Scan on abonent:
+-используется первичный индекс abonent_pkey;
+-выполняется по значению Accountid из текущей строки Paysumma;
+-повторяется два раза, т.е. только для новых Accountid.
+
+2.Memoize:
+-кэширует результаты предыдущих обращений к Abonent;
+-из 5 обращений 3 — найдены в кэше (Hits), 2 — вычислены заново
+(Misses);
+-это значительно ускоряет вложенное соединение.
+
+3.Seq Scan on paysumma:
+-читаем строки Paysumma, пока не получим 5 подходящих соединений;
+-прочитано только 5 строк, благодаря LIMIT.
+
+4.Nested Loop:
+-вложенный цикл: для каждой строки из Paysumma — обращение
+к Abonent по индексу (и кэшу);
+-выполнение останавливается после получения 5 строк.
+
+5.Limit: останавливает выполнение, как только получено 5 строк.
+*/
+
+
+EXPLAIN ANALYZE
+SELECT Fio,
+       (SELECT COUNT(*)
+        FROM Request
+        WHERE Incomingdate >= '2024-01-01')
+FROM Abonent;
+
+/*
+Seq Scan on abonent (cost=1.29..2.41 rows=12 width=66) (actual time=0.023..0.025 rows=12 loops=1)
+InitPlan 1
+-> Aggregate (cost=1.28..1.29 rows=1 width=8) (actual time=0.011..0.011 rows=1 loops=1)
+-> Seq Scan on request (cost=0.00..1.26 rows=7 width=0) (actual time=0.006..0.008 rows=5 loops=1)
+Filter: (incomingdate >= '2024-01-01'::date)
+Rows Removed by Filter: 16
+Planning Time: 0.093 ms
+Execution Time: 0.044 ms
+
+
+Здесь InitPlan означает, что подзапрос выполняется однократно до
+основного запроса.
+Seq Scan on request читает всю таблицу Request
+(21 строка), применяя фильтр по дате.
+Найдено 5 строк, удовлетворяющих условию.
+Aggregate выполняет COUNT(*) — возвращает 5. Это значение
+затем используется как константа для всех строк из Abonent.
+
+Операцией Seq Scan on abonent прочитано 12 строк из таблицы Abonent.
+К каждой из них подставлено уже рассчитанное значение 5 из InitPlan.
+
+*/
+--Запрос со связанным подзапросом (в WHERE):
+
+EXPLAIN ANALYZE
+SELECT Fio
+FROM Abonent A
+WHERE EXISTS (SELECT 1
+FROM Request R
+WHERE Accountid = A.Accountid);
+
+/*
+Этот запрос выбирает абонентов, у которых хотя бы одна заявка
+в таблице Request.
+Фрагмент плана может выглядеть так:
+
+Hash Semi Join (cost=1.47..2.76 rows=12 width=58) (actual time=0.867..0.872 rows=10 loops=1)
+      Hash Cond: ((a.accountid)::text = (r.accountid)::text)
+         -> Seq Scan on abonent a (cost=0.00..1.12 rows=12 width=86) (actual time=0.018..0.019 rows=12 loops=1)
+        -> Hash (cost=1.21..1.21 rows=21 width=28) (actual time=0.348..0.348 rows=21 loops=1)
+             Buckets: 1024 Batches: 1 Memory Usage: 9kB
+             -> Seq Scan on request r (cost=0.00..1.21 rows=21 width=28) (actual time=0.029..0.034 rows=21 loops=1)
+Planning Time: 0.421 ms
+Execution Time: 0.900 ms
+
+PostgreSQL оптимизировал EXISTS в Hash Semi Join, что очень эффективно.
+Теперь по шагам.
+
+1.Seq Scan on request r → Hash:
+
+Seq Scan on request r
+(actual time=0.029..0.034 rows=21 loops=1)
+-читается вся таблица request — 21 строка;
+-не выполняется фильтрация — читаются все строки;
+
+Hash
+Buckets: 1024 Memory Usage: 9kB
+-на основе этих 21 строк создаётся хеш-таблица по Accountid.
+
+2.Seq Scan on abonent a — прочитаны все 12 абонентов:
+-Seq Scan on abonent a
+(actual time=0.018..0.019 rows=12 loops=1)
+-Hash Semi Join:
+
+3.Hash Semi Join
+Hash Cond: ((a.accountid)::text = (r.accountid)::text)
+(actual time=0.867..0.872 rows=10 loops=1)
+
+-PostgreSQL сопоставляет A.Accountid с хеш-таблицей R.Accountid;
+-тип соединения — Semi Join:
+-возвращает только строки из Abonent, у которых есть хотя бы
+одно совпадение в Request;
+-не возвращает дубликаты и не собирает строки Request —
+это идеально для EXISTS.
+
+В результате 10 абонентов имеют хотя бы одну заявку.
+
+*/
+
+
+EXPLAIN ANALYZE
+WITH active_abonnents AS  (SELECT accountid
+                          FROM request
+                          WHERE incomingdate >= '2024-01-01'
+                          GROUP BY accountid)
+SELECT a.fio,
+       COUNT(r.*) AS total_requests
+FROM active_abonnents
+         JOIN abonent a USING (accountid)
+         JOIN request r USING (accountid)
+GROUP BY a.fio;
+
+
+
+
+/*
+
+HashAggregate  (cost=3.51..3.57 rows=12 width=66) (actual time=0.110..0.113 rows=5 loops=1)
+  Group Key: a.fio
+  Batches: 1  Memory Usage: 24kB
+  ->  Hash Join  (cost=2.34..3.49 rows=12 width=131) (actual time=0.082..0.103 rows=13 loops=1)
+        Hash Cond: ((request.accountid)::text = (a.accountid)::text)
+        ->  Hash Join  (cost=1.21..2.34 rows=7 width=129) (actual time=0.039..0.056 rows=13 loops=1)
+              Hash Cond: ((r.accountid)::text = (request.accountid)::text)
+              ->  Seq Scan on request r  (cost=0.00..1.10 rows=21 width=101) (actual time=0.011..0.022 rows=21 loops=1)
+              ->  Hash  (cost=1.17..1.17 rows=7 width=28) (actual time=0.020..0.021 rows=5 loops=1)
+                    Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                    ->  HashAggregate  (cost=1.13..1.17 rows=7 width=28) (actual time=0.017..0.019 rows=5 loops=1)
+                          Group Key: request.accountid
+                          Batches: 1  Memory Usage: 24kB
+                          ->  Seq Scan on request  (cost=0.00..1.13 rows=7 width=28) (actual time=0.006..0.009 rows=5 loops=1)
+                                Filter: (incomingdate >= '2024-01-01'::date)
+                                Rows Removed by Filter: 16
+        ->  Hash  (cost=1.06..1.06 rows=12 width=86) (actual time=0.035..0.035 rows=12 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 9kB
+              ->  Seq Scan on abonent a  (cost=0.00..1.06 rows=12 width=86) (actual time=0.024..0.027 rows=12 loops=1)
+Planning Time: 0.315 ms
+Execution Time: 0.194 ms
+
+
+Этот план показывает, как PostgreSQL:
+1.выполняет подзапрос Active_abonents с агрегацией и фильтрацией
+по дате;
+2.использует вложенные Hash Join для соединения с Abonent и Request;
+3.выполняет итоговую агрегацию COUNT(R.*) с группировкой по Fio.
+
+Следует обратить внимание: хотя CTE может быть воспринято как
+отдельный шаг, в PostgreSQL оно часто «встраивается» в основной план,
+если не используется MATERIALIZED!!!
+
+Использование CTE и агрегатных функций отражается в планах
+выполнений через цепочки вложенных операций
+-Hash;
+-Aggregate;
+-Join.
+Анализ таких планов помогает обнаружить дорогие подзапросы,
+неоптимальные соединения и проверить, насколько эффективно
+реализована агрегация.
+*/
+
+
+
+
+/*
+Рекомендуемые практики построения SQL-запросов
+Существует ряд отработанных приёмов и принципов построения
+эффективных и поддерживаемых SQL-запросов.
+Ниже приведены некоторые
+рекомендации, которые помогут получить от базовых SQL-запросов
+максимальную отдачу.
+
+Конкретика при выборе столбцов. При построении запроса вместо
+использования синтаксиса SELECT * для выбора всех столбцов следует
+указывать нужные столбцы.
+Это помогает уменьшить объём возвращаемых
+данных и повышает производительность запроса.
+*/
+
+-- рекомендуемая практика
+SELECT fio, phone
+FROM abonent;
+
+-- не рекомендуется
+SELECT *
+FROM abonent;
+
+/*
+Применение значимых псевдонимов. При использовании псевдонимов
+для таблиц или столбцов следует выбирать понятные и значимые названия.
+Это сделает запрос более читабельным и понятным.
+*/
+
+
+-- рекомендуемая практика
+SELECT a.fio, r.incomingdate
+FROM abonent a
+         INNER JOIN request r USING (accountid);
+
+-- не рекомендуется
+SELECT c.fio, d.incomingdate
+FROM abonent c
+         INNER JOIN request d USING (accountid);
+
+
+/*
+Использование соответствующих методов фильтрации.
+Рекомендуется всегда применять соответствующие методы фильтрации,
+такие как секция WHERE и операторы сравнения, чтобы сузить круг данных,
+возвращаемых запросом.
+Это помогает повысить производительность запросов и делает
+результаты более релевантными.
+*/
+
+-- рекомендуемая практика
+SELECT accountid, serviceid, paysum
+FROM paysumma
+WHERE serviceid = 2
+  AND paysum > 670;
+
+-- не рекомендуется
+SELECT accountid, serviceid, paysum
+FROM paysumma;
+
+
+/*
+Управление ресурсами.
+Использование возможности управления ресурсами, такие как лимиты на
+количество строк или использование оконных функций, для ограничения
+объёма данных, возвращаемых запросами.
+Это помогает повысить производительность запроса и уменьшает объём
+данных, обрабатываемых применяемым приложением.
+*/
+
+-- рекомендуемая практика
+SELECT accountid, serviceid, nachislsum
+FROM nachislsumma
+ORDER BY accountid
+LIMIT 10;
+
+-- не рекомендуется
+SELECT accountid, serviceid, nachislsum
+FROM nachislsumma
+ORDER BY accountid;
+
+
+/*
+=============================================================================
+Использование соединений и подзапросов
+=============================================================================
+
+СОЕДИНЕНИЯ (JOIN) используются:
+
+1) для извлечения данных из нескольких таблиц, основанных на логической
+   связи между столбцами этих таблиц. Соединения особенно полезны,
+   когда нужно объединить строки из двух или более таблиц в один набор
+   результатов, основанный на значениях общих столбцов;
+
+2) когда нужно оптимизировать производительность. Во многих случаях
+   соединения работают быстрее подзапросов, особенно при работе
+   с большими объёмами данных, так как СУБД оптимизирует выполнение
+   соединений;
+
+3) для упрощения запросов. Иногда использование соединений может
+   сделать запрос более понятным и лёгким для чтения, в сравнении
+   с вложенными запросами.
+
+-----------------------------------------------------------------------------
+ПОДЗАПРОСЫ (Subqueries) следует использовать:
+
+1) когда нужно выполнить агрегацию до соединения. Вложенные запросы
+   полезны для выполнения агрегации в одной таблице перед соединением
+   её результатов с другой таблицей;
+
+2) для фильтрации результатов. Подзапросы в секции WHERE или HAVING
+   могут быть использованы для фильтрации результатов основного запроса
+   по критериям, зависящим от данных в других таблицах;
+
+3) когда требуется «существование» определённых записей. Использование
+   подзапросов с EXISTS может быть эффективным способом проверить
+   наличие связанных данных в другой таблице, не требуя фактического
+   объединения данных;
+
+4) для возвращения скалярных значений. Подзапросы, возвращающие
+   единственное значение, могут быть использованы в выражениях или для
+   получения конкретных значений, которые затем используются в основном
+   запросе.
+
+-----------------------------------------------------------------------------
+ОПТИМИЗАЦИЯ СОЕДИНЕНИЙ:
+
+При применении соединений рекомендуется использовать соответствующий
+тип соединения (например, INNER JOIN, OUTER JOIN) и убедиться,
+что соединяются индексированные столбцы.
+Это помогает повысить производительность запросов.
+
+
+Индексы работают везде, где СУБД ищет, фильтрует, сортирует
+или группирует данные:
+-в WHERE;
+-JOIN ON;
+-ORDER BY;
+-GROUP BY;
+-PARTITION BY;
+
+Почему индекс для PARTITION BY важен
+PARTITION BY логически группирует строки, и если у вас есть
+индекс на столбцы группировки, PostgreSQL может:
+-Быстрее найти нужные строки
+-Избежать лишней сортировки (если данные уже отсортированы по ключу партиции)
+-Уменьшить объём памяти для хеш-таблиц
+
+-а в HAVING — только  если условие не на агрегатную функцию.
+Главное — создать правильный индекс под конкретный запрос.
+*/
+
+
+-- рекомендуемая практика
+SELECT n.accountid, p.paysum, n.nachislsum
+FROM nachislsumma n
+         INNER JOIN paysumma p USING (accountid);
+
+-- не рекомендуется (предполагается, что Accountid —
+-- это индексированный столбец)
+SELECT n.accountid, p.paysum, n.nachislsum
+FROM nachislsumma n
+         INNER JOIN paysumma p ON n.nachislmonth = p.paymonth
+    AND n.nachislyear = p.payyear;
+
+
+/*
+Использование комментариев. Необходимо к SQL-запросам добавлять
+комментарии, чтобы объяснить цель запроса, любые сделанные предположения
+или любую сложную логику.
+Это помогает улучшить читаемость и ремонтопригодность кода.
+*/
+
+
+-- рекомендуемая практика
+-- Поиск абонентов, оплативших услугу 2 с значением больше 1000
+SELECT Accountid, Paysum
+FROM Paysumma
+WHERE Serviceid = 2 AND Paysum > 1000;
+
+/*
+Форматирование запросов. Очень рекомендуется использовать
+согласованное форматирование и отступы в SQL-запросах.
+Каждая секция запроса (SELECT, FROM, WHERE, JOIN, GROUP BY, ORDER BY и т.д.)
+должна начинаться с новой строки. Это помогает улучшить читаемость
+кода и облегчает его понимание.
+*/
+
+-- рекомендуемая практика
+SELECT n.accountid,
+       p.paysum,
+       n.nachislsum
+FROM nachislsumma n
+         INNER JOIN paysumma p USING (accountid);
+
+/*
+Применение оконных функций. Гибкость в аналитике.
+-Оконные функции позволяют выполнять сложные расчёты
+(например, скользящие суммы, ранжирование)
+без необходимости группировки данных!!!
+-Работа с каждой строкой. Они возвращают результат для каждой строки,
+сохраняя исходные данные, в отличие от агрегатных функций, которые
+сворачивают строки.
+-Производительность. Меньше необходимости в подзапросах и объединениях,
+что упрощает запросы и ускоряет выполнение.
+-Многофункциональность. Позволяют одновременно использовать агрегатные
+и аналитические функции, комбинируя несколько вычислений в одном
+запросе.
+-Простота синтаксиса. Упрощают реализацию сложных задач, таких как
+расчёт рангов, разностей между строками и накопительных итогов,
+с минимальными усилиями.
+
+Например, поиск абонентов, имеющих максимальное значение платежа
+по каждой услуге, следующим запросом позволит
+существенно повысить производительность:
+
+
+Важно: при одинаковых значениях DENSE_RANK()
+даёт одинаковый ранг и не пропускает следующие номера.
+*/
+
+SELECT accountid, serviceid, paysum
+FROM paysumma
+ORDER BY DENSE_RANK() OVER (
+    PARTITION BY serviceid
+    ORDER BY paysum DESC
+    )
+FETCH FIRST 1 ROW WITH TIES
+;
+
+---он же
+
+/*
+FETCH FIRST 1 ROW	Взять первую строку (с наименьшим рангом)
+WITH TIES	Взять все строки, у которых ранг такой же,
+как у последней взятой строки
+*/
+
+
+/*
+DENSE_RANK() + FETCH FIRST 1 ROW WITH TIES
+✅ Возвращает всех абонентов с максимальной суммой
+
+
+ROW_NUMBER() + WHERE rn = 1
+❌ Возвращает только одного (первого попавшегося)
+*/
+WITH ranked AS (SELECT accountid,
+                       serviceid,
+                       paysum,
+                       ROW_NUMBER() OVER (PARTITION BY serviceid ORDER BY paysum DESC) AS rn
+                FROM paysumma)
+
+SELECT accountid, serviceid, paysum
+FROM ranked
+WHERE rn = 1;
+
+/*
+=============================================================================
+Анализ плана выполнения запроса (EXPLAIN ANALYZE)
+=============================================================================
+
+Это важная и рекомендуемая практика при построении, оптимизации и
+сопровождении SQL-запросов, особенно в PostgreSQL.
+Вот почему:
+
+1. Объективная оценка производительности. EXPLAIN ANALYZE показывает
+   реальное поведение запроса, включая:
+   - исполняемые операции (сканирование, соединение, сортировка);
+   - число реально обработанных строк;
+   - сколько времени занимает каждая операция.
+   Это позволяет не гадать, а точно видеть, где возникает узкое место.
+
+2. Выявление неэффективных решений. План может показать, что:
+   - индекс не используется;
+   - подзапрос исполняется в цикле (вместо объединения);
+   - оценка числа строк сильно расходится с реальностью (плохая
+     статистика).
+   Это помогает избежать дорогостоящих ошибок, особенно в больших БД.
+
+3. Выбор лучшей стратегии. Видно, какую стратегию выбрал оптимизатор:
+   - Hash Join, Nested Loop, Merge Join;
+   - Index Scan или Seq Scan.
+   Можно направлять проектирование запроса, например:
+     - добавить индекс;
+     - переписать соединение;
+     - изменить WHERE.
+
+4. Диагностика проблем в реальной БД.
+   EXPLAIN ANALYZE помогает понять,
+   почему запрос внезапно стал работать медленно:
+   - изменились данные?
+   - сломалась статистика?
+   - больше строк стало проходить фильтр?
+   Это ключевой инструмент в эксплуатации и отладке.
+
+-----------------------------------------------------------------------------
+Масштабируемость и поддерживаемость
+-----------------------------------------------------------------------------
+
+Рекомендуется разбивать сложные запросы
+на более мелкие подзапросы или использовать CTE.
+Применение CTE позволяет уменьшить дублирование кода,
+повысить его читабельность и расширить возможности выполнения проверок
+качества результатов!!!
+
+=============================================================================
+Безопасность и выбор между соединениями (JOIN) и подзапросами
+=============================================================================
+
+Безопасность:
+Для защиты от SQL-инъекций необходимо использовать параметризованные
+и подготовленные запросы.
+
+-----------------------------------------------------------------------------
+Выбор между соединениями и подзапросами
+-----------------------------------------------------------------------------
+В SQL выбор между использованием соединений и подзапросов зависит
+от нескольких факторов, включая читаемость, производительность и
+конкретные требования задачи.
+
+Вот общие рекомендации по использованию каждого из этих подходов:
+
+1. Читаемость и поддержка.
+   Важно учитывать, как подход (соединения или подзапросы) влияет на
+   читаемость и лёгкость поддержки SQL-кода.
+   В некоторых случаях вложенные запросы могут сделать запрос более понятным,
+   в других случаях соединения могут упростить его структуру.
+
+2. Производительность.
+   Производительность может сильно зависеть от конкретной СУБД,
+   структуры данных и объёма данных. Всегда полезно тестировать
+   различные подходы, чтобы определить, какой из них работает быстрее
+   для вашего конкретного случая.
+
+-----------------------------------------------------------------------------
+Итог
+-----------------------------------------------------------------------------
+В конечном счёте выбор между соединениями и подзапросами зависит
+от конкретных требований задачи и предпочтений разработчика.
+В некоторых случаях они могут быть взаимозаменяемы, но обычно один
+подход будет предпочтительнее другого.
+
+Следуя этим рекомендациям, вы сможете строить эффективные и
+поддерживаемые SQL-запросы, которые эффективно извлекают и анализируют
+данные из базы данных. Отработка этих приёмов поможет стать более
+опытным разработчиком SQL.
+*/
+
+
+/*
+
+=============================================================================
+Тема 6. Программирование запросов определения данных
+=============================================================================
+
+6.1. Домены. Создание, изменение и удаление базовых таблиц
+
+-----------------------------------------------------------------------------
+Предварительный анализ
+-----------------------------------------------------------------------------
+
+Перед реализацией проекта базы данных всегда проводится тщательный
+аналитический этап — инфологическое и даталогическое проектирование.
+Каждая предметная область потенциально содержит бесконечное множество
+атрибутов, однако задача проектирования БД заключается в выявлении
+только тех данных, которые необходимы для решения поставленных задач!!!
+Эти данные описываются в информационной модели, которая затем
+проецируется в структуру реляционной базы данных с учётом возможностей
+конкретной СУБД.
+
+-----------------------------------------------------------------------------
+Разработка структуры БД включает:
+-----------------------------------------------------------------------------
+- определение набора таблиц и их полей;
+- назначение ключей;
+- установление связей между таблицами;
+- определение ограничений и зависимостей между атрибутами.
+
+Лишь после завершения этой аналитической работы можно приступить
+к генерации схемы БД, будь то средствами SQL или с помощью визуальных
+средств проектирования, предоставляемых СУБД.
+
+-----------------------------------------------------------------------------
+Язык определения данных (DDL)
+-----------------------------------------------------------------------------
+Для описания и модификации структуры объектов БД используется язык
+определения данных (Data Definition Language, DDL), являющийся частью
+стандарта SQL.
+Запросы DDL позволяют:
+
+- создавать пользовательские домены;
+- определять и создавать таблицы;
+- изменять структуру уже существующих таблиц;
+- определять виртуальные таблицы (представления, курсоры);
+- создавать индексы для ускорения доступа к данным;
+- удалять объекты базы данных и т.д.
+
+-----------------------------------------------------------------------------
+Ключевые операторы DDL
+-----------------------------------------------------------------------------
+Ядро языка DDL составляют три ключевых оператора:
+
+- CREATE — создание объекта БД (таблицы, индекса, представления);
+- DROP — удаление объекта из БД.
+- ALTER — изменение структуры объекта БД.
+
+Дополнительно в PostgreSQL поддерживается оператор CREATE OR REPLACE,
+позволяющий создать новый или заменить существующий объект.
+
+
+Для выполнения DDL-запросов пользователь должен обладать соответствующими
+правами.
+Владельцем объекта по умолчанию становится пользователь, его создавший.
+
+DDL-запросы изменяют схему БД, поэтому они относятся к категории
+команд действия.
+Если они выполняются в рамках транзакции, её
+необходимо завершить с помощью одной из команд управления
+транзакциями:
+- COMMIT — зафиксировать изменения;
+- ROLLBACK — отменить изменения.
+
+Новая (пустая) база данных в PostgreSQL представляет собой набор
+системных файлов, содержащих лишь метаинформацию (системные таблицы).
+Эти файлы создаются в каталоге data, указанном в конфигурации
+PostgreSQL.
+Поскольку пользовательские данные отсутствуют, объём такой
+базы минимален. По мере добавления таблиц и данных её размер возрастает.
+
+Создание БД возможно двумя основными способами.
+1. С помощью графических утилит, таких как DBeaver или pgAdmin. Они
+   предоставляют мастеры создания БД как со стандартными параметрами,
+   так и с расширенными настройками.
+2. Выполнением SQL-сценариев, содержащих команду CREATE DATABASE.
+   Этот способ предпочтителен для автоматизации, версионирования и
+   развертывания в командной разработке.
+
+Для подключения к существующей БД можно воспользоваться пунктом меню
+в утилите или выполнить SQL-команду CONNECT.
+
+Опишем типовую последовательность действий при создании БД в PostgreSQL.
+
+1. Создать БД и подключиться к ней.
+2. Определить и создать пользовательские домены.
+3. Создать таблицы и задать ограничения.
+4. Создать индексы для повышения производительности.
+5. Наполнить таблицы начальными данными.
+6. Создать представления, функции, процедуры и триггеры.
+7. Настроить политику безопасности и доступ.
+
+Получение информации о структуре БД:
+*/
+-- список всех баз данных
+SELECT datname FROM pg_database;
+
+-- имя текущей базы данных
+SELECT CURRENT_DATABASE();
+
+-- имя текущей схемы
+SELECT CURRENT_SCHEMA();
+
+/*
+В этой теме мы рассмотрим:
+- создание и удаление доменов;
+- работу с постоянными, временными и внешними таблицами;
+- создание и изменение индексов;
+- определение представлений и их роль в разграничении доступа.
+
+Все эти операции касаются не самих данных, а структуры базы,
+которая определяет, какие данные могут быть сохранены и как они
+связаны между собой.
+*/
+
+
+/*
+# Домены
+
+Если в различных таблицах базы данных имеются столбцы с одинаковыми
+характеристиками, удобно задать их свойства один раз — с помощью
+домена.
+**Домен** в PostgreSQL — это пользовательский тип данных,
+представляющий собой именованное множество скалярных значений одного
+типа с заданными ограничениями.
+
+Домены позволяют централизованно определить тип данных, ограничения
+и правила, которые затем можно применять к нескольким столбцам
+в различных таблицах.
+Это способствует повышению целостности данных,
+упрощает сопровождение и повышает читаемость схемы БД.
+
+Например, домен TMonth, представляющий номер месяца, может содержать
+только значения от 1 до 12.
+Его можно использовать во всех таблицах, где нужно хранить номера месяцев.
+
+Ключевая особенность доменов — концептуальная природа: они определяются
+в пределах конкретной базы данных, и атрибуты, связанные с одним и тем
+же доменом, логично сравнивать между собой.
+Сравнение атрибутов, основанных на разных доменах, может не иметь смысла
+— это важно для логической согласованности моделей данных.
+
+Синтаксис запроса определения домена имеет следующий вид:
+CREATE DOMAIN имя_домена [AS] <тип_данных>
+[COLLATE порядок_сортировки]
+[DEFAULT {литерал | NULL | контекстная_переменная}]
+[[CONSTRAINT имя_ограничения] {NULL | NOT NULL
+    | CHECK (<ограничение_домена>)}
+[...]]
+
+где:
+- имя_домена — имя создаваемого домена;
+- <тип_данных> — тип данных;
+- DEFAULT — ключевое слово, определяющее значение по умолчанию,
+  применяемое к каждому столбцу;
+- литерал — любая самоопределённая константа строкового, числового
+  типа или типа дата/время (соответствует типу данных домена),
+  предварительно определённый литерал;
+- NULL — неопределённое (неизвестное) значение;
+- контекстная_переменная — любая контекстная переменная, тип которой
+  совместим с типом данных домена.
+
+
+Существует набор ограничений доменной целостности к каждому столбцу,
+определённому на этом домене:
+
+- CONSTRAINT имя_ограничения, если оно не указано явно, генерирует
+  система. В PostgreSQL имя, сгенерированное системой, будет иметь
+  шаблон <имя домена>_CHECK. Так как удаление ограничения домена
+  в PostgreSQL реализуется по его имени, при создании ограничения
+  следует указать его имя;
+
+- NOT NULL запрещает неопределённые значения. Атрибут используется
+  при определении домена, если требуется, чтобы все столбцы,
+  создаваемые на основе этого домена, не имели пустого значения.
+  Переопределить атрибут NOT NULL, заданный для домена, нельзя.
+  Часто неизвестно, действительно ли потребуется, чтобы все столбцы,
+  определяемые на домене, имели NOT NULL значения. Также часто
+  требуется определять внешний ключ на домене без условия NOT NULL.
+  Поэтому предпочтительнее добавлять атрибут NOT NULL декларативно,
+  т.е. при определении столбцов (см. ниже);
+
+- CHECK определяет список ограничений на значения (VALUE) в
+  соответствующем столбце. Ограничение домена фактически повторяет
+  синтаксис условия поиска в секции WHERE (используется простое
+  сравнение, проверка на принадлежность диапазону, на членство
+  во множестве и т.п.) с той лишь разницей, что вместо точного
+  указания проверяемого значения используется слово VALUE.
+
+Ограничение домена может быть одним из следующих:
+
+<ограничение_домена> ::= [NOT] <ограничение_1>
+    [[AND | OR] [NOT] <ограничение_2>]...
+
+
+где
+
+<ограничение> ::=
+{
+VALUE <операция_сравнения> <значение>
+| VALUE [NOT] BETWEEN <значение1> AND <значение2>
+| VALUE [NOT] [I]LIKE 'шаблон' [ESCAPE 'символ_пропуска']
+| VALUE [NOT] IN (<значение1> [, <значение2>...])
+| VALUE IS [NOT] NULL
+| VALUE IS [NOT] DISTINCT FROM <значение>
+| VALUE SIMILAR TO 'регулярное_выражение'
+    [ESCAPE 'символ_пропуска']
+}
+
+<значение> ::= {столбец | константа | <выражение> | функция}
+
+---
+
+Ключевое слово VALUE используется как обозначение значений, которые
+будут помещаться в столбец таблицы, имеющий тип соответствующего домена.
+
+Необязательная опция COLLATE задаёт порядок сортировки для случая,
+если домен основан на строковом типе данных. При отсутствии этой опции
+по умолчанию принимается порядок сортировки по умолчанию для указанного
+набора сортировки при создании домена.
+
+Итак, каждому создаваемому домену присваивается имя, тип данных,
+значение по умолчанию, бизнес-ограничение допустимых значений и порядок
+сортировки.
+
+Например, для определения домена с именем Telephone, описывающего
+номер телефона абонента (по умолчанию '999999', не может быть значения
+'100000') и имеющего тип VARCHAR(10), следует применить запрос
+*/
+
+CREATE DOMAIN Telephone AS VARCHAR(10)
+DEFAULT '999999'
+CONSTRAINT "Phone_value"
+CHECK (VALUE != '100000');
+
+
+/*
+После определения домена его имя используется для обозначения типа
+данных соответствующих столбцов таблиц.
+
+В учебной БД PostgreSQL используются четыре домена, запросы определения
+которых выглядят следующим образом:
+*/
+
+CREATE DOMAIN currency AS NUMERIC(15, 2);
+CREATE DOMAIN pkfield AS INTEGER;
+CREATE DOMAIN tmonth AS SMALLINT CHECK (value BETWEEN 1 AND 12);
+CREATE DOMAIN tyear AS SMALLINT CHECK (value BETWEEN 1990 AND 2100);
+
+/*
+Просмотреть список доменов, определённых в БД, и структуру каждого
+из них можно в DBeaver с помощью инспектора типов данных.
+
+Определение существующего домена можно **изменить** с помощью запроса
+ALTER DOMAIN. Этот запрос позволяет:
+
+- переименовать домен;
+- изменить тип данных;
+- удалить существующее и определить новое значение по умолчанию
+  (заменяя при этом старое значение, если оно было указано);
+- установить или удалить ограничение NOT NULL;
+- ввести новое ограничение целостности или удалить существующее.
+
+Синтаксис запроса ALTER DOMAIN имеет формат:
+
+ALTER DOMAIN имя_домена
+[RENAME TO другое_имя]
+[{SET DEFAULT {литерал | NULL | контекстная_переменная} | DROP DEFAULT}]
+[{SET | DROP} NOT NULL]
+[ADD [CONSTRAINT] CHECK (<ограничение_домена>)
+    | DROP CONSTRAINT (<имя_ограничения>)
+    | RENAME CONSTRAINT (<имя_ограничения>) TO <имя_нового_ограничения>
+    | VALIDATE CONSTRAINT (<имя_ограничения>)]
+[OWNER TO {{<новый_владелец>} | CURRENT_ROLE | CURRENT_USER | SESSION_USER}];
+
+где:
+- RENAME TO переименовывает домен;
+- SET DEFAULT указывает новое значение по умолчанию;
+- DROP DEFAULT удаляет значение по умолчанию;
+- ADD [CONSTRAINT] добавляет CHECK ограничение;
+- DROP CONSTRAINT удаляет ограничение;
+- RENAME CONSTRAINT переименовывает ограничение;
+- SET устанавливает ограничение NOT NULL;
+- DROP удаляет ограничение NOT NULL.
+
+Созданный домен Telephone можно **изменить**, например удалив
+ограничение, запросом:
+*/
+
+ALTER DOMAIN Telephone DROP CONSTRAINT "Phone_value";
+
+---или **установить** другое значение по умолчанию запросом:
+
+ALTER DOMAIN Telephone SET DEFAULT '111111';
+
+---Получить список доменов из схемы Abonent можно следующим запросом:
+
+SELECT typname
+FROM pg_catalog.pg_type
+JOIN pg_catalog.pg_namespace
+    ON pg_namespace.oid = pg_type.typnamespace
+WHERE typtype = 'd'
+  AND nspname = 'Abonent';
+
+/*Существующий домен можно удалить с помощью запроса DROP DOMAIN,
+имеющего синтаксис:
+
+DROP DOMAIN имя_домена;
+
+---
+
+### Примечание
+
+Домен не будет удалён, если на него имеются какие-либо ссылки, т.е.
+существуют таблицы со столбцами, определёнными на этом домене.
+
+Например, если попытаться на учебной БД удалить домен Currency:
+
+DROP DOMAIN Currency;
+
+то будет выдано сообщение об ошибке:
+«ОШИБКА: удалить объект тип currency нельзя, так как от него зависят
+другие объекты.
+Подробности: столбец Nachislsum отношения таблица
+Nachislsumma зависит от объекта тип currency; столбец Paysum отношения
+таблица Paysumma зависит от объекта тип currency»
+
+
+# Создание, изменение и удаление базовых таблиц
+## Создание таблицы
+
+В реляционной базе данных ключевым элементом структуры является
+**таблица**. Именно в таблицах хранятся все данные, относящиеся
+к предметной области. Однако прежде чем приступить к созданию таблиц,
+необходимо спроектировать структуру базы данных и выполнить
+нормализацию отношений [1–2].
+
+Проектирование таблиц включает не только определение их структуры,
+но и осознанный выбор ролей и свойств.
+Перед созданием таблицы разработчику следует ответить на ряд важных вопросов:
+
+- Какие таблицы будут справочными (реже изменяемыми), а какие —
+  оперативными (используемыми для решения текущих задач)?
+- Как назвать таблицу?
+- Какие имена будут у столбцов таблицы?
+- Какие типы данных должны быть назначены каждому столбцу?
+- Какие столбцы являются обязательными для заполнения?
+- Какие столбцы должны иметь значения по умолчанию?
+- Какие столбцы составляют первичный ключ?
+- Какие ограничения целостности необходимо задать декларативно (в SQL),
+  а какие реализовать процедурно (с помощью триггеров, функций и др.)?
+
+Создать базовую таблицу можно двумя способами:
+
+1) с помощью графического интерфейса пользователя (GUI), например,
+   в DBeaver — через контекстное меню инспектора объектов, выбрав
+   пункт Создать объект → Таблица;
+
+2) путём выполнения SQL-запроса в редакторе SQL или скриптов,
+   открываемом через меню Редактор SQL.
+
+Для создания таблицы используется оператор CREATE TABLE. В нём
+указывается имя таблицы, а затем перечисляются её столбцы с описанием.
+Описание каждого столбца включает как обязательные атрибуты — имя
+и тип данных, так и дополнительные ограничения:
+
+- ограничение на NOT NULL;
+- значения по умолчанию (DEFAULT);
+- правила ссылочной целостности (REFERENCES);
+- уникальность (UNIQUE).
+- первичный ключ (PRIMARY KEY) и др.
+Таким образом, проектирование и создание таблиц представляет собой
+осмысленный процесс, сочетающий логику предметной области с правилами
+реализации хранения данных.
+
+---
+
+Синтаксис запроса CREATE TABLE в PostgreSQL в рамках учебника
+рассмотрен в упрощённом варианте:
+
+CREATE TABLE базовая_таблица
+    ( [<определение_столбца> [ COMPRESSION метод_сжатия ]
+    [ COLLATE правило_сортировки ]
+    [ <ограничение_столбца> [ ... ] ]
+    | ограничение_таблицы
+    | LIKE исходная_таблица [ вариант_копирования ... ] ]
+    [, ... ]
+    ] )
+[ INHERITS ( таблица_родитель [, ... ] ) ]
+[ PARTITION BY { RANGE | LIST | HASH } ( { имя_столбца | (
+выражение ) } [ COLLATE правило_сортировки ] [ класс_операторов
+] [, ... ] ) ]
+WITH ( параметр_хранения [= значение] [, ... ] )
+    | WITHOUT OIDS ]
+
+Конструкция <определение_столбца> имеет вид
+
+<определение_столбца> :: = столбец
+    { <тип_данных> | имя_домена
+    | GENERATED ALWAYS AS (<выражение>) STORED }
+[ DEFAULT { литерал | NULL | контекстная_переменная } ]
+[ NOT NULL ]
+[ GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY
+    [(START WITH начальное_значение [INCREMENT BY шаг])] ]
+
+
+Все столбцы таблицы должны иметь уникальные имена. Тип данных столбца
+может задаваться непосредственно указанием типа или указанием имени
+домена. Тип данных столбца может содержать определение массива с этим
+типом.
+  С точки зрения теории БД использование доменов при определении
+типа столбца является необходимым.
+  При этом домены должны определяться до создания таблиц!!!
+
+Секция COLLATE назначает правило сортировки для столбца (который должен
+иметь тип, поддерживающий сортировку).
+  Если оно отсутствует, используется правило сортировки по умолчанию,
+  установленное для типа данных столбца.
+
+Секция PARTITION BY задает стратегию секционирования таблицы.
+Ключевое слово WITH определяет дополнительные параметры хранения
+для таблицы или индекса.
+
+Необязательное ключевое слово INHERITS определяет список таблиц,
+от которых новая таблица будет автоматически наследовать все столбцы.
+При использовании INHERITS создается постоянная связь дочерней таблицы
+с родительскими таблицами. Изменения схемы в родительских таблицах
+также отражаются в дочерних таблицах, и по умолчанию при чтении
+родительских таблиц в результате включаются данные дочерней таблицы.
+
+
+Ключевое слово LIKE определяет таблицу, из которой в новую таблицу
+будут автоматически скопированы все имена столбцов, их типы данных
+и их ограничения на NULL. В отличие от INHERITS, новая и исходная
+таблица становятся полностью независимыми после завершения создания.
+Изменения в исходной таблице не отражаются в новой, а данные новой
+таблицы не включаются в результат чтения исходной. Кроме того,
+в отличие от INHERITS, столбцы и ограничения, копируемые командой LIKE,
+не объединяются с одноименными столбцами и ограничениями.
+Если дублирующее имя указывается явно или возникает в другом LIKE,
+происходит ошибка.
+
+Необязательная опция <вариант_копирования> указывает, какие
+дополнительные свойства исходной таблицы будут копироваться. Указание
+INCLUDING копирует заданное свойство, а EXCLUDING исключает его.
+По умолчанию подразумевается EXCLUDING.
+
+Для определения значения вычисляемого столбца используется опция
+
+**GENERATED ALWAYS AS (<выражение>) STORED**
+
+Такая секция определяет столбец как генерируемый, в который нельзя
+записать данные, а при чтении его возвращается результат указанного
+выражения. Все функции и операторы в выражении должны быть постоянными
+[3–7]. Ключевое слово STORED отмечает, что этот столбец будет
+вычисляться при записи и сохраняться на диске.
+
+### Примечания
+1. Вычисляемый столбец может ссылаться только на столбцы текущей
+   таблицы.
+2. Вычисляемый столбец может обращаться только к столбцам с готовыми
+   значениями.
+3. Вычисляемый столбец не может иметь значение столбца по умолчанию
+   или определение идентификатора и не могут быть использованы
+   вложенные запросы.
+
+
+Например, если требуется поместить в столбец Summa значение суммы
+столбцов First и Second, определение столбца Summa должно выглядеть так:
+
+Summa NUMBER GENERATED ALWAYS AS (First + Second) STORED
+
+При использовании GENERATED ALWAYS AS в PostgreSQL требуется явное
+указание типа данных.
+
+При конкатенации строк, содержащих имя (Name) и отчество (Second_Name),
+для получения полного имени (Full_Name) определяется столбца Full_Name,
+содержащего запятую в качестве разделителя, может быть таким:
+
+Full_Name TEXT GENERATED ALWAYS AS (Name || ', ' || Second_Name)
+
+Очевидно, что определённые таким образом столбцы Summa и Full_Name
+будут доступны только для чтения (read-only column), т.е. в эти столбцы
+нельзя добавлять значения, а следовательно, они не должны упоминаться
+в списке столбцов запросов INSERT и UPDATE.
+
+Опция NOT NULL устанавливает ограничение на непустое значение столбца
+(условие обязательности данных).
+
+Опция DEFAULT определяет значение столбца по умолчанию, которое будет
+вставляться при добавлении новой строки с отсутствующим значением
+в этом столбце. Оно будет актуальным до тех пор, пока пользователь
+не введёт в столбец другое значение. Использование опции DEFAULT
+обеспечивает ограничение области значений данных.
+
+
+При внедрении опции DEFAULT необходимо учитывать следующие условия.
+
+1. DEFAULT применяется только в отношении запросов INSERT.
+2. Столбец может иметь только одно значение по умолчанию.
+3. Для столбцов, имеющих свойство IDENTITY, нельзя устанавливать
+   значение по умолчанию.
+4. Опция DEFAULT позволяет указать вместо пользовательских системные
+   значения, например, USER, CURRENT_USER, CURRENT_TIMESTAMP.
+
+Опцию DEFAULT можно использовать в следующих случаях:
+
+1. данные, хранящиеся в столбце, имеют явное значение по умолчанию;
+2. столбец не может содержать пустые значения;
+3. в столбце не обеспечивается уникальность значений.
+
+Опция
+GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY
+    [(START WITH начальное_значение [INCREMENT BY шаг])]
+
+
+**Столбец идентификации** — это столбец, связанный с внутренним
+генератором неявной последовательности. При выполнении запроса INSERT
+к таблице со столбцом идентификации, определённым с опцией BY DEFAULT,
+значение такой столбец получает автоматически или явно заданное.
+
+  В этом случае при вставке в столбец идентификации значения по умолчанию
+следует либо задать ключевое слово DEFAULT, либо не указывать столбец
+идентификации. При определении столбца идентификации с секцией ALWAYS
+вставка в него значения явно недопустима. В качестве типа данных для
+такого столбца может быть дан SMALLINT, INTEGER или BIGINT. Столбец
+идентификации не может быть вычисляемым (нельзя использовать
+конструкцию GENERATED ALWAYS AS (выражение)), не может иметь значения
+по умолчанию (нельзя использовать опцию DEFAULT) и не допускает
+псевдоназначения NULL (всегда NOT NULL). Для указания отличного от нуля
+**начального значения** существует необязательная секция START WITH.
+
+Автоинкремент, как правило, используется для получения значений
+суррогатных ключей, формируемых информационной системой и
+идентифицирующих строки в таблице. Другими способами формирования
+значений суррогатных ключей могут быть:
+
+- хранение для каждой таблицы последнего значения;
+- увеличение на единицу значения, максимального из существующих
+- применение алгоритмов генерации глобальных универсальных уникальных
+  идентификаторов GUID
+- использование последовательности
+- применение последовательных типов данных SMALLSERIAL, SERIAL
+  и BIGSERIAL
+
+Также необходимо помнить, что идентификационный столбец не обеспечивает
+уникальность автоматически, так как в столбец может быть добавлено
+и не уникальное (явно указанное) значение с помощью запроса
+модификации. В качестве столбца с уникальным значением необходимо
+использовать столбец, являющийся первичным ключом.
+
+
+Например, необходимо создать таблицу Days, состоящую из шести столбцов:
+идентификационный столбец Num типа INTEGER, Dat типа DATE, Event типа
+VARCHAR(20), Implemented типа BOOLEAN, Usr типа CHAR(10) и Tel,
+определённого на созданном домене Telephone. При этом столбец Dat
+по умолчанию должен содержать дату 1 сентября 2022 г., столбец Event
+по умолчанию должен содержать NULL, столбец Implemented не должен
+содержать NULL, столбец Usr по умолчанию должен содержать имя
+пользователя, подключенного к БД, а столбец Tel должен содержать
+значение по умолчанию из домена Telephone. Запрос на создание таблицы
+Days примет вид
+*/
+
+CREATE TABLE days
+(
+    num INTEGER GENERATED BY DEFAULT AS IDENTITY,
+    dat DATE DEFAULT TO_DATE('01.09.2022', 'DD.MM.YYYY'),
+    event VARCHAR(20) DEFAULT NULL,
+    implemented BOOLEAN NOT NULL,
+    usr VARCHAR(10) DEFAULT USER,
+    tel telephone
+);
+
+/*
+
+Если определение столбца основано на домене, то оно может включать
+новое значение по умолчанию и (или) дополнительные ограничения,
+которые перекрывают значения, заданные при определении домена.
+Например, можно добавить ограничение NOT NULL для столбца, если домен
+его ещё не содержит. Однако домен, который был определён как NOT NULL,
+не может быть переопределён на уровне столбца как допускающий NULL
+значение.
+
+Рекомендуемым способом обеспечения целостности, соответствующим
+стандарту ANSI, являются ограничения (CONSTRAINT). Под ограничением
+понимается условие, которое должно выполняться при хранении, обновлении
+и добавлении данных в таблицу БД.
+По области применения различают ограничения, накладываемые:
+
+- на определённый столбец;
+- на всю таблицу.
+
+Принципиально они друг от друга не отличаются. Однако ограничения
+на значения столбцов проверяются для отдельных столбцов (такие
+ограничения являются частью определения отдельного столбца),
+а ограничения на таблицы проверяются для таблицы в целом (такие
+ограничения применяются к одному или нескольким столбцам таблицы).
+
+Составной тип — это набор атрибутов, каждый из которых имеет своё имя
+и свой тип (см. лекц. 2.2). Типы атрибутов могут отличаться (в отличие
+от массивов). Составной тип можно рассматривать как табличную строку.
+Часто он называется «записью». Чтобы использовать составной тип
+данных, например, для создания столбца составного типа, необходимо
+предварительно создать составной тип данных с нужной структурой.
+Синтаксис запроса на создание составного типа следующий:
+
+CREATE TYPE имя AS
+    ([имя_атрибута тип_данных [COLLATE правило_сортировки]
+    [, ...]])
+
+Составные типы в PostgreSQL можно использовать для объединения тесно
+связанных данных. Например, можно создать типы, представляющие собой
+адреса:
+*/
+
+CREATE TYPE House_address AS
+(
+    Streetid Pkfield,   -- улица
+    Houseno SMALLINT    -- дом
+);
+
+CREATE TYPE Abonent_address AS
+(
+    House House_address,   -- дом
+    Flatno SMALLINT        -- квартира
+);
+
+
+
+
+
+
+
+
+/*395*/
+
+/*508 - Процедурное программирование*/
 
