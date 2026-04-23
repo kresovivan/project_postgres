@@ -25683,6 +25683,7 @@ BEGIN
 
     INSERT INTO Abonent(Accountid, Streetid)
     VALUES (Laccounttid, Lstreetid);
+
 EXCEPTION
     WHEN SQLSTATE '23505' THEN
         CALL Excep_inser('Add_p', 'Дублирование строки');
@@ -25735,8 +25736,2125 @@ from Errors;
 
 
 
+/*
+Хранимые функции
+
+В различных СУБД, поддерживающих процедурные языки, существует
+возможность создавать с их использованием не только ХП, но также
+и функции. Процедурная (хранимая) функция (ХФ) представляет собой
+подпрограмму, которая принимает входные параметры, выполняет,
+например числовые вычисления, результат которых возвращается
+в виде значения функции. В качестве значения может
+выступать единственное значение, множество значений (строка),
+таблица. Кроме того, ХФ может выполнять какие-то действия
+с данными и не возвращать значение.
+
+В PostgreSQL можно разрабатывать функции на языке декларативного
+программирования (SQL-функции), на языках процедурного
+программирования (PL/pgSQL, PL/Tcl, PL/Perl, PL/Python),
+а также на языке C.
+
+SQL-программирование хранимых функций
+
+Запрос на определение SQL-функции имеет следующий синтаксис:
+
+CREATE [OR REPLACE] FUNCTION имя_функции
+(
+    [ <режим_параметра> ] [имя_параметра] тип_данных_параметра
+    [, ...]
+)
+[RETURNS {тип_данных_результата | VOID]
+| RETURNS TABLE {имя_столбца тип_столбца [, ...]}]
+AS
+$$
+<тело_функции>
+$$
+LANGUAGE SQL;
+
+где режим_параметра:
+- IN (входной);
+- OUT (выходной);
+- INOUT (входной и выходной);
+- VARIADIC (переменный — массив входящих параметров).
+
+По умолчанию подразумевается IN. За единственным аргументом
+VARIADIC могут быть только аргументы OUT.
+
+Синтаксис команды CREATE FUNCTION требует, чтобы тело функции
+было записано как строковая константа!!!
+Обычно строковую константу заключают в знаки долларов «$$».
+
+Тело функции содержит последовательность SQL-запросов
+(INSERT, UPDATE, DELETE, MERGE и SELECT), разделенных символом «;».
+В простейшем случае такие функции возвращают результат последнего
+запроса в последовательности!!!
+
+Если последний запрос вообще
+не вернет строки, будет возвращен NULL.
+Последней строкой в теле функции должен быть запрос SELECT,
+возвращающий какие-то данные, или оператор RETURNING,
+возвращающий результат с типом возврата функции.
+
+Типом возвращаемых данных (возможно, дополненный схемой) может
+быть базовый, составной или доменный тип, либо ссылка на тип
+столбца таблицы. Для определения функции SQL, выполняющей
+действия, но не возвращающую полезное значение, необходимо
+объявить ее как возвращающую тип VOID. Кроме того, аргументы OUT
+и INOUT нельзя использовать с секцией RETURNS TABLE.
+
+Параметры в заголовке SQL-функции можно указывать в виде имен
+и типов или типов, а в теле — соответственно в виде имен
+или номеров (старый вариант):
+- $1 — первый параметр;
+- $2 — второй параметр и т. д.
+
+Синтаксис запроса вызова SQL-функции следующий:
+*/
+
+
+SELECT возвращаемые_элементы
+FROM имя_функции(аргументы);
+
+/*
+или
+*/
+
+SELECT имя_функции (аргументы);
+
+/*
+Например, для вычисления длины окружности заданного радиуса:
+*/
+
+CREATE FUNCTION Pir2
+(
+    Par FLOAT
+)
+    RETURNS FLOAT
+AS $$
+SELECT 2 * PI() * Par;
+$$
+    LANGUAGE SQL;
+
+/*
+Вызов функции:
+*/
+
+SELECT Pir2(2) AS "Длина окружности";
+
+/*
+или
+*/
+
+SELECT *
+FROM Pir2(2) AS "Длина окружности";
+
+/*
+Также можно отказаться от имен параметров и обращаться к ним
+по номерам:
+*/
+
+CREATE FUNCTION S2c2(INTEGER, INTEGER)
+    RETURNS FLOAT
+AS $$
+SELECT POWER(COS(PI()/$1), 2) + POWER(SIN(PI()/$2), 2);
+$$ LANGUAGE SQL;
+
+/*
+или в смешанной форме так:
+*/
+
+CREATE OR REPLACE FUNCTION S2c2(INT, P INT)
+    RETURNS FLOAT
+AS $$
+SELECT POWER(COS(PI()/$1), 2) + POWER(SIN(PI()/P), 2);
+$$ LANGUAGE SQL;
+
+/*
+и даже так:
+*/
+
+CREATE OR REPLACE FUNCTION S2c2
+(
+S INT, P INT
+)
+    RETURNS FLOAT
+AS $$
+SELECT POWER(COS(PI() / $1), 2) + POWER(SIN(PI() / P), 2);
+$$
+    LANGUAGE SQL;
+
+select *
+    from S2c2(2,2);
+
+/*
+Пример функции с выходным параметром:
+*/
+
+CREATE OR REPLACE FUNCTION S2c2
+(
+S INTEGER, P INTEGER, OUT Rez FLOAT
+)
+AS $$
+SELECT POWER(COS(PI() / $1), 2) + POWER(SIN(PI() / $2), 2);
+$$
+    LANGUAGE SQL;
+
+/*
+Примеры вызовов:
+*/
+
+SELECT S2c2(4, 4) AS "SIN(x)↑2 + COS(x)↑2";
+
+---или
+
+SELECT *
+FROM S2c2(4, 4) AS "SIN(x)↑2 + COS(x)↑2";
 
 
 
-/*590 - Процедурное программирование*/
+/*
+В качестве простейшего примера приведем скрипт скалярной функции
+Avgsql, вычисляющей среднее значение платежей для абонента
+с заданным номером лицевого счета:
+
+*/
+
+CREATE OR REPLACE FUNCTION Avgsql
+(
+    Acc VARCHAR(6)
+)
+    RETURNS Currency -- тип возвращаемого значения
+AS $$
+SELECT AVG(Paysum) -- результат
+FROM Paysumma
+WHERE Accountid = Acc;
+$$
+    LANGUAGE SQL;
+
+
+
+CREATE OR REPLACE FUNCTION PaymentStats
+(
+    Acc VARCHAR(6)
+)
+    RETURNS TABLE
+            (
+                avg_payment Currency,
+                max_payment Currency
+            )
+AS $$
+SELECT AVG(Paysum), MAX(Paysum)
+FROM Paysumma
+WHERE Accountid = Acc;
+$$
+    LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION PaymentStats
+(
+    Acc VARCHAR(6)
+)
+    RETURNS RECORD
+AS $$
+SELECT AVG(Paysum), MAX(Paysum)
+FROM Paysumma
+WHERE Accountid = Acc;
+$$
+    LANGUAGE SQL;
+
+
+
+-- Функция возвращает ВСЕ платежи абонента
+CREATE OR REPLACE FUNCTION GetPayments(Acc VARCHAR(6))
+    RETURNS SETOF Paysumma  -- возвращает таблицу (много строк)
+    LANGUAGE SQL
+AS $$
+SELECT * FROM Paysumma
+WHERE Accountid = Acc
+ORDER BY Paydate DESC;
+$$;
+
+/*
+Правило: если функция объявлена с RETURNS
+(не RETURNS TABLE и не RETURNS SETOF), PostgreSQL ожидает,
+что запрос в теле функции вернет одну строку с одной колонкой.
+
+Результатом вызова функции в следующем запросе:
+*/
+
+SELECT Avgsql('005488') AS "Среднее";
+
+/*
+будет среднее значение плат абонента с номером лицевого счета
+'005488'.
+
+Пример вызова с параметром:
+*/
+
+SELECT Avgsql(:Par) AS "Среднее";
+
+/*
+Можно выполнять не только одиночные вызовы функции, но и
+использовать их в контексте запроса, например так:
+*/
+
+SELECT Accountid, Fio, Avgsql(Accountid) AS "Среднее"
+FROM Abonent;
+
+/*
+Результатом выполнения такого запроса является набор данных
+с номером лицевого счета, ФИО и средним значением плат каждого
+абонента.
+
+Хранимые функции, возвращающие одно единственное значение,
+могут использоваться в качестве табличного выражения.
+В таком случае запрос выполняется так, будто функция возвращает
+таблицу с одной строкой и одним столбцом:
+*/
+
+SELECT Accountid, Fio, "Среднее".*
+FROM Abonent
+         CROSS JOIN LATERAL Avgsql(Accountid) AS "Среднее";
+
+/*
+Этот запрос выдаст тот же результат, что и предыдущий.
+
+Решим задачу добавления в таблицу Paysumma генерируемого столбца
+Paydayweek с названием дня платежа выполнением следующего
+скрипта:
+*/
+
+
+CREATE OR REPLACE FUNCTION Paydayweek_f
+(
+    I_date DATE
+)
+    RETURNS TEXT
+AS $$
+SELECT (CASE
+            WHEN I_date IS NULL
+                THEN 'Nodate'
+            ELSE TO_CHAR(I_date, 'Day')
+        END);
+$$
+    LANGUAGE SQL IMMUTABLE;
+
+ALTER TABLE Paysumma
+    ADD Paydayweek VARCHAR(15)
+        GENERATED ALWAYS AS (Paydayweek_f(Paydate)) STORED;
+
+/*
+ИЛИ НА РУССКОМ:
+*/
+
+CREATE OR REPLACE FUNCTION Paydayweek_f(I_date DATE)
+    RETURNS TEXT
+AS $$
+SELECT (CASE WHEN I_date IS NULL THEN 'Nodate'
+             ELSE
+                 CASE EXTRACT(DOW FROM I_date)
+                     WHEN 0 THEN 'Воскресенье'
+                     WHEN 1 THEN 'Понедельник'
+                     WHEN 2 THEN 'Вторник'
+                     WHEN 3 THEN 'Среда'
+                     WHEN 4 THEN 'Четверг'
+                     WHEN 5 THEN 'Пятница'
+                     WHEN 6 THEN 'Суббота'
+                 END
+        END);
+$$ LANGUAGE SQL IMMUTABLE;
+
+ALTER TABLE Paysumma
+    ADD Paydayweek VARCHAR(15)
+        GENERATED ALWAYS AS (Paydayweek_f(Paydate)) STORED;
+---STORED	Результат вычисления ФИЗИЧЕСКИ хранится на диске
+--GENERATED ALWAYS AS (...)	Значение колонки ВЫЧИСЛЯЕТСЯ automatically
+---IMMUTABLE означает, что функция всегда возвращает один и тот же результат для одних и тех же входных данных.
+
+select *
+from Paysumma;
+
+/*
+Это достигается определением хранимой функции с категорией
+изменчивости IMMUTABLE с последующим вызовом ее
+в запросе ALTER TABLE. Решение данной задачи с помощью
+DML-триггера.
+
+Следующим примером может быть SQL-функция, изменяющая значения
+всех платежей заданного абонента, и возвращающая с помощью
+RETURNING первое изменение значение:
+*/
+
+CREATE OR REPLACE FUNCTION Op
+(
+Acc TEXT, Deb NUMERIC
+)
+    RETURNS NUMERIC
+AS $$
+UPDATE Paysumma
+SET Paysum = Paysum - Deb
+WHERE Accountid = Acc
+RETURNING Paysum;
+$$
+    LANGUAGE SQL;
+
+/*
+Пример запроса на выполнение функции:
+*/
+
+
+SELECT * FROM Op('136169', 50.00);
+
+/*
+В случае наличия параметров OUT или INOUT, секцию RETURNS можно
+опустить. Если она присутствует, она должна согласовываться
+с типом результата, выводимым из выходных параметров:
+в качестве возвращаемого типа, указывается RECORD или
+SETOF определенный тип, если выходных параметров несколько,
+либо тип единственного выходного параметра.
+Указание SETOF показывает, что функция возвращает множество,
+а не единственный элемент. Например:
+*/
+
+CREATE FUNCTION Ab_nls
+(
+    Acc TEXT
+)
+    RETURNS SETOF Abonent
+AS $$
+SELECT *
+FROM Abonent
+WHERE Accountid = $1;
+$$
+    LANGUAGE SQL;
+
+/*
+Вызов:
+*/
+
+SELECT *
+FROM Ab_nls('005488');
+
+/*
+Или с SETOF RECORD:
+*/
+
+CREATE OR REPLACE FUNCTION Acc_sum
+(
+Acc TEXT, OUT Serviceid INT, OUT Summ NUMERIC
+)
+    RETURNS SETOF RECORD
+AS $$
+SELECT Serviceid, SUM(Paysum) AS Summ
+FROM Paysumma
+WHERE Accountid = $1
+GROUP BY Accountid, Serviceid;
+$$
+    LANGUAGE SQL;
+
+/*
+Вызов:
+*/
+
+SELECT * FROM Acc_sum('005488');
+
+
+/*
+Кроме того, можно объявить функцию с указанием таблицы
+RETURNS TABLE (столбцы). В этом случае будут возвращены все
+строки таблицы:
+*/
+
+CREATE OR REPLACE FUNCTION Acc_ph
+(
+)
+    RETURNS TABLE
+            (
+                Acc TEXT,
+                Ph  TEXT
+            )
+AS $$
+SELECT Accountid, Phone
+FROM Abonent
+WHERE Phone IS NOT NULL;
+$$
+    LANGUAGE SQL;
+
+/*
+Вызов:
+*/
+
+SELECT *
+FROM Acc_ph();
+
+/*
+или
+*/
+
+CREATE OR REPLACE FUNCTION Acc_pay
+(
+    Acc TEXT
+)
+    RETURNS TABLE
+            (
+                Accountid TEXT,
+                Fio       TEXT,
+                Servicenm TEXT,
+                Paydate   DATE,
+                Paysum    NUMERIC
+            )
+AS $$
+SELECT P.Accountid,
+       A.Fio,
+       S.Servicenm,
+       P.Paydate,
+       P.Paysum
+FROM Paysumma                P
+         INNER JOIN Abonent  A USING (Accountid)
+         INNER JOIN Services S USING (Serviceid)
+WHERE P.Accountid = Acc;
+$$
+    LANGUAGE SQL;
+
+/*
+Пример вызова:
+*/
+
+SELECT *
+FROM Acc_pay('136160');
+
+
+/*
+Иногда полезно присваивать параметрам значение по умолчанию.
+Оно указывается после имени параметра и его типа данных
+в следующем виде:
+
+{DEFAULT | =} выражение_по_умолчанию
+
+В этом случае можно не передавать соответствующий аргумент
+при вызове функции:
+*/
+
+CREATE OR REPLACE FUNCTION Acc_df
+(
+    Acc TEXT DEFAULT '005488'
+)
+    RETURNS TABLE
+            (
+                Acc TEXT,
+                Ph  TEXT
+            )
+AS $$
+SELECT Accountid, Phone
+FROM Abonent
+WHERE Accountid = Acc;
+$$
+    LANGUAGE SQL;
+
+/*
+Примеры вызова:
+*/
+
+SELECT * FROM Acc_df();
+SELECT * FROM Acc_df('126112');
+
+/*
+Например:
+*/
+
+CREATE OR REPLACE FUNCTION Listabonent(IN Pay Currency)
+    RETURNS TABLE (
+                      Laccountid VARCHAR(6),
+                      Lfio       VARCHAR(30),
+                      Ldate      DATE,
+                      Lsum       Currency,
+                      Lmonth     Tmonth,
+                      Lpay       Tyear
+                  )
+AS $$
+SELECT A.Accountid,
+       A.Fio,
+       P.Paydate,
+       P.Paysum,
+       P.Paymonth,
+       P.Payyear
+FROM Abonent A
+         INNER JOIN Paysumma P USING (Accountid)
+WHERE P.Paysum > Pay;
+$$
+    LANGUAGE SQL;
+
+/*
+Пример использования:
+*/
+
+SELECT *
+FROM Listabonent(1500);
+
+
+/*
+Здесь совпадают количество и порядок следования выходных
+параметров и столбцов в запросе. При этом типы данных также
+у них совпадают. Так как в теле функции не указан общий тип
+возвращаемых данных функций (т. е. не указана команда RETURNS),
+функция будет возвращать только первую строку из результирующего
+набора данных. Именно поэтому в этом примере вернется только
+одна строка, хотя запрос возвращает не одну, а 15 строк.
+
+Приведем пример ХФ (SQL), которая выполняет не только
+запрос-выборку всех данных всех абонентов с расшифровкой
+наименования улицы, но и запрос-действие добавления новой строки
+в таблицу Abonent:
+*/
+
+CREATE OR REPLACE FUNCTION Ins_sel
+(
+Acc VARCHAR(6), Str Pkfield, Hn SMALLINT, Fn SMALLINT, Fi VARCHAR(20), Ph VARCHAR(15)
+)
+    RETURNS TABLE
+            (
+                Accountid VARCHAR(6),
+                Streetid  Pkfield,
+                Houseno   SMALLINT,
+                Flatno    SMALLINT,
+                Fio       VARCHAR(20),
+                Phone     VARCHAR(15)
+            )
+AS $$
+INSERT INTO Abonent
+VALUES (Acc, Str, Hn, Fn, Fi, Ph);
+SELECT *
+FROM Abonent;
+-- DELETE FROM Abonent WHERE Accountid = Acc;
+$$
+    LANGUAGE SQL;
+
+/*
+Используем созданную функцию как обычную таблицу с соединением
+с другой таблицей:
+*/
+
+SELECT Accountid, Streetnm, Houseno, Flatno, Fio, Phone
+FROM Ins_Sel(
+             '111111'::VARCHAR(6),
+             1::Pkfield,
+             2::SMALLINT,
+             3::SMALLINT,
+             '720336'::VARCHAR(15)
+     ) I
+JOIN Street S ON I.Streetid = S.Streetid;
+     -- явное условие
+
+/*
+или с вводимыми значениями параметров:
+*/
+
+SELECT Accountid, Streetnm, Houseno, Flatno, Fio, Phone
+FROM Ins_Sel(
+             :Nls::VARCHAR(6),
+             :St::Pkfield,
+             :D::smallint,
+             :Kv::SMALLINT,
+             :Fio::VARCHAR(20),
+             :Ph::VARCHAR(15)
+     )
+         NATURAL JOIN Street;
+
+/*
+Самым популярным, удобным, понятным и самым правильным способом
+возвращения табличных данных в PostgreSQL является способ
+с использованием конструкции RETURNS TABLE, при которой
+объявляется структура возвращаемых табличных данных, т. е.
+*/
+
+CREATE OR REPLACE FUNCTION Listabonent
+(
+    Pay Currency
+)
+    RETURNS TABLE
+            (
+                Laccountid VARCHAR(6),
+                Lfio       VARCHAR(30),
+                Ldate      DATE,
+                Lsum       Currency,
+                Lmonth     Tmonth,
+                Lpay       TYear
+            )
+AS $$
+SELECT Accountid, Fio, Paydate, Paysum, Paymonth, Payyear
+FROM Abonent
+         NATURAL JOIN Paysumma
+WHERE Paysum > Pay;
+$$
+    LANGUAGE SQL;
+
+/*
+Запрос к ХФ Listabonent:
+*/
+
+SELECT *
+FROM Listabonent(1500);
+
+/*
+Функция ListAbonent возвращает строку, состоящую из номера
+лицевого счета абонента (Laccountid), ФИО абонента (Lfio),
+даты оплаты (Ldate) и значения оплаты (Lsumn), а также месяца
+(Lmonth) и года (Lpay), за которые производится оплата,
+со значением, большим 1500.
+
+Создадим в качестве примера SQL-функцию для работы с составным
+типом:
+*/
+
+-- Создаем тип
+CREATE TYPE Date_month_year AS
+(
+    P_date  DATE,
+    P_month INT,
+    P_year  INT
+);
+
+CREATE OR REPLACE FUNCTION M_y
+(
+    A Date_month_year
+)
+    RETURNS RECORD
+AS $$
+SELECT EXTRACT(MONTH FROM A.P_date),
+       ROW (A.P_date, A.P_month, A.P_year)::Date_month_year;
+$$
+    LANGUAGE SQL;
+
+/*
+Выполнить эту ХФ можно следующим запросом (рис. 9.10):
+*/
+
+SELECT Payfactid, Accountid, M_y(D_m_y)
+FROM Paysumma_1;
+
+/*
+Результат вызова ХФ, возвращающей RECORD значения
+
+В теме 4 при обсуждении независимых вложенных запросов был
+рассмотрен запрос, вычисляющий различные метрики платежной
+активности абонентов. Поскольку все эти метрики имеют схожую
+функциональность, можно создать единую "обертку" в виде
+функции:
+*/
+
+CREATE OR REPLACE FUNCTION Getaverage_abonent_by
+(
+    Groupby TEXT
+)
+    RETURNS DECIMAL
+AS $$
+WITH Pdates AS (
+               SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY') AS Dates
+               FROM Paysumma P
+               ),
+     Grouped AS (
+               SELECT TO_CHAR(D.Dates, Groupby),
+                      COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              p
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY TO_CHAR(D.Dates, Groupby)
+               )
+SELECT ROUND(AVG(Acc), 2)
+FROM Grouped;
+$$
+    LANGUAGE SQL;
+
+/*
+После чего эту функцию можно использовать для расчета любой
+метрики:
+*/
+
+SELECT
+    GetAverage_abonent_by('YYYY-MM-DD') AS Daa,
+    GetAverage_abonent_by('YYYY-WW') AS Waa,
+    GetAverage_Abonent_by('YYYY-MM') AS Maa,
+    GetAverage_abonent_by('YYYY') AS Yaa;
+
+
+
+
+
+WITH Pdates AS (
+               SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY') AS Dates
+               FROM Paysumma P
+               ),
+     Grouped AS (
+               SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'),
+                      COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              p
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY TO_CHAR(D.Dates, 'YYYY-MM-DD')
+               )
+SELECT ROUND(AVG(Acc), 2)
+FROM Grouped;
+
+
+/*
+Программирование хранимых функций на языке PL/pgSQL
+
+В теле функции на PL/pgSQL кроме запросов SQL могут применяться
+конструкции языка, представляющего собой процедурное расширение
+SQL. Это могут быть операторы присваивания, условные операторы,
+циклы, обработка ошибок. Основными
+составными частями определения функции являются:
+-имя,
+-параметры,
+-тип возвращаемого значения,
+-тело,
+-секция обработки ошибок.
+
+Формат тела хранимой функции на языке PL/pgSQL, дополненный
+разделами объявления и обработки ошибок, следующий:
+
+DECLARE
+    объявления
+BEGIN
+    <тело_функции>
+[EXCEPTION
+    <блок_исключений>]
+END;
+$$
+LANGUAGE PLPGSQL;
+
+В разделе EXCEPTION обрабатываются ошибки:
+
+WHEN условие THEN
+    RAISE EXCEPTION 'Сообщение об ошибке';
+
+где условие — наименование ошибки.
+
+Функция RAISE уровня EXCEPTION генерирует исключение и выдает
+сообщение об ошибке.
+
+Локальные переменные и курсоры, используемые в теле
+PL/pgSQL-функции, объявляются в блоке DECLARE:
+
+имя_переменной1 тип_переменной1;
+[имя_переменной2 тип_переменной2; ...]
+
+Результат возвращается оператором
+RETURN,
+RETURN NEXT
+или RETURN QUERY.
+
+В теле функции PL/pgSQL обязательно должен быть
+хотя бы один оператор RETURN, кроме случаев, когда тип результата
+VOID или функция имеет выходные параметры.
+Оператор RETURN прекращает выполнение и возвращает значение выражения:
+
+RETURN <выражение>
+
+Для функций на PL/pgSQL, возвращающих SETOF определенный тип,
+отдельные элементы возвращаемого значения формируются оператором:
+
+RETURN NEXT <выражение>
+
+или
+
+RETURN QUERY <запрос>
+
+а финальный оператор RETURN без аргументов завершает выполнение
+функции. RETURN NEXT используется как со скалярными, так
+и с составными типами данных.
+
+Для составного типа результат функции возвращается в виде таблицы.
+RETURN QUERY добавляет результат выполнения запроса к результату
+функции.
+
+
+Операторы RETURN NEXT и RETURN QUERY можно свободно смешивать в теле
+функции, в этом случае их результаты будут объединены.
+Эти операторы не выполняют возврата из функции, а только
+добавляют строки в результирующее множество. Затем выполнение
+продолжается со следующего оператора в функции. Успешное
+выполнение RETURN NEXT и RETURN QUERY формирует множество строк
+результата. Для выхода из функции используется RETURN, обязательно
+без аргументов (или можно просто дождаться окончания выполнения
+функции).
+RETURN QUERY имеет и другой формат:
+
+RETURN QUERY EXECUTE строка-команды [USING выражение [, ...]];
+
+предназначенный для динамического выполнения запроса. В текст
+запроса можно добавить параметры, используя USING, так же,
+как и с командой EXECUTE.
+
+Для функции с выходными параметрами достаточно использовать
+RETURN NEXT без аргументов. При каждом исполнении RETURN NEXT
+текущие значения выходных параметров сохраняются для последующего
+возврата в качестве строки результата.
+
+В качестве простейшего примера приведем скрипт скалярной функции
+Acc_avg_pay, вычисляющей среднее значение платежей для абонента
+с заданным номером лицевого счета.
+*/
+
+CREATE OR REPLACE FUNCTION Acc_avg_pay
+(
+    Acc VARCHAR(6)
+)
+    RETURNS Currency -- тип возвращаемого значения
+AS $$
+BEGIN
+    RETURN (
+           SELECT AVG(Paysum) -- результат
+           FROM Paysumma
+           WHERE Accountid = Acc
+           );
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+или
+*/
+
+CREATE OR REPLACE FUNCTION Acc_avg_pay
+(
+    Acc VARCHAR(6)
+)
+    RETURNS Currency -- тип возвращаемого значения
+    LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    Var_acc_avg_pay Currency;
+BEGIN
+    SELECT AVG(Paysum)
+    INTO Var_acc_avg_pay -- результат
+    FROM Paysumma
+    WHERE Accountid = Acc;
+    RETURN Var_acc_avg_pay;
+END;
+$$;
+
+/*
+или
+*/
+
+CREATE OR REPLACE FUNCTION Acc_avg_pay
+(
+    Acc VARCHAR(6)
+)
+    RETURNS Currency
+    LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    Var_acc_avg_pay Currency;
+BEGIN
+    SELECT AVG(Paysum)
+    FROM Paysumma
+    WHERE Accountid = Acc
+    INTO Var_acc_avg_pay; -- результат
+    RETURN Var_acc_avg_pay;
+END;
+$$;
+
+/*
+Хранимые функции, возвращающие единственное значение, вызываются
+так же, как и обычные внутренние функции. Количество и типы
+аргументов должны соответствовать определению функции.
+Результатом вызова функции в следующем запросе:
+*/
+
+SELECT Acc_avg_pay('005488') AS "Среднее";
+
+/*
+будет среднее значение плат абонента с номером лицевого счета
+'005488', или с параметром так:
+*/
+
+SELECT Acc_avg_pay(:Par) AS "Среднее";
+
+/*
+Можно выполнять не только одиночные вызовы функции, но и
+использовать их в контексте запроса, например так:
+*/
+
+SELECT Accountid, Fio, Acc_avg_pay(Accountid) AS "Среднее"
+FROM Abonent;
+
+/*
+Хранимые функции, возвращающие одно единственное значение, могут
+также использоваться в качестве табличного выражения. В таком
+случае запрос выполняется так, будто функция возвращает таблицу
+с одной строкой и одним столбцом:
+
+
+
+Пошагово:
+Берется первая строка из Abonent (например, Accountid = '005488')
+Вызывается функция Acc_avg_pay('005488') — она возвращает одно число (средний платеж)
+Это число "заворачивается" в таблицу с одной строкой и одной колонкой
+CROSS JOIN соединяет строку абонента с результатом функции
+"Среднее".* разворачивает эту строку (фактически просто число)
+Процесс повторяется для каждого абонента
+*/
+
+SELECT Accountid, Fio, "Среднее".*
+FROM Abonent
+         CROSS JOIN LATERAL Acc_avg_pay(Accountid) AS "Среднее";
+
+/*
+Выше рассмотрены способы создания табличных функций
+с использованием языка SQL. Однако иногда возникает необходимость
+в таких функциях задействовать некую логику (ветвления, циклы,
+переменные), иными словами, все возможности языка PL/pgSQL.
+
+Рассмотрим возвращение табличных данных через выходные параметры.
+Функции, возвращающие табличные данные на PL/pgSQL, создаются
+немного по-другому, поэтому эти способы мы рассмотрим отдельно.
+Сразу необходимо отметить, что способы объявления структуры
+возвращаемых табличных данных будут точно такими же, как те,
+которые мы уже встречали в случае с функциями на SQL, например,
+использование OUT-параметров с RETURNS SETOF RECORD или
+RETURNS TABLE, поскольку это не относится к языку, на котором
+будет написана табличная функция. С глобальной точки зрения
+способов возврата табличных данных на PL/pgSQL всего два —
+это RETURN QUERY и RETURN NEXT, и именно RETURN QUERY является
+наиболее популярным и предпочтительным вариантом возвращения
+табличных данных.
+
+Суть способа в том, что объявляется структура возвращаемых
+табличных данных — любым способом, будь то указание названия
+таблицы или определение структуры непосредственно в функции,
+а в теле функции используется инструкция RETURN QUERY, после
+которой располагается запрос, формирующий возвращаемые табличные
+данные. При этом, конечно же, в определении функции указывается,
+что функция написана с использованием языка PL/pgSQL, а в теле
+функции можно использовать любые конструкции языка PL/pgSQL.
+
+Для выборки данных в виде таблицы применяется тип TABLE.
+Рассмотрим следующий DDL-сценарий, который создает функцию
+без входных параметров с именем List_abonent, возвращающую
+таблицу:
+*/
+
+CREATE OR REPLACE FUNCTION List_abonent()
+    RETURNS TABLE
+            (
+                Laccountid VARCHAR(6),
+                Lfio VARCHAR(30),
+                Ldate DATE,
+                Lsum Currency,
+                Lmonth TMonth,
+                Lpay TYear
+            )
+AS $$
+BEGIN
+    RETURN QUERY
+        SELECT A.Accountid, A.Fio,
+               P.Paydate, P.Paysum,
+               P.Paymonth, P.Payyear
+        FROM Abonent A
+                 INNER JOIN Paysumma P USING(Accountid)
+        WHERE P.Paysum > 1500;
+END
+$$ LANGUAGE PLPGSQL;
+
+/*
+Пример вызова :
+*/
+
+SELECT *
+FROM List_abonent();
+
+/*
+Следующий запрос демонстрирует возможность вызова ХФ в секции FROM
+запроса, на котором основано определяемое представление:
+*/
+
+CREATE VIEW P_listab
+AS
+SELECT *
+FROM List_abonent();
+
+/*
+Результат выполнения запроса
+*/
+
+SELECT * FROM P_listab;
+
+/*
+Вторым способом возвращения табличных данных на PL/pgSQL является
+способ с использованием инструкции RETURN NEXT. Суть данного
+способа в том, что данные в результирующую таблицу добавляются
+построчно с помощью инструкции RETURN NEXT. Данный способ
+предпочтителен в тех случаях, когда каждая строка результирующего
+набора данных подвергается какой-то обработке!!!
+Например, все те случаи, когда данные накапливаются с помощью цикла,
+т. е. что-то перебирается и что-то куда-то складывается:
+*/
+
+CREATE OR REPLACE FUNCTION List_abonent(Pay Currency)
+    RETURNS TABLE
+            (
+                Laccountid VARCHAR(6),
+                Lfio VARCHAR(30),
+                Ldate DATE,
+                Lsum Currency,
+                Lmonth TMonth,
+                Lpay TYear
+            )
+AS $$
+DECLARE
+    Var_r RECORD;
+BEGIN
+    FOR Var_r IN (SELECT A.Accountid, A.Fio, P.Paydate,
+                         P.Paysum, P.Paymonth, P.Payyear
+                  FROM Abonent A
+                           INNER JOIN Paysumma P USING(Accountid)
+                  WHERE P.Paysum > Pay)
+        LOOP
+            Laccountid := Var_r.Accountid;
+            Lfio := Var_r.Fio;
+            Ldate := Var_r.Paydate;
+            Lsum := Var_r.Paysum;
+            Lmonth := Var_r.Paymonth;
+            Lpay := Var_r.Payyear;
+            RETURN NEXT;
+        END LOOP;
+END
+$$ LANGUAGE PLPGSQL;
+
+/*
+Оператор RETURN NEXT добавляет строку в возвращаемую таблицу,
+значения столбцов строки извлекаются из текущих значений выходных
+переменных.
+
+В функции List_abonent производятся следующие действия:
+
+1) запрос SELECT формирует неявное соединение таблиц Abonent,
+   Paysumma и возвращает НД;
+2) неявный курсор FOR Var_r IN... LOOP для каждой строки таблицы
+   результатов, сформированной запросом SELECT, выполняет блок
+   операторов, который следует за секцией LOOP;
+3) в данном случае выполняется один оператор RETURN NEXT.
+
+Чтобы выбрать значения, возвращаемые функцией List_abonent,
+необходимо выполнить запрос;
+*/
+
+SELECT *
+FROM List_abonent(2280);
+
+/*
+Результат, возвращаемый данной функцией, может быть легко получен
+с помощью запроса SELECT без оформления ХФ. Однако использование
+даже такой несложной функции вместо обычного запроса SELECT дает
+ряд преимуществ (простота доступа, сокращение объема кода
+клиентского приложения и другие, описанные ранее), не говоря уже
+о функциях, реализующих более сложные алгоритмы.
+*/
+
+
+/*
+В PostgreSQL при возврате множества значений используется тип
+SETOF [RECORD], например так:
+*/
+
+CREATE OR REPLACE FUNCTION List_abonent
+(
+    Str TEXT
+)
+    RETURNS SETOF Abonent
+AS $$
+BEGIN
+    RETURN QUERY
+        SELECT *
+        FROM Abonent
+        WHERE Streetid = (
+                         SELECT Streetid
+                         FROM Street
+                         WHERE Streetnm = Str
+                         );
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Выведем все данные абонентов, проживающих на заданной улице:
+*/
+
+SELECT *
+FROM List_abonent('МОСКОВСКОЕ ШОССЕ');
+
+
+
+/*
+В качестве следующего примера преобразуем ХП Factorial,
+вычисляющую факториал числа, в функцию F_factorial.
+Запрос на определение такой функции более компактный, чем
+определение аналогичной ХП:
+*/
+
+drop function F_factorial;
+CREATE OR REPLACE FUNCTION F_factorial (Num INT)
+    RETURNS NUMERIC
+    LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    result NUMERIC;
+BEGIN
+    IF (Num < 0) THEN
+        RETURN NULL;
+    END IF;
+    IF (Num = 0 OR Num = 1) THEN
+        RETURN 1;
+    ELSE
+        CALL Factorial(Num, result);  -- ← вызов процедуры через CALL
+        RETURN result;                -- ← возвращаем полученное значение
+    END IF;
+END;
+$$;
+
+/*
+Созданную функцию F_factorial можно вызвать соответственно так:
+*/
+
+SELECT F_factorial(3);
+
+/*
+или с параметром
+*/
+
+SELECT F_factorial(:N);
+
+/*
+Результат выполнения запроса будет аналогичен представленному
+
+Важно отметить, что в отличие от ХП, скалярная функция может
+быть указана в любом месте выражения, в том числе в вычисляемых
+столбцах и определениях ограничений CHECK, например:
+*/
+
+SELECT *
+FROM Paysumma
+LIMIT F_factorial(3);
+
+/*
+Примером определения функции с выходным параметром может
+следующий скрипт:
+*/
+
+CREATE OR REPLACE FUNCTION Err_exception (OUT Rez INTEGER)
+    LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    Code TEXT;
+    Msg TEXT;
+    Context TEXT;
+BEGIN
+    Rez = COUNT(*) FROM Abonent;
+END;
+$$;
+
+/*
+Примеры вызова:
+*/
+
+SELECT *
+FROM Err_exception();
+SELECT Err_exception();
+
+
+CREATE OR REPLACE FUNCTION Err_exception (OUT Rez INT)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    Code TEXT;
+    Msg TEXT;
+    Context TEXT;
+BEGIN
+    SELECT COUNT(*) FROM Abonent INTO Rez;
+EXCEPTION
+    WHEN OTHERS THEN
+        Rez := 0;
+        GET STACKED DIAGNOSTICS
+            Code := RETURNED_SQLSTATE,
+            Msg := MESSAGE_TEXT,
+            Context := PG_CONTEXT;
+        RAISE NOTICE 'Код ошибки: %. Текст сообщения об ошибке:
+%. Контекст ошибки: %', Code, Msg, Context;
+END;
+$$;
+
+/*
+В приведенном скрипте создается ХФ с выходным параметром,
+в которой производится расчет количества строк в таблице.
+С помощью оператора GET STACKED DIAGNOSTICS осуществляется
+диагностика возникающих ошибок. В последнем случае, так как
+таблица Abonen не определена, выполнение функции в следующем
+DO-блоке:
+*/
+
+DO $$
+    DECLARE
+        Rez INTEGER;
+    BEGIN
+        SELECT E.Rez INTO Rez FROM Err_exception() AS E;
+        RAISE NOTICE 'Результат: %', Rez;
+    END; $$;
+
+/*
+дает результат, равный 0, и полную информацию о возникшей ошибке:
+
+Код ошибки: 42P01. Текст сообщения об ошибке: отношение "abonen"
+не существует. Контекст ошибки: функция PL/pgSQL err_exception(),
+строка 12, оператор GET STACKED DIAGNOSTICS SQL-оператор:
+"SELECT E.Rez FROM Err_exception() AS E"
+функция PL/pgSQL inline_code_block, строка 5, оператор SQL-оператор
+Результат: 0
+
+Рассмотрим пример DDL-сценария создания функции List_abonent
+с входными параметрами M и G и перехватом некоторых ошибок.
+Входные параметры используются для отбора строк, содержащих
+информацию о платах больше 1500, произведенных абонентом
+за заданный месяц (M) указанного года (G):
+*/
+
+
+CREATE OR REPLACE FUNCTION List_abonent
+(
+M TMonth, G Tyear
+)
+    RETURNS TABLE
+            (
+                L_accountid VARCHAR(6),
+                L_fio       VARCHAR(30),
+                L_date      DATE,
+                L_sum       Currency,
+                L_month     Tmonth,
+                L_pay       Tyear
+            )
+    LANGUAGE PLPGSQL
+AS $$
+BEGIN
+    -- Инициирование исключения
+    -- если месяц не задан, выводится соответствующее сообщение
+    IF M IS NULL
+    THEN
+        RAISE EXCEPTION 'Не задан месяц';
+    END IF;
+
+    -- Инициирование исключения
+    -- если год не задан, то выводится предупреждение
+    IF G IS NULL
+    THEN
+        RAISE EXCEPTION 'Не задан год';
+    END IF;
+
+    RETURN QUERY
+        SELECT A.Accountid,
+               A.Fio,
+               P.Paydate,
+               P.Paysum,
+               P.Paymonth,
+               P.Payyear
+        FROM Abonent  A,
+             Paysumma P
+        WHERE A.Accountid = P.Accountid
+          AND P.Paysum > 1500
+          AND P.Paymonth = M
+          AND P.Payyear = G;
+END $$;
+
+/*
+Проверочные запросы могут быть следующими:
+*/
+
+SELECT * FROM List_abonent(NULL::Tmonth, NULL::Tyear);
+SELECT * FROM List_abonent(12::Tmonth, NULL::Tyear);
+SELECT * FROM List_abonent(13::Tmonth, 2022::Tyear);
+
+/*
+Если функция определена с указанием входных параметров, то их
+задание при выводе функции в запросе SELECT является обязательным.
+Например, чтобы вывести все сведения о значениях плат, больших
+1500, за март 2025 г., необходимо выполнить запрос
+*/
+
+SELECT *
+FROM List_abonent(2::Tmonth, 2025::Tyear);
+
+/*
+Результат выполнения запроса к модифицированной
+функции List_abonent
+
+Набор данных, возвращаемый ХФ, можно использовать в соединении
+с базовой таблицей, например:
+*/
+
+SELECT *
+FROM Nachislsumma                                        N
+         INNER JOIN List_abonent(3::Tmonth, 2025::Tyear) s
+         ON N.Accountid = S.L_accountid
+WHERE N.Nachislyear = S.L_pay
+  AND N.Nachislmonth = S.L_month;
+
+/*
+Запрос вызова ХФ может быть параметризированным, например таким:
+*/
+
+SELECT *
+FROM List_abonent(:Par_1::Tmonth, :Par_2::Tyear);
+
+/*
+Рассмотрим пример функции, в которой используется обновляемый
+явный курсор для позиционированного удаления и обновления строк
+таблицы.
+Создадим функцию Exec_Req, которая путем
+позиционированной модификации строк таблицы Request удаляет
+все невыполненные ремонтные заявки, а все непогашенные ремонтные
+заявки преобразует в погашенные.
+При этом в таблицу Executor заносится дополнительная информация
+по исполнителям, для которых последним произведено удаление
+или погашение заявок. Соответствующий DDL-скрипт выглядит так:
+*/
+
+ALTER TABLE Executor
+    ADD Info VARCHAR(40);
+
+
+DROP FUNCTION IF EXISTS Exec_Req();
+
+CREATE OR REPLACE FUNCTION Exec_Req
+(
+)
+    RETURNS TABLE
+            (
+                Ecode Pkfield,
+                Ename VARCHAR(20),
+                Einfo VARCHAR(40)
+            )
+    LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    Edate DATE;
+    Exec  BOOLEAN;
+    Req CURSOR FOR
+        SELECT Executorid, Executiondate, Executed
+        FROM Request;
+BEGIN
+    OPEN Req;
+    LOOP
+        FETCH Req INTO Ecode, Edate, Exec;
+        IF NOT FOUND
+        THEN
+            EXIT;
+        END IF;
+        IF Edate IS NULL
+        THEN
+            DELETE FROM Request WHERE CURRENT OF Req;
+            UPDATE Executor
+            SET Info = 'DEL_NotExec'
+            WHERE Executorid = Ecode;
+        ELSIF NOT Exec
+        THEN
+            UPDATE Request SET Executed = TRUE WHERE CURRENT OF Req;
+            UPDATE Executor
+            SET Info = 'UPD_Executed'
+            WHERE Executorid = Ecode;
+        END IF;
+    END LOOP;
+    CLOSE Req;
+    RETURN QUERY
+        SELECT Executorid, Fio, Info
+        FROM Executor
+        ORDER BY Executorid;
+END;
+    $$;
+
+/*
+В начале скрипта с помощью запроса ALTER TABLE в таблицу Executor
+добавляется столбец Info. После этого создается функция Exec_Req,
+в которой сначала явным курсором Req выполняется выборка строк
+из таблицы Request, а затем проверяется ряд условий.
+
+Если очередная ремонтная заявка не выполнена (Edate IS NULL),
+то происходит ее позиционированное удаление, а в таблице Executor
+столбец Info получает значение 'DEL_NotExec' (признак того,
+что для данного исполнителя удалены невыполненные заявки).
+
+Если выполненная ремонтная заявка не погашена (NOT Exec),
+то происходит позиционированное обновление (Executed = TRUE)
+той строки, на которой установлен курсор Req.
+
+
+Затем в таблице Executor происходит обновление столбца
+Info. Столбец Info получает значение 'UPD_Executed' (признак того,
+что для данного исполнителя непогашенные ранее заявки погашены).
+
+Если очередная ремонтная заявка и выполнена, и погашена,
+то позиционированная модификация строки в таблице Request
+не выполняется и для исполнителя соответствующей заявки в таблице
+Executor столбец Info не обновляется (содержит NULL).
+
+Затем курсор Reg закрывается, и с помощью RETURN QUERY
+возвращается содержимое таблицы Executor.
+
+Функция Exec_reg выполняется с помощью запроса:
+*/
+
+SELECT *
+FROM Exec_Req();
+
+SELECT current_database();
+
+SELECT proname
+FROM pg_proc
+WHERE proname ILIKE '%exec%';
+
+/*
+Результат работы функции Exec_Reg
+
+Предыдущие примеры ХФ были просто на манипулирование данными
+таблиц. С целью получения новых сведений рассмотрим пример
+решения задачи получения информации о начислениях, платежах
+и денежных остатках у заданного абонента по заданной услуге
+на начало и на конец каждого месяца определенного периода.
+
+Под значением оборота начислений за заданный период Nachisl
+будем понимать сумму всех значений начислений (Nachislsum)
+за рассматриваемый период:
+
+Nachisl = SUM(Nachislsum)
+
+а под значением оборота платежей за заданный период Pay —
+сумму всех значений платежей (Paysum) за рассматриваемый период:
+
+Pay = SUM(Paysum)
+
+Под значением остатка на конец заданного периода Result_ostatok
+будем понимать остаток на начало этого периода (Begin_ostatok)
+плюс оборот начислений за заданный период (Oborot_nachisl)
+и минус оборот платежей за этот же период (Oborot_pay), т.е.:
+
+Result_ostatok = Begin_ostatok + Oborot_nachisl - Oborot_pay
+
+Непременным условием является равенство сальдо на начало
+определенного периода и сальдо на конец предшествующего периода.
+В качестве отчетного периода может использоваться как один,
+так и несколько месяцев.
+
+Представим решение данной задачи в трех вариантах.
+Первый вариант DDL-скрипта в виде единого модуля без вложений
+может быть следующим:
+*/
+
+CREATE FUNCTION oborot_saldo_vedomost
+(
+Argaccount VARCHAR(6), Argserviceid Pkfield, Argmonth Tmonth, Argnyear Tyear, Argfmonth Tmonth, Argfyear Tyear
+)
+    RETURNS TABLE
+            (
+                Nachislmonth   Tmonth,
+                Nachislyear    Tyear,
+                Begin_ostatok  Currency,
+                Nachisl        Currency,
+                Pay            Currency,
+                Result_ostatok Currency
+            )
+    LANGUAGE PLPGSQL
+AS $$
+BEGIN
+    SELECT
+        -- вычисление остатка на начало 1-го месяца периода
+
+        -- сумма начислений на начало 1-го месяца периода
+        (COALESCE((
+                  SELECT SUM(N.Nachislsum) SumNach
+                  FROM Nachislsumma N
+                  WHERE N.Accountid = Argaccount
+                    AND N.Serviceid = Argserviceid
+                    AND (N.Nachislyear < Argnyear
+                      OR (N.Nachislyear = Argnyear
+                          AND N.Nachislmonth < Argmonth))
+                  ), 0)
+            -
+            -- сумма оплат на начало 1-го месяца периода
+         COALESCE((
+                  SELECT SUM(P.Paysum) SumPay
+                  FROM Paysumma P
+                  WHERE P.Accountid = Argaccount
+                    AND P.Serviceid = Argserviceid
+                    AND (P.Payyear < Argnyear
+                      OR (P.Payyear = Argnyear
+                          AND P.Paymonth < Argmonth))
+                  ), 0))
+    INTO Begin_ostatok;
+
+    LOOP
+        SELECT
+            -- начисление за месяц
+            COALESCE((
+                     SELECT SUM(Na.Nachislsum)
+                     FROM Nachislsumma Na
+                     WHERE Na.Accountid = Argaccount
+                       AND Na.Serviceid = Argserviceid
+                       AND Na.Nachislyear = Argnyear
+                       AND Na.Nachislmonth = Argmonth
+                     ), 0),
+            -- оплата за месяц
+            COALESCE((
+                     SELECT SUM(Pa.Paysum)
+                     FROM Paysumma Pa
+                     WHERE Pa.Accountid = Argaccount
+                       AND Pa.Serviceid = Argserviceid
+                       AND Pa.Payyear = Argnyear
+                       AND Pa.Paymonth = Argmonth
+                     ), 0)
+        INTO Nachisl, Pay;
+
+        -- вычисление остатка на конец месяца
+        Result_ostatok = Begin_ostatok + (Nachisl - Pay);
+        Nachislmonth = Argmonth;
+        Nachislyear = Argnyear;
+        RETURN NEXT;
+        Begin_ostatok = Result_ostatok;
+
+        IF Argmonth = Argfmonth AND Argnyear = Argfyear
+        THEN
+            RETURN;
+        END IF;
+
+        IF Argmonth = 12
+        THEN
+            Argnyear = Argnyear + 1;
+            Argmonth = 1;
+        ELSE
+            Argmonth = Argmonth + 1;
+        END IF;
+    END LOOP;
+END;
+$$;
+
+/*
+Функция Oborot_saldo_vedomost для определенного абонента
+(Argaccount) по указанной услуге (Argserviceid) по каждому месяцу,
+попадающему в заданный период (от месяца Argmonth в Argnyear году
+до месяца Argfmonth в Argfyear году), вычисляет и выводит:
+
+1) значение денежного остатка на начало первого месяца периода
+   (Begin_ostatok);
+2) сумму значений начислений за каждый месяц периода (Nachisl);
+3) сумму значений плат за каждый месяц периода (Pay);
+4) значение денежного остатка на конец каждого месяца периода
+   (Result_ostatok).
+
+При каждом проходе цикла запрос возвращает одну строку
+с информацией за очередной месяц. Информация выводится по каждому
+месяцу анализируемого периода, а не только по тем месяцам,
+за которые есть начисление или оплата в таблицах соответственно
+Nachislsumma или Paysumma. В цикле также происходит переход
+к следующему месяцу. Работа функции заканчивается после того,
+как будет выведена информация за последний месяц заданного
+периода (месяц Argfmonth, год Argfyear).
+
+Например, чтобы вывести информацию о начислениях, оплатах
+и об остатках у абонента с номером лицевого счета '015527'
+по услуге с кодом 1 за период с января 2024 г. по май 2025 г.
+включительно, необходимо выполнить запрос:
+*/
+
+SELECT *
+FROM oborot_saldo_vedomost(
+        '015527', 1::PkField,
+        1::TMonth, 2024::TYear,
+        5::TMonth, 2025::TYear
+     );
+
+
+
+
+/*
+Использование параметризированного запроса позволит обеспечить
+более высокую гибкость при задании кода услуги:
+*/
+
+SELECT *
+FROM Oborot_saldo_vedomost('015527', :Par::Pkfield,
+                           1::Tmonth, 2024::Tyear,
+                           5::Tmonth, 2025::Tyear);
+
+/*
+Во втором варианте решения представим вышеприведенную функцию
+в виде трех функций, чтобы показать возможность вызова одной
+функции из другой.
+Приведем скрипты функций для последовательного решения следующих
+задач:
+
+1) расчет и вывод значения остатка на начало заданного периода
+   (Saldo_n);
+2) расчет и вывод значений оборотов начислений и плат в разрезе
+   месяцев заданного периода (Oborot_vedomost);
+3) расчет и вывод значений остатков на начало и конец каждого
+   месяца заданного периода, а также значений оборотов начислений
+   и плат за каждый месяц заданного периода (Oborot_Saldo_vedomost).
+
+DDL-скрипт функции Saldo_n для расчета и вывода значения остатка
+на начало первого месяца заданного периода для заданного абонента
+по заданной услуге:
+*/
+
+CREATE OR REPLACE FUNCTION Saldo_n (
+                                   Argaccount VARCHAR(6),
+                                   Argserviceid Pkfield,
+                                   Argmonth Tmonth,
+                                   Argnyear Tyear
+)
+    RETURNS TABLE (
+                      Nachislmonth Tmonth,
+                      Nachislyear Tyear,
+                      Begin_ostatok Currency
+                  )
+    LANGUAGE PLPGSQL
+AS
+$$
+BEGIN
+    -- вычисление остатка на начало 1-го месяца периода
+    -- сумма начислений на начало 1-го месяца периода
+    SELECT
+        (COALESCE((SELECT SUM(N.Nachislsum) SumNach
+                   FROM Nachislsumma N
+                   WHERE N.Accountid = Argaccount
+                     AND N.Serviceid = Argserviceid
+                     AND (N.Nachislyear < Argnyear
+                       OR (N.Nachislyear = Argnyear
+                           AND N.Nachislmonth < Argmonth))), 0)
+            -
+            -- сумма оплат на начало 1-го месяца периода
+         COALESCE((SELECT SUM(P.Paysum) SumPay
+                   FROM Paysumma P
+                   WHERE P.Accountid = Argaccount
+                     AND P.Serviceid = Argserviceid
+                     AND (P.Payyear < Argnyear
+                       OR (P.Payyear = Argnyear
+                           AND P.Paymonth < Argmonth))), 0))
+    INTO Begin_ostatok;
+
+    Nachislmonth = Argmonth;
+    Nachislyear = Argnyear;
+    RETURN NEXT;
+END;
+$$;
+
+/*
+Функция Saldo_n для определенного абонента (Argaccount)
+по указанной услуге (Argserviceid) рассчитывает и выводит значение
+денежного остатка (Begin_ostatok) на начало заданного месяца
+(Argmonth, Argnyear) как разницу между суммами всех значений
+начислений и плат за весь период, предшествующий заданному
+месяцу.
+
+Например, чтобы вывести значение остатка на начало марта 2024 г.
+у абонента с номером лицевого счета '015527' по услуге с кодом 1,
+необходимо выполнить запрос:
+*/
+
+SELECT *
+FROM Saldo_n('015527', 1::Pkfield, 3::Tmonth, 2024::Tyear);
+
+/*
+Анализируя результаты выполнения запроса,можно установить,
+что у абонента с лицевым счетом '015527' на начало января 2024
+по услуге с кодом 1, имеется переплата, равная 1.68 условных единиц.
+
+Используя созданную ХФ можно достаточно просто вычислить
+значения остатков на начало, например первого и последнего
+месяцев заданного периода:
+*/
+
+SELECT *
+FROM Saldo_n('015527', 1::Pkfield, 1::Tmonth, 2024::Tyear)
+UNION
+SELECT *
+FROM Saldo_n('015527', 1::Pkfield, 12::Tmonth, 2025::Tyear)
+ORDER BY 1;
+
+/*
+DDL-скрипт функции Oborot_vedomost для расчета и вывода значений
+оборотов начислений (Nachisl) и плат (Pay) за заданный месяц
+имеет следующий вид:
+*/
+
+CREATE OR REPLACE FUNCTION Oborot_vedomost (
+                                           Argaccount VARCHAR(6),
+                                           Argserviceid Pkfield,
+                                           Argmonth Tmonth,
+                                           Argnyear Tyear
+)
+    RETURNS TABLE (Nachisl Currency, Pay Currency)
+    LANGUAGE PLPGSQL
+AS
+$$
+BEGIN
+    SELECT
+        -- сумма начислений за месяц
+        COALESCE((SELECT SUM(Na.Nachislsum)
+                  FROM Nachislsumma Na
+                  WHERE Na.Accountid = Argaccount
+                    AND Na.Serviceid = Argserviceid
+                    AND Na.Nachislyear = Argnyear
+                    AND Na.Nachislmonth = Argmonth), 0),
+        -- сумма плат за месяц
+        COALESCE((SELECT SUM(Pa.Paysum)
+                  FROM Paysumma Pa
+                  WHERE Pa.Accountid = Argaccount
+                    AND Pa.Serviceid = Argserviceid
+                    AND Pa.Payyear = Argnyear
+                    AND Pa.Paymonth = Argmonth), 0)
+    INTO Nachisl, Pay;
+
+    RETURN NEXT;
+END;
+$$;
+
+/*
+Функция Oborot_vedomost для определенного абонента (Argaccount)
+по указанной услуге (Argserviceid) за заданный месяц выводит
+суммы значений начислений (Nachisl) и плат (Pay).
+
+Например, следующий запрос выдаст оборотную ведомость абонента
+с номером лицевого счета '015527' по услуге с кодом 1 за февраль
+2024 года:
+*/
+
+SELECT *
+FROM Oborot_vedomost('015527', 1::Pkfield, 2::Tmonth, 2024::Tyear);
+
+
+/*
+DDL-скрипт функции Oborot_saldo_vedomost, отвечающей за:
+- расчет и вывод значений остатков на начало каждого месяца заданного периода,
+- расчет и вывод значений остатков на конец каждого месяца заданного периода,
+- а также значений оборотов начислений и платы
+за каждый месяц заданного периода:
+*/
+
+CREATE OR REPLACE FUNCTION Oborot_saldo_vedomost
+(
+Argaccount VARCHAR(6), Argserviceid PkField, Argmonth Tmonth, Argyear Tyear, Argfmonth Tmonth, Argfyear Tyear
+)
+    RETURNS TABLE
+            (
+                Nachislmonth   Tmonth,
+                Nachislyear    Tyear,
+                Begin_ostatok  Currency,
+                Nachisl        Currency,
+                Pay            Currency,
+                Result_ostatok Currency
+            )
+    LANGUAGE PLPGSQL
+AS
+$$
+BEGIN
+    -- вычисление остатка на начало 1-го месяца периода
+    SELECT *
+    FROM Saldo_n(Argaccount, Argserviceid, Argmonth, Argyear)
+    INTO Nachislmonth, Nachislyear, Begin_ostatok;
+
+    SELECT *
+    FROM Oborot_vedomost(Argaccount, Argserviceid, Argmonth, Argyear)
+    INTO Nachisl, Pay;
+
+    Result_ostatok = Begin_ostatok + (Nachisl - Pay);
+    Nachislmonth = Argmonth;
+    Nachislyear = Argyear;
+    RETURN NEXT;
+
+    -- выборка значений начислений и плат за каждый месяц периода
+    -- и расчёт остатка на конец месяца
+    LOOP
+        IF Argmonth = Argfmonth AND Argyear = Argfyear
+        THEN
+            RETURN;
+        END IF;
+
+        IF Argmonth = 12
+        THEN
+            Argyear = Argyear + 1;
+            Argmonth = 1;
+        ELSE
+            Argmonth = Argmonth + 1;
+        END IF;
+
+        -- выборка значений начислений и плат за каждый месяц периода
+        SELECT *
+        FROM Oborot_vedomost(Argaccount, Argserviceid, Argmonth, Argyear)
+        INTO Nachisl, Pay;
+
+        -- вычисление остатка на конец месяца
+        Begin_ostatok = Result_ostatok;
+        Result_ostatok = Begin_ostatok + (Nachisl - Pay);
+        Nachislmonth = Argmonth;
+        Nachislyear = Argyear;
+        RETURN NEXT;
+    END LOOP;
+END;
+$$;
+
+/*
+Пример вызова:
+*/
+
+SELECT *
+FROM Oborot_saldo_vedomost(
+        '015527', 1::PkField,
+        1::Tmonth, 2022::Tyear,
+        12::Tmonth, 2025::Tyear
+     );
+
+
+
+/*
+Приведем текст DDL-скрипт функции, осуществляющей проверку того,
+является ли входная строка вещественным числом:
+*/
+
+CREATE OR REPLACE FUNCTION Istr (Str VARCHAR(255))
+    RETURNS TABLE (Ir FLOAT)
+    LANGUAGE PLPGSQL
+AS
+$$
+BEGIN
+    IF (Str SIMILAR TO
+        '[+\-]?[0-9]*([0-9].|.[0-9])?[[:DIGIT:]]*' ESCAPE '\')
+    THEN
+        Ir = Str;
+        RETURN NEXT;
+    ELSE
+        RAISE EXCEPTION 'Не число';
+    END IF;
+EXCEPTION
+    WHEN SQLSTATE '22P02' THEN
+        RAISE EXCEPTION 'Пустая строка';
+END;
+$$;
+
+/*
+Здесь проверка входной строки на число осуществляется с помощью
+регулярного выражения. Функция возвращает вещественное число или
+сообщает путем вызова исключения, что входная строка не является
+числом. Оператор WHEN обрабатывает ошибку при задании пустой
+строки в качестве параметра (код ошибки равен 22P02).
+
+Примеры вызова функции Istr:
+*/
+
+SELECT * FROM Istr('25');
+SELECT * FROM Istr('25.54');
+SELECT * FROM Istr('-25.5');
+SELECT * FROM Istr((+123.45)::TEXT);
+SELECT * FROM Istr('SQL');
+SELECT * FROM Istr('');
+SELECT * FROM Istr(:Par);
+
+/*
+Если входному параметру Str присвоить значение по умолчанию:
+*/
+
+CREATE OR REPLACE FUNCTION Istr(Str VARCHAR(255) = 'Здравствуйте')
+    RETURNS TABLE (Ir FLOAT)
+    LANGUAGE PLPGSQL
+AS
+$$
+BEGIN
+    IF (Str SIMILAR TO
+        '[+\-]?[0-9]*([0-9].|.[0-9])?[[:DIGIT:]]*' ESCAPE '\')
+    THEN
+        Ir = Str;
+        RETURN NEXT;
+    ELSE
+        RAISE EXCEPTION 'Не число';
+    END IF;
+EXCEPTION
+    WHEN SQLSTATE '22P02' THEN
+        RAISE EXCEPTION 'Пустая строка';
+END;
+$$;
+
+/*
+то выполнять эту функцию можно без аргументов:
+*/
+
+SELECT * FROM Istr();
+
+/*
+В этом варианте проверяется на соответствие регулярному выражению
+либо передаваемое значение параметра, либо значение по умолчанию
+при отсутствии параметра. Такой подход является более гибким
+по сравнению с представленным ранее благодаря возможности вызова
+функции без параметра.
+
+Функция, в отличие от ХП, может быть усложнена как "внутри",
+так и "снаружи", т. е. она поддается сортировке, группировке
+и соединению.
+
+Следует отметить, что PostgreSQL позволяет вызывать функции
+с именованными параметрами, используя позиционную или именованную
+нотации. В позиционной нотации вызов функции записывается
+со значениями аргументов в том же порядке, в каком они определены
+в объявлении функции. В именованной нотации аргументы
+соответствуют параметрам функции по имени и могут быть записаны
+в любом порядке.
+
+В любой нотации параметры, которые имеют значения по умолчанию,
+заданные в объявлении функции, вообще не нужно записывать
+при вызове. Но это особенно полезно в именованной нотации,
+так как любая комбинация параметров может быть опущена, в то
+время как в позиционной нотации параметры могут быть опущены
+только справа налево.
+
+PostgreSQL также поддерживает смешанную нотацию, в которой
+сочетаются позиционная и именованная нотации. В этом случае
+сначала записываются позиционные параметры, а после них
+появляются именованные параметры.
+
+Следующие примеры иллюстрируют использование всех трех нотаций,
+используя следующее определение функции:
+*/
+
+CREATE FUNCTION Executed_or_not_executed (
+                                         A VARCHAR(6),
+                                         B VARCHAR(6),
+                                         U BOOLEAN DEFAULT FALSE
+)
+    RETURNS TABLE (Acc VARCHAR(6), Incom DATE)
+    LANGUAGE plpgsql
+AS
+$$
+BEGIN
+    IF ($3) THEN
+        RETURN QUERY
+            SELECT AccountId, Incomingdate
+            FROM Request
+            WHERE (AccountId = $1 OR AccountId = $2)
+              AND Executed;
+    ELSE
+        RETURN QUERY
+            SELECT AccountId, Incomingdate
+            FROM Request
+            WHERE (AccountId = $1 OR AccountId = $2)
+              AND NOT Executed;
+    END IF;
+END;
+$$;
+
+/*
+Функция Executed_or_not_executed имеет два обязательных параметра
+A и B. Кроме того, есть один необязательный параметр U, который
+по умолчанию имеет значение FALSE. Функция выдает ID абонента
+и дату регистрации погашенных и непогашенных его заявок
+в зависимости от параметра U.
+
+Позиционная нотация — это традиционный механизм передачи
+аргументов в функции PostgreSQL:
+*/
+
+SELECT * FROM Executed_or_not_executed ('005488'::VARCHAR(6), '115705'::VARCHAR(6), TRUE);
+
+/*
+Все аргументы указаны по порядку. Результатом является погашение
+заявки, поскольку U указан как TRUE.
+*/
+
+SELECT * FROM Executed_or_not_executed ('005488'::VARCHAR(6), '115705'::VARCHAR(6));
+
+/*
+Здесь параметр U опущен, поэтому он получает значение по умолчанию
+FALSE, что приводит к выводу непогашенных заявок. В позиционной
+записи аргументы можно опускать справа налево, если они имеют
+значения по умолчанию.
+
+В именованной нотации имя каждого аргумента указывается с помощью
+"=>", чтобы отделить его от выражения аргумента, например:
+*/
+
+SELECT * FROM Executed_or_not_executed (A => '005488', B => '115705');
+SELECT * FROM Executed_or_not_executed (A => '005488', B => '115705', U => TRUE);
+SELECT * FROM Executed_or_not_executed (A => '005488', U => TRUE, B => '115705');
+SELECT * FROM Executed_or_not_executed (U => true, B => '115705', A => '005488');
+
+/*
+Смешанная нотация сочетает в себе позиционную и именную нотации.
+Однако, как уже упоминалось, именованные аргументы не могут
+предшествовать позиционным аргументам. Например:
+*/
+
+SELECT * FROM Executed_or_not_executed ('005488', '115705', U => TRUE);
+
+/*
+В приведенном выше запросе аргументы А и В указаны позиционно,
+а U — по имени. В более сложной функции, имеющей множество
+параметров, имеющих значения по умолчанию, именованная или
+смешанная нотация может сэкономить много времени на написание
+и снизить вероятность ошибки.
+
+Удаление функции в PostgreSQL производится следующим запросом:
+
+DROP FUNCTION [IF EXISTS] имя_функции
+[([(<режим_параметра>) [имя_параметра]] тип_данных_параметра
+[, ... ] ) ] [, ... ]
+[CASCADE | RESTRICT]
+
+Кроме имени функции необходимо указать типы ее аргументов, так как
+в БД могут существовать несколько функций с одним именем, но
+с разными списками аргументов.
+
+После изучения хранимых функций и процедур целесообразно показать
+различия между ними. Основные различия в PostgreSQL приведены
+в табл. 9.1.
+
+Хранимые функции и процедуры в PostgreSQL служат различным целям:
+функции, как правило, используются для вычисления и возвращения
+значений, в то время как процедуры чаще применяются для
+выполнения операций, осуществляемых над данными с возможностью
+управления транзакциями. Поддерживают механизм обработки
+исключений с использованием блоков EXCEPTION, что позволяет
+обрабатывать ошибки и исключительные ситуации в рамках
+исполнения функции и процедуры. Выбор между использованием
+функций или процедуры в большей степени зависит от конкретной
+задачи, которую нужно решить. Версии PostgreSQL, начиная с 11,
+усиливают гибкость и возможности разработчиков благодаря
+улучшениям в механизмах управления транзакциями и обработки
+исключений, предоставляя разработчикам мощные инструменты для
+создания различных процедур и функций, позволяющих реализовывать
+как простые, так и сложные логики обработки данных.
+*/
+
+/*
+Различие между хранимыми процедурами и функциями
+
++----------------------+------------------------------------------+----------------------------------------------+
+| Параметр             | Процедуры                                | Функции                                      |
++----------------------+------------------------------------------+----------------------------------------------+
+| Входные параметры    | Могут принимать                          | Могут принимать                              |
+| Возвращаемое значение| Не предназначены для возврата данных.    | Могут возвращать значения базовых типов,     |
+|                      | Используются для выполнения задач,       | составных типов, наборы строк или таблицы.   |
+|                      | включающих изменения в БД или управление | Подходят для использования в запросах, где   |
+|                      | транзакциями.                            | требуется обработка и возврат данных.        |
++----------------------+------------------------------------------+----------------------------------------------+
+| Использование в      | Нельзя вызвать напрямую в SQL-запросах.  | Можно вызывать непосредственно в SQL-запро-  |
+| запросах SELECT      | Вызываются с помощью CALL.               | сах, так как возвращают результаты.          |
++----------------------+------------------------------------------+----------------------------------------------+
+| Транзакции           | Позволяют управлять транзакциями         | Менее гибкие в управлении транзакциями,      |
+|                      | (BEGIN, COMMIT, ROLLBACK).               | но могут быть использованы внутри транзакций |
++----------------------+------------------------------------------+----------------------------------------------+
+| DML-операции         | Идеально подходят для выполнения         | Нет, но могут вызывать хранимые процедуры    |
+|                      | операций, влияющих на данные.            |                                              |
++----------------------+------------------------------------------+----------------------------------------------+
+| Исключения           | Поддерживают                             | Поддерживают                                 |
++----------------------+------------------------------------------+----------------------------------------------+
+*/
+
+
+
+
+
+/*613 - Процедурное программирование*/
 
