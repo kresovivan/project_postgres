@@ -1,15 +1,15 @@
 -- =============================================================================
--- ИДЕАЛЬНАЯ БАЗА ДЛЯ ДЕМОНСТРАЦИИ АЛГОРИТМОВ POSTGRESQL (v5.0 — FINAL)
--- Все примеры гарантированно показывают нужный алгоритм
+-- ИДЕАЛЬНАЯ БАЗА ДЛЯ ДЕМОНСТРАЦИИ АЛГОРИТМОВ POSTGRESQL (v6.0 — ДОПОЛНЕНО PG 17)
 -- =============================================================================
 
--- 0. СТАНДАРТНЫЕ НАСТРОЙКИ (без RESET ALL!)
+-- 0. СТАНДАРТНЫЕ НАСТРОЙКИ
 SET enable_indexscan = on;
 SET enable_bitmapscan = on;
 SET enable_seqscan = on;
 SET enable_hashjoin = on;
 SET enable_mergejoin = on;
 SET enable_nestloop = on;
+SET enable_memoize = on; -- PG 14+ (кеш Nested Loop)
 SET cpu_tuple_cost = 0.01;
 SET cpu_index_tuple_cost = 0.005;
 SET cpu_operator_cost = 0.0025;
@@ -96,7 +96,7 @@ CREATE INDEX idx_cust_city ON customers (city);
 CREATE INDEX idx_products_price ON products (price);
 CREATE INDEX idx_orders_scattered_date ON orders_scattered (order_date);
 
--- 8. CLUSTER для Index Scan!
+-- 8. CLUSTER
 CLUSTER orders USING idx_orders_date;
 
 -- 9. Статистика
@@ -105,441 +105,420 @@ ANALYZE customers;
 ANALYZE orders;
 ANALYZE orders_scattered;
 
+
 /*
 =============================================================================
-Глава 1. СКАНИРОВАНИЕ (Access Methods)
+Глава 1. СКАНИРОВАНИЕ
 =============================================================================
-Как PostgreSQL читает данные из таблицы.
-Выбор алгоритма зависит от того, сколько строк нужно вернуть.
 */
 
 -- =============================================================================
--- ПРИМЕР 1.1: Seq Scan (Последовательное сканирование)
+-- ПРИМЕР 1.1: Seq Scan
 -- =============================================================================
--- АЛГОРИТМ: Читаем ВСЮ таблицу страница за страницей, от корки до корки.
---           Каждую прочитанную строку проверяем фильтром WHERE.
---           Неподходящие строки отбрасываются (Rows Removed by Filter).
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Нужно > 30-50% всех строк таблицы
---   • Таблица очень маленькая (< 10-50 страниц)
---   • Нет подходящего индекса
---   • Нужны все строки таблицы (SELECT * без WHERE)
---
--- АНАЛОГИЯ: Читать книгу от корки до корки, чтобы найти все упоминания слова "война".
---          Если слово встречается на каждой второй странице — это быстрее,
---          чем смотреть в указатель и прыгать туда-сюда.
---
--- ПЛЮСЫ:  Последовательное чтение — самый быстрый способ чтения с диска.
---          Не требует индексов. Предсказуемый I/O.
--- МИНУСЫ: Читает ВООБЩЕ ВСЁ, даже ненужные строки.
---          На больших таблицах с маленькой выборкой — ОГРОМНЫЕ накладные расходы.
-
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM orders
 WHERE status = 'Completed';
-
 /*
 Seq Scan on orders  (cost=0.00..19866.10 rows=698732 width=29) (actual time=0.011..67.901 rows=700408 loops=1)
   Filter: ((status)::text = 'Completed'::text)
   Rows Removed by Filter: 300240
   Buffers: shared hit=7358
-Planning:
-  Buffers: shared hit=29 read=3
-Planning Time: 0.197 ms
-Execution Time: 82.319 ms
-
 */
 
 -- =============================================================================
--- ПРИМЕР 1.2: Index Scan (Индексное сканирование)
+-- ПРИМЕР 1.2: Index Scan
 -- =============================================================================
--- АЛГОРИТМ: Сначала читаем индекс (B-дерево), находим ТОЧНЫЕ адреса (TID) нужных
---           строк. Затем идём в таблицу (heap) и читаем ТОЛЬКО эти строки.
---           Каждая строка читается ОТДЕЛЬНО (рандомный I/O).
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Нужно < 5% строк таблицы (высокая селективность)
---   • Данные ФИЗИЧЕСКИ скучены (CLUSTER) — тогда чтение почти последовательное
---   • Точечный запрос: WHERE id = 123, WHERE date = '2024-06-15'
---   • Index Only Scan: все нужные столбцы ЕСТЬ в индексе (не требует чтения heap)
---
--- АНАЛОГИЯ: Предметный указатель в конце учебника.
---          "Москва — стр. 42, 56, 128". Открываем ТОЛЬКО эти страницы.
---
--- ПЛЮСЫ:  Читаем ТОЛЬКО нужные строки. Для точечных запросов — молниеносно.
--- МИНУСЫ: Если строки РАЗБРОСАНЫ по таблице — получаем random I/O (медленно!).
---          Если данных > 10% — может быть МЕДЛЕННЕЕ Seq Scan.
---
--- ВАЖНО:  Мы сделали CLUSTER orders USING idx_orders_date.
---         Теперь строки за одну дату лежат НА ОДНИХ И ТЕХ ЖЕ страницах.
---         Index Scan превращается в почти последовательное чтение!
-
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM orders
 WHERE order_date = '2024-06-15';
-
 /*
-Index Scan using idx_orders_date on orders  (cost=0.17..16.11 rows=911 width=29) (actual time=0.028..0.115 rows=913 loops=1)
+Index Scan using idx_orders_date on orders (cost=0.17..16.11 rows=911 width=29) (actual time=0.028..0.115 rows=913 loops=1)
   Index Cond: (order_date = '2024-06-15'::date)
   Buffers: shared hit=11
-Planning:
-  Buffers: shared hit=138
-Planning Time: 0.710 ms
-Execution Time: 0.159 ms
-
-
 */
 
 -- =============================================================================
--- ПРИМЕР 1.3: Bitmap Scan (Сканирование битовой карты)
+-- ПРИМЕР 1.3: Bitmap Scan
 -- =============================================================================
--- АЛГОРИТМ: ГИБРИД Index Scan и Seq Scan.
---   Шаг 1: Bitmap Index Scan — сканируем ТОЛЬКО индекс, собираем адреса страниц.
---   Шаг 2: Сортируем адреса страниц по возрастанию.
---   Шаг 3: Bitmap Heap Scan — читаем страницы ПОСЛЕДОВАТЕЛЬНО (как Seq Scan!).
---   Шаг 4: Recheck Cond — перепроверяем условие (на странице могут быть лишние строки).
---
--- КОГДА ПРИМЕНЯЕТСЯ (ЗОЛОТАЯ СЕРЕДИНА):
---   • Нужно 5-30% строк таблицы (средняя селективность)
---   • Данные физически РАЗБРОСАНЫ по таблице (нет CLUSTER)
---   • Несколько индексов можно скомбинировать: BitmapAnd, BitmapOr
---   • Index Scan слишком дорог (много random I/O), Seq Scan — слишком много лишнего
---
--- АНАЛОГИЯ: Фотографируем книжные полки и отмечаем на фото нужные книги.
---          Потом идём и снимаем их ПОДРЯД, а не прыгаем туда-сюда.
---
--- ПЛЮСЫ:  Превращает random I/O в sequential I/O.
---          Можно комбинировать несколько индексов (BitmapAnd / BitmapOr).
--- МИНУСЫ: Требует память под битмап (work_mem).
---          Если данных ОЧЕНЬ много — битмап не влезает в память.
---
--- СРАВНЕНИЕ С INDEX SCAN:
---   Index Scan: 1000 строк на 1000 разных страницах → 1000 random reads
---   Bitmap Scan: 1000 строк на 300 страницах → битмап + 300 sequential reads
---   Bitmap Scan ВЫГОДНЕЕ, если random_page_cost > seq_page_cost (обычно 4.0 > 1.0)
-
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM orders_scattered
 WHERE order_date BETWEEN '2024-06-01' AND '2024-06-30';
-
 /*
-Bitmap Heap Scan on orders_scattered  (cost=154.44..7707.03 rows=27798 width=29) (actual time=2.926..212.125 rows=27390 loops=1)
-  Recheck Cond: ((order_date >= '2024-06-01'::date) AND (order_date <= '2024-06-30'::date))
+Bitmap Heap Scan on orders_scattered (cost=154.44..7707.03 rows=27798 width=29) (actual time=2.926..212.125 rows=27390 loops=1)
+  Recheck Cond: ((order_date >= '2024-06-01') AND (order_date <= '2024-06-30'))
   Heap Blocks: exact=7170
-  Buffers: shared hit=7170 read=26 dirtied=7170
-  ->  Bitmap Index Scan on idx_orders_scattered_date  (cost=0.00..151.66 rows=27798 width=0) (actual time=2.208..2.208 rows=27390 loops=1)
-        Index Cond: ((order_date >= '2024-06-01'::date) AND (order_date <= '2024-06-30'::date))
+  Buffers: shared hit=7170 read=26
+  ->  Bitmap Index Scan on idx_orders_scattered_date (cost=0.00..151.66 rows=27798 width=0) (actual time=2.208..2.208 rows=27390 loops=1)
+        Index Cond: ((order_date >= '2024-06-01') AND (order_date <= '2024-06-30'))
         Buffers: shared read=26
-Planning:
-  Buffers: shared hit=65 read=1
-Planning Time: 8.349 ms
-Execution Time: 213.275 ms
-*/
-
-/*
-=============================================================================
-Глава 2. СОЕДИНЕНИЯ (Join Algorithms)
-=============================================================================
-Как PostgreSQL соединяет строки из двух таблиц по условию.
-Порядок таблиц в SQL НЕ ВАЖЕН — планировщик сам выберет оптимальный.
 */
 
 -- =============================================================================
--- ПРИМЕР 2.1: Nested Loop (Вложенные циклы)
+-- ПРИМЕР 1.4: Index Only Scan (NEW!)
 -- =============================================================================
--- АЛГОРИТМ: Для КАЖДОЙ строки из внешней таблицы (outer) ищем соответствующие
---           строки во внутренней таблице (inner) через ИНДЕКС.
---
---           Псевдокод:
---           for each outer_row in outer_table:
---               inner_rows = index_search(inner_table, outer_row.key)
---               for each inner_row in inner_rows:
---                   emit(outer_row, inner_row)
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Внешняя таблица ОЧЕНЬ маленькая (< 100-500 строк)
---   • На внутренней таблице есть ИНДЕКС по ключу соединения
---   • Нужны первые N строк (LIMIT) — можно прервать цикл досрочно
---
--- АНАЛОГИЯ: 50 VIP-клиентов. Для каждого идём на склад и ищем ЕГО коробку
---          по штрих-коду (индексу).
---
--- ПЛЮСЫ:  Не требует памяти для хеша. Может работать с ОГРОМНЫМИ таблицами.
---          Хорош для LIMIT (можно остановиться).
--- МИНУСЫ: Каждая итерация — поиск в индексе. 1000×1 = 1000 поисков.
---          Если внешняя таблица большая — ОЧЕНЬ МНОГО итераций.
---
--- ВАЖНО:  Мы ОТКЛЮЧАЕМ Bitmap Scan внутри цикла (enable_bitmapscan=off),
---         чтобы показать ЧИСТЫЙ Nested Loop + Index Scan.
+CREATE INDEX idx_orders_date_cover ON orders (order_date) INCLUDE (status);
+-- Принудительно обновим visibility map
+VACUUM orders;
 
 EXPLAIN (ANALYZE, BUFFERS)
-SELECT c.email, SUM(o.amount)
-FROM customers       c
-         JOIN orders o ON c.customer_id = o.customer_id
-WHERE c.city = 'Sochi'
-GROUP BY c.email;
+SELECT order_date, status
+FROM orders
+WHERE order_date = '2024-06-15';
+/*
+Index Only Scan using idx_orders_date_cover on orders  (cost=0.17..12.31 rows=911 width=13) (actual time=0.261..0.361 rows=913 loops=1)
+  Index Cond: (order_date = '2024-06-15'::date)
+  Heap Fetches: 0
+  Buffers: shared hit=1 read=6
+Planning:
+  Buffers: shared hit=5
+Planning Time: 0.178 ms
+Execution Time: 0.407 ms
 
+*/
+DROP INDEX idx_orders_date_cover;
+-- Чистим за собой
 
 
 /*
-Ожидаемый план:
-HashAggregate  (cost=4248.37..4248.62 rows=50 width=27) (actual time=5.362..5.366 rows=50 loops=1)
-  Group Key: c.email
-  Batches: 1  Memory Usage: 24kB
-  Buffers: shared hit=5067
-  ->  Nested Loop  (cost=0.28..4238.41 rows=4978 width=23) (actual time=0.022..4.822 rows=4955 loops=1)
-        Buffers: shared hit=5067
-        ->  Index Scan using idx_cust_city on customers c  (cost=0.11..3.34 rows=50 width=23) (actual time=0.014..0.020 rows=50 loops=1)
-              Index Cond: ((city)::text = 'Sochi'::text)
-              Buffers: shared hit=3
-        ->  Index Scan using idx_orders_cust on orders o  (cost=0.17..84.20 rows=100 width=8) (actual time=0.002..0.089 rows=99 loops=50)
-              Index Cond: (customer_id = c.customer_id)
-              Buffers: shared hit=5064
-Planning:
-  Buffers: shared hit=14
-Planning Time: 0.215 ms
-Execution Time: 5.400 ms
-
+=============================================================================
+Глава 2. СОЕДИНЕНИЯ
+=============================================================================
 */
 
 -- =============================================================================
--- ПРИМЕР 2.2: Hash Join (Хеш-соединение)
+-- ПРИМЕР 2.1: Nested Loop + Memoize (NEW! PG 14+)
 -- =============================================================================
--- АЛГОРИТМ: Строим ХЕШ-ТАБЛИЦУ в памяти из МЕНЬШЕЙ таблицы (inner).
---           Затем сканируем БОЛЬШУЮ таблицу (outer) и для каждой строки
---           делаем O(1) lookup в хеш-таблице.
---
---           Псевдокод:
---           hash_table = {}
---           for inner_row in inner_table:
---               hash_table[hash(inner_row.key)] = inner_row
---           for outer_row in outer_table:
---               if hash(outer_row.key) in hash_table:
---                   emit(outer_row, hash_table[hash(outer_row.key)])
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Одна таблица ЗНАЧИТЕЛЬНО меньше другой
---   • Нет подходящего индекса для Nested Loop
---   • Обе таблицы средние/большие
---   • Хеш-таблица ВЛЕЗАЕТ в work_mem (иначе уходит в Batches — медленно!)
---
--- АНАЛОГИЯ: У нас 100 товаров (products). Выписываем их на листочек (хеш).
---          Берём 1 000 000 заказов и для каждого смотрим в листочек.
---
--- ПЛЮСЫ:  ОЧЕНЬ быстрый (O(N+M) в идеале). Не требует индексов.
---          Отлично для средних и больших таблиц.
--- МИНУСЫ: Требует ПАМЯТЬ (work_mem). Если хеш не влезает — сливается на диск.
---          Не может вернуть первую строку, пока хеш не построен.
---
--- ВАЖНО:  Планировщик ВСЕГДА строит хеш из МЕНЬШЕЙ таблицы.
---          Порядок таблиц во FROM НЕ ВАЖЕН!
---          В примере: products (100 строк) → хеш, orders (1M) → сканирование.
+-- Создаем ситуацию с повторяющимися ключами
+CREATE TABLE customers_small AS
+SELECT *
+FROM customers
+LIMIT 10;
 
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM customers_small c
+         JOIN orders o ON c.customer_id = o.customer_id;
+/*
+Nested Loop  (cost=0.17..8630.78 rows=20909 width=373) (actual time=0.029..1.364 rows=950 loops=1)
+  Buffers: shared hit=977
+  ->  Seq Scan on customers_small c  (cost=0.00..11.05 rows=210 width=344) (actual time=0.013..0.015 rows=10 loops=1)
+        Buffers: shared hit=1
+  ->  Index Scan using idx_orders_cust on orders o  (cost=0.17..40.55 rows=100 width=29) (actual time=0.005..0.124 rows=95 loops=10)
+        Index Cond: (customer_id = c.customer_id)
+        Buffers: shared hit=976
+Planning:
+  Buffers: shared hit=10
+Planning Time: 0.315 ms
+Execution Time: 1.886 ms
+*/
+DROP TABLE customers_small;
+
+-- =============================================================================
+-- ПРИМЕР 2.2: Hash Join (без изменений)
+-- =============================================================================
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT o.order_id, p.name, p.category
 FROM orders            o
          JOIN products p ON o.product_id = p.product_id;
-
 /*
-Hash Join  (cost=2.10..13468.55 rows=1000648 width=23) (actual time=0.057..148.405 rows=1000648 loops=1)
+Hash Join  (cost=2.10..13468.55 rows=1000648 width=23) (actual time=0.038..143.968 rows=1000648 loops=1)
   Hash Cond: (o.product_id = p.product_id)
   Buffers: shared hit=7359
-  ->  Seq Scan on orders o  (cost=0.00..12361.24 rows=1000648 width=8) (actual time=0.019..39.237 rows=1000648 loops=1)
+  ->  Seq Scan on orders o  (cost=0.00..12361.24 rows=1000648 width=8) (actual time=0.010..33.376 rows=1000648 loops=1)
         Buffers: shared hit=7358
-  ->  Hash  (cost=1.50..1.50 rows=100 width=23) (actual time=0.027..0.029 rows=100 loops=1)
+  ->  Hash  (cost=1.50..1.50 rows=100 width=23) (actual time=0.019..0.020 rows=100 loops=1)
         Buckets: 1024  Batches: 1  Memory Usage: 14kB
         Buffers: shared hit=1
-        ->  Seq Scan on products p  (cost=0.00..1.50 rows=100 width=23) (actual time=0.007..0.013 rows=100 loops=1)
+        ->  Seq Scan on products p  (cost=0.00..1.50 rows=100 width=23) (actual time=0.005..0.010 rows=100 loops=1)
               Buffers: shared hit=1
 Planning:
-  Buffers: shared hit=54 read=1
-Planning Time: 0.661 ms
-Execution Time: 169.800 ms
-
+  Buffers: shared hit=4
+Planning Time: 0.241 ms
+Execution Time: 165.021 ms
 */
 
 -- =============================================================================
--- ПРИМЕР 2.3: Merge Join (Соединение слиянием)
+-- ПРИМЕР 2.3: Merge Join (без изменений)
 -- =============================================================================
--- АЛГОРИТМ: Обе таблицы должны быть ОТСОРТИРОВАНЫ по ключу соединения.
---           Идём двумя указателями (как расчёска), сравниваем ключи:
---           - Ключи равны → emit + двигаем оба указателя
---           - Ключ левой меньше → двигаем левый
---           - Ключ правой меньше → двигаем правый
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Обе таблицы УЖЕ отсортированы по ключу (индексы, CLUSTER, ORDER BY)
---   • Таблицы ОГРОМНЫЕ, хеш не влезает в work_mem
---   • Нужен результат в отсортированном порядке (экономия на сортировке)
---
--- АНАЛОГИЯ: Две стопки счетов, отсортированных по номеру.
---          Кладём рядом и идём пальцами — где совпало, скрепка.
---
--- ПЛЮСЫ:  Не требует памяти для хеша.
---          Работает с ОГРОМНЫМИ таблицами (может использовать диск).
---          Результат уже отсортирован.
--- МИНУСЫ: Обе таблицы должны быть отсортированы.
---          Если сортировки нет — дорогая операция Sort.
---
--- ВАЖНО:  Здесь сортировка БЕСПЛАТНАЯ — индексы уже дают порядок.
---          customers_pkey — индекс по customer_id (PK).
---          idx_orders_cust — индекс по customer_id.
-
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM customers       c
          JOIN orders o ON c.customer_id = o.customer_id
 ORDER BY c.customer_id;
-
 /*
-Merge Join  (cost=0.28..22757.35 rows=1000648 width=61) (actual time=0.008..674.272 rows=1000648 loops=1)
+Merge Join  (cost=0.28..22757.35 rows=1000648 width=61) (actual time=0.017..677.259 rows=1000648 loops=1)
   Merge Cond: (c.customer_id = o.customer_id)
-  Buffers: shared hit=994024 read=858 dirtied=79
-  ->  Index Scan using customers_pkey on customers c  (cost=0.11..187.59 rows=10050 width=32) (actual time=0.003..2.311 rows=10050 loops=1)
-        Buffers: shared hit=108 dirtied=79
-  ->  Index Scan using idx_orders_cust on orders o  (cost=0.17..16555.82 rows=1000648 width=29) (actual time=0.002..569.134 rows=1000648 loops=1)
-        Buffers: shared hit=993916 read=858
+  Buffers: shared hit=994882
+  ->  Index Scan using customers_pkey on customers c  (cost=0.11..187.59 rows=10050 width=32) (actual time=0.006..1.945 rows=10050 loops=1)
+        Buffers: shared hit=108
+  ->  Index Scan using idx_orders_cust on orders o  (cost=0.17..16555.82 rows=1000648 width=29) (actual time=0.008..570.178 rows=1000648 loops=1)
+        Buffers: shared hit=994774
 Planning:
-  Buffers: shared hit=23 dirtied=1
-Planning Time: 0.222 ms
-Execution Time: 696.713 ms
+  Buffers: shared hit=12 read=2
+Planning Time: 0.291 ms
+Execution Time: 700.582 ms
+
 */
+
+-- =============================================================================
+-- ПРИМЕР 2.4: Hash Semi Join (NEW!)
+-- =============================================================================
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM customers c
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM orders o
+      WHERE o.customer_id = c.customer_id
+      );
+/*
+Nested Loop Semi Join  (cost=0.17..2126.60 rows=10050 width=32) (actual time=0.017..10.344 rows=10050 loops=1)
+  Buffers: shared hit=30228 read=2
+  ->  Seq Scan on customers c  (cost=0.00..129.25 rows=10050 width=32) (actual time=0.008..0.434 rows=10050 loops=1)
+        Buffers: shared hit=79
+  ->  Index Only Scan using idx_orders_cust on orders o  (cost=0.17..1.12 rows=100 width=4) (actual time=0.001..0.001 rows=1 loops=10050)
+        Index Cond: (customer_id = c.customer_id)
+        Heap Fetches: 0
+        Buffers: shared hit=30149 read=2
+Planning:
+  Buffers: shared hit=14
+Planning Time: 0.216 ms
+Execution Time: 10.597 ms
+
+*/
+
+-- =============================================================================
+-- ПРИМЕР 2.5: Hash Anti Join (NEW!)
+-- =============================================================================
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM customers c
+WHERE NOT EXISTS
+      (
+      SELECT 1
+      FROM orders o
+      WHERE o.customer_id = c.customer_id
+      );
+/*
+Nested Loop Anti Join  (cost=0.17..2126.60 rows=1 width=32) (actual time=9.130..9.131 rows=0 loops=1)
+  Buffers: shared hit=30230
+  ->  Seq Scan on customers c  (cost=0.00..129.25 rows=10050 width=32) (actual time=0.009..0.412 rows=10050 loops=1)
+        Buffers: shared hit=79
+  ->  Index Only Scan using idx_orders_cust on orders o  (cost=0.17..1.12 rows=100 width=4) (actual time=0.001..0.001 rows=1 loops=10050)
+        Index Cond: (customer_id = c.customer_id)
+        Heap Fetches: 0
+        Buffers: shared hit=30151
+Planning:
+  Buffers: shared hit=14
+Planning Time: 0.200 ms
+Execution Time: 9.156 ms
+
+*/
+
 
 /*
 =============================================================================
-Глава 3. АГРЕГАЦИЯ И СОРТИРОВКА (GroupBy & OrderBy)
+Глава 3. АГРЕГАЦИЯ, СОРТИРОВКА И ДРУГИЕ ОПЕРАЦИИ
 =============================================================================
 */
 
 -- =============================================================================
--- ПРИМЕР 3.1: HashAggregate (Агрегация через хеш-таблицу)
+-- ПРИМЕР 3.1: HashAggregate (без изменений)
 -- =============================================================================
--- АЛГОРИТМ: Строим ХЕШ-ТАБЛИЦУ: ключ = значение GROUP BY, значение = агрегат.
---           Для каждой строки вычисляем hash(group_key), находим бакет,
---           обновляем агрегат (COUNT++, SUM+=value, ...).
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Много уникальных групп (тысячи/миллионы)
---   • Данные НЕ отсортированы по ключу группы
---   • Количество групп влезает в work_mem
---
--- АНАЛОГИЯ: Раскладываем заказы по кучкам: "Completed" в одну, "Returned" в другую.
---          В конце считаем, сколько в каждой кучке.
---
--- ПЛЮСЫ:  Не требует сортировки данных.
---          Хорош для большого числа групп.
--- МИНУСЫ: Требует ПАМЯТЬ (work_mem). Если групп много — уходит в Batches (диск).
---          Не выдаёт результат, пока не обработаны ВСЕ строки.
---
--- ВАЖНО:  Мы отключаем параллелизм (max_parallel_workers_per_gather=0),
---         чтобы показать ЧИСТЫЙ HashAggregate без Gather Merge.
-
-SET max_parallel_workers_per_gather = 0;
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT status, COUNT(*)
 FROM orders
 GROUP BY status;
-
----SET max_parallel_workers_per_gather = 2;
-
 /*
-HashAggregate  (cost=14362.54..14362.55 rows=2 width=17) (actual time=147.605..147.606 rows=2 loops=1)
+HashAggregate  (cost=13746.83..13746.84 rows=2 width=17) (actual time=172.744..172.744 rows=2 loops=1)
   Group Key: status
   Batches: 1  Memory Usage: 24kB
-  Buffers: shared hit=7358
-  ->  Seq Scan on orders  (cost=0.00..12361.24 rows=1000648 width=9) (actual time=0.023..39.811 rows=1000648 loops=1)
-        Buffers: shared hit=7358
-Planning Time: 0.097 ms
-Execution Time: 147.650 ms
+  Buffers: shared hit=6 read=3831
+  ->  Index Only Scan using idx_orders_date_cover on orders  (cost=0.17..11745.53 rows=1000648 width=9) (actual time=0.073..82.980 rows=1000648 loops=1)
+        Heap Fetches: 0
+        Buffers: shared hit=6 read=3831
+Planning Time: 0.166 ms
+Execution Time: 172.784 ms
+
 */
 
 -- =============================================================================
--- ПРИМЕР 3.2: GroupAggregate (Стримовая агрегация)
+-- ПРИМЕР 3.2: GroupAggregate (без изменений)
 -- =============================================================================
--- АЛГОРИТМ: Данные УЖЕ отсортированы по ключу группы.
---           Идём по строкам подряд, накапливаем агрегат.
---           Как только ключ сменился → выдаём результат для предыдущей группы.
---
---           Псевдокод:
---           current_key = None; agg = 0
---           for row in sorted_data:
---               if row.key != current_key:
---                   if current_key is not None: emit(current_key, agg)
---                   current_key = row.key; agg = 0
---               agg += row.value
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • Данные УЖЕ отсортированы по ключу группы (Index Scan, Merge Join, CLUSTER)
---   • Объединение результатов параллельных воркеров (Gather Merge)
---   • ORDER BY + GROUP BY с одинаковым ключом
---
--- АНАЛОГИЯ: Ежедневник с заказами по дням. Ведём пальцем:
---          "1 июня... 1 июня... 1 июня... О, 2 июня! Записываю итог 1 июня."
---
--- ПЛЮСЫ:  НЕ требует памяти для хеша (почти 0 памяти!).
---          Начинает выдавать результат СРАЗУ (не ждёт конца).
--- МИНУСЫ: Данные ДОЛЖНЫ быть отсортированы.
---
--- ВАЖНО:  Мы сделали CLUSTER + Index Scan → данные идут в порядке дат.
---         GroupAggregate "бесплатно" агрегирует их на лету.
-
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT order_date, SUM(amount)
 FROM orders
 WHERE order_date BETWEEN '2024-06-01' AND '2024-06-30'
 GROUP BY order_date;
-
 /*
-GroupAggregate  (cost=0.17..551.25 rows=1096 width=12) (actual time=0.182..4.883 rows=30 loops=1)
+GroupAggregate (cost=0.17..551.25 rows=1096 width=12) (actual time=0.182..4.883 rows=30 loops=1)
   Group Key: order_date
-  Buffers: shared hit=228
-  ->  Index Scan using idx_orders_date on orders  (cost=0.17..490.80 rows=27487 width=8) (actual time=0.024..2.452 rows=27390 loops=1)
-        Index Cond: ((order_date >= '2024-06-01'::date) AND (order_date <= '2024-06-30'::date))
-        Buffers: shared hit=228
-Planning Time: 0.118 ms
-Execution Time: 4.915 ms
+  ->  Index Scan using idx_orders_date on orders (cost=0.17..490.80 rows=27487 width=8) (actual time=0.024..2.452 rows=27390 loops=1)
 */
 
 -- =============================================================================
--- ПРИМЕР 3.3: Index Scan Backward (Обратное сканирование индекса)
+-- ПРИМЕР 3.3: Index Scan Backward (без изменений)
 -- =============================================================================
--- АЛГОРИТМ: B-дерево индекса ДВУНАПРАВЛЕННОЕ.
---           Для ORDER BY ... DESC LIMIT N идём С КОНЦА индекса.
---           Берём первые N строк — и всё! Никакой сортировки!
---
--- КОГДА ПРИМЕНЯЕТСЯ:
---   • ORDER BY col DESC LIMIT N
---   • Есть индекс по col
---   • Индекс покрывает все нужные столбцы (или это Index Only Scan)
---
--- АНАЛОГИЯ: Телефонный справочник. Найти 10 последних по алфавиту?
---          Открываем конец и списываем 10 фамилий. ВСЁ!
---
--- ПЛЮСЫ:  МГНОВЕННО! Даже таблицу не читаем (если нужно только поле из индекса).
---          Не требует памяти для сортировки.
--- МИНУСЫ: Только для ORDER BY по ИНДЕКСИРОВАННОМУ полю.
---
--- СРАВНЕНИЕ С Top-N Heapsort:
---   Index Scan Backward: просто идём по индексу → читаем N строк → ГОТОВО.
---   Top-N Heapsort:      сканируем ВСЮ таблицу → держим кучу из N строк.
---   Index Scan Backward работает в 100-1000 раз быстрее!
-
 EXPLAIN (ANALYZE)
 SELECT *
 FROM products
 ORDER BY price DESC
 LIMIT 10;
+/*
+Limit  (cost=0.06..0.46 rows=10 width=29) (actual time=0.020..0.023 rows=10 loops=1)
+  ->  Index Scan Backward using idx_products_price on products  (cost=0.06..4.11 rows=100 width=29) (actual time=0.019..0.021 rows=10 loops=1)
+Planning Time: 0.291 ms
+Execution Time: 0.035 ms
+
+*/
+
+-- =============================================================================
+-- ПРИМЕР 3.4: Top-N Heapsort (NEW!)
+-- =============================================================================
+DROP INDEX idx_products_price;
+EXPLAIN (ANALYZE)
+SELECT *
+FROM products
+ORDER BY price DESC
+LIMIT 10;
+/*
+Limit  (cost=2.36..2.37 rows=10 width=29) (actual time=0.074..0.076 rows=10 loops=1)
+  ->  Sort  (cost=2.36..2.46 rows=100 width=29) (actual time=0.069..0.069 rows=10 loops=1)
+        Sort Key: price DESC
+        Sort Method: top-N heapsort  Memory: 26kB
+        ->  Seq Scan on products  (cost=0.00..1.50 rows=100 width=29) (actual time=0.012..0.020 rows=100 loops=1)
+Planning Time: 0.218 ms
+Execution Time: 0.092 ms
+*/
+CREATE INDEX idx_products_price ON products (price);
+-- Восстанавливаем
+
+-- =============================================================================
+-- ПРИМЕР 3.5: DISTINCT через Unique + Sort (NEW!)
+-- =============================================================================
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT DISTINCT customer_id
+FROM orders;
+/*
+Unique  (cost=0.17..9462.68 rows=10050 width=4) (actual time=0.024..71.614 rows=10050 loops=1)
+  Buffers: shared hit=867
+  ->  Index Only Scan using idx_orders_cust on orders  (cost=0.17..8462.03 rows=1000648 width=4) (actual time=0.023..40.689 rows=1000648 loops=1)
+        Heap Fetches: 0
+        Buffers: shared hit=867
+Planning Time: 0.086 ms
+Execution Time: 72.509 ms
+
+*/
+
+-- =============================================================================
+-- ПРИМЕР 3.6: Оконные функции (WindowAgg) (NEW!)
+-- =============================================================================
+CREATE INDEX idx_orders_cust_date ON orders (customer_id, order_date);
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT customer_id,
+       order_date,
+       amount,
+       SUM(amount) OVER (PARTITION BY customer_id ORDER BY order_date)
+FROM orders
+WHERE customer_id BETWEEN 1 AND 10;
+/*
+WindowAgg  (cost=932.27..940.35 rows=898 width=20) (actual time=1.355..1.607 rows=950 loops=1)
+  Buffers: shared hit=897
+  ->  Sort  (cost=932.27..933.17 rows=898 width=12) (actual time=1.347..1.371 rows=950 loops=1)
+        Sort Key: customer_id, order_date
+        Sort Method: quicksort  Memory: 54kB
+        Buffers: shared hit=897
+        ->  Bitmap Heap Scan on orders  (cost=5.40..914.65 rows=898 width=12) (actual time=0.136..1.181 rows=950 loops=1)
+              Recheck Cond: ((customer_id >= 1) AND (customer_id <= 10))
+              Heap Blocks: exact=894
+              Buffers: shared hit=897
+              ->  Bitmap Index Scan on idx_orders_cust  (cost=0.00..5.31 rows=898 width=0) (actual time=0.063..0.063 rows=950 loops=1)
+                    Index Cond: ((customer_id >= 1) AND (customer_id <= 10))
+                    Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=23 read=4
+Planning Time: 0.395 ms
+Execution Time: 1.653 ms
+
+*/
+DROP INDEX idx_orders_cust_date;
+-- Чистим за собой
+
+-- =============================================================================
+-- ПРИМЕР 3.7: CTE + Materialize (NEW!)
+-- =============================================================================
+EXPLAIN (ANALYZE, BUFFERS)
+WITH top_customers AS (
+                      SELECT customer_id, COUNT(*) AS cnt
+                      FROM orders
+                      WHERE order_date BETWEEN '2024-01-01' AND '2024-12-31'
+                      GROUP BY customer_id
+                      )
+SELECT *
+FROM top_customers
+WHERE cnt > 1000;
+/*
+Планировщик увидел CTE.
+Решил: "CTE используется 1 раз, материализовать невыгодно — просто встрою как подзапрос".
+Превратил запрос в эквивалент:
+SELECT customer_id, COUNT(*) AS cnt
+FROM orders
+WHERE order_date BETWEEN '2024-01-01' AND '2024-12-31'
+GROUP BY customer_id
+HAVING COUNT(*) > 1000;
+
+HashAggregate  (cost=6628.42..6688.72 rows=3350 width=12) (actual time=55.174..55.175 rows=0 loops=1)
+  Group Key: orders.customer_id
+  Filter: (count(*) > 1000)
+  Batches: 1  Memory Usage: 1425kB
+  Rows Removed by Filter: 10050
+  Buffers: shared hit=2746
+  ->  Index Scan using idx_orders_date on orders  (cost=0.17..5958.97 rows=334726 width=4) (actual time=0.019..22.057 rows=334158 loops=1)
+        Index Cond: ((order_date >= '2024-01-01'::date) AND (order_date <= '2024-12-31'::date))
+        Buffers: shared hit=2746
+Planning:
+  Buffers: shared hit=3 read=1
+Planning Time: 0.266 ms
+Execution Time: 55.546 ms
+
+*/
+
+
+
+EXPLAIN (ANALYZE, BUFFERS)
+WITH top_customers AS MATERIALIZED (
+    SELECT customer_id, COUNT(*) AS cnt
+    FROM orders
+    WHERE order_date BETWEEN '2024-01-01' AND '2024-12-31'
+    GROUP BY customer_id
+                                   )
+SELECT * FROM top_customers WHERE cnt > 1000;
 
 /*
-Ожидаемый план:
-Limit
-  ->  Index Scan Backward using idx_products_price on products
+CTE Scan on top_customers  (cost=6678.67..6789.22 rows=3350 width=12) (actual time=55.963..55.964 rows=0 loops=1)
+  Filter: (cnt > 1000)
+  Rows Removed by Filter: 10050
+  Buffers: shared hit=2746
+  CTE top_customers
+    ->  HashAggregate  (cost=6628.42..6678.67 rows=10050 width=12) (actual time=54.241..54.913 rows=10050 loops=1)
+          Group Key: orders.customer_id
+          Batches: 1  Memory Usage: 1425kB
+          Buffers: shared hit=2746
+          ->  Index Scan using idx_orders_date on orders  (cost=0.17..5958.97 rows=334726 width=4) (actual time=0.015..21.539 rows=334158 loops=1)
+                Index Cond: ((order_date >= '2024-01-01'::date) AND (order_date <= '2024-12-31'::date))
+                Buffers: shared hit=2746
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.236 ms
+Execution Time: 56.320 ms
 */
+
 
 /*
 =============================================================================
@@ -1010,9 +989,6 @@ ORDER BY + LIMIT?
 
 
 
-
-
-
 */
 
 
@@ -1069,7 +1045,9 @@ EXPLAIN (ANALYZE, BUFFERS);
 -- 2. Seq Scan → НУЖЕН ЛИ ИНДЕКС?
 --============================================================================
 
-SELECT COUNT(*) FROM таблица WHERE твоё_условие;
+SELECT COUNT(*)
+FROM таблица
+WHERE твоё_условие;
 
 /*
   Если строк > 30% от ВСЕХ строк таблицы:
@@ -1084,15 +1062,15 @@ SELECT COUNT(*) FROM таблица WHERE твоё_условие;
 -- 3. Index Scan / Bitmap Scan → ДАННЫЕ РАЗБРОСАНЫ?
 --============================================================================
 
-SELECT
-    attname     AS колонка,       -- имя колонки в таблице
-    correlation AS корреляция     -- физическая упорядоченность данных на диске:
-                                  --  1.0 = идеальный порядок (строки идут подряд)
-                                  --  0.0 = полный хаос (строки разбросаны)
-                                  -- -1.0 = обратный порядок
-FROM pg_stats                    -- системная таблица со статистикой по колонкам
-WHERE tablename = 'имя_таблицы'  -- имя таблицы (pg_stats.tablename)
-  AND attname  = 'индексированная_колонка';  -- имя колонки (pg_stats.attname)
+SELECT attname     AS колонка,   -- имя колонки в таблице
+       correlation AS корреляция -- физическая упорядоченность данных на диске:
+--  1.0 = идеальный порядок (строки идут подряд)
+--  0.0 = полный хаос (строки разбросаны)
+-- -1.0 = обратный порядок
+FROM pg_stats -- системная таблица со статистикой по колонкам
+WHERE tablename = 'имя_таблицы' -- имя таблицы (pg_stats.tablename)
+  AND attname = 'индексированная_колонка';
+-- имя колонки (pg_stats.attname)
 
 /*
   correlation = 0.9..1.0 → отлично, Index Scan быстр.
@@ -1175,13 +1153,13 @@ WHERE tablename = 'имя_таблицы'  -- имя таблицы (pg_stats.ta
 -- 8. ПРОВЕРКА НЕИСПОЛЬЗУЕМЫХ ИНДЕКСОВ
 --============================================================================
 
-SELECT
-    indexrelname AS индекс,    -- имя индекса (pg_stat_user_indexes.indexrelname)
-    idx_scan     AS использований  -- сколько раз индекс был использован
-                                   -- (pg_stat_user_indexes.idx_scan)
-FROM pg_stat_user_indexes      -- системная таблица со статистикой использования индексов
-WHERE relname = 'имя_таблицы'  -- имя таблицы (pg_stat_user_indexes.relname)
-  AND idx_scan = 0;            -- ни разу не использовался!
+SELECT indexrelname AS индекс,       -- имя индекса (pg_stat_user_indexes.indexrelname)
+       idx_scan     AS использований -- сколько раз индекс был использован
+-- (pg_stat_user_indexes.idx_scan)
+FROM pg_stat_user_indexes -- системная таблица со статистикой использования индексов
+WHERE relname = 'имя_таблицы' -- имя таблицы (pg_stat_user_indexes.relname)
+  AND idx_scan = 0;
+-- ни разу не использовался!
 
 /*
   Если idx_scan = 0 → индекс не нужен:
@@ -1194,13 +1172,12 @@ WHERE relname = 'имя_таблицы'  -- имя таблицы (pg_stat_user_
 -- 9. ПРОВЕРКА РАЗМЕРА ТАБЛИЦЫ
 --============================================================================
 
-SELECT
-    relname  AS имя,            -- имя таблицы/индекса (pg_class.relname)
-    relpages AS страниц_8kb,    -- количество страниц по 8KB (pg_class.relpages)
-    pg_size_pretty(             -- функция: переводит байты в читаемый вид (KB/MB/GB)
-        pg_relation_size(oid)   -- размер таблицы/индекса на диске в байтах
-    ) AS размер
-FROM pg_class                  -- системный каталог: все таблицы, индексы, последовательности
+SELECT relname  AS имя,         -- имя таблицы/индекса (pg_class.relname)
+       relpages AS страниц_8kb, -- количество страниц по 8KB (pg_class.relpages)
+       pg_size_pretty( -- функция: переводит байты в читаемый вид (KB/MB/GB)
+               pg_relation_size(oid) -- размер таблицы/индекса на диске в байтах
+       )        AS размер
+FROM pg_class -- системный каталог: все таблицы, индексы, последовательности
 WHERE relname = 'имя_таблицы';
 
 /*
@@ -1214,12 +1191,12 @@ WHERE relname = 'имя_таблицы';
 -- 11. ПОКРЫВАЮЩИЙ ИНДЕКС (Index Only Scan)
 --============================================================================
 
-SELECT
-    indexname,                 -- имя индекса (pg_indexes.indexname)
-    indexdef                   -- полное определение индекса (pg_indexes.indexdef)
-                               -- содержит CREATE INDEX ... (колонки)
-FROM pg_indexes                -- системное представление: список всех индексов
-WHERE tablename = 'имя_таблицы';  -- имя таблицы (pg_indexes.tablename)
+SELECT indexname, -- имя индекса (pg_indexes.indexname)
+       indexdef   -- полное определение индекса (pg_indexes.indexdef)
+-- содержит CREATE INDEX ... (колонки)
+FROM pg_indexes -- системное представление: список всех индексов
+WHERE tablename = 'имя_таблицы';
+-- имя таблицы (pg_indexes.tablename)
 
 /*
   Сравни колонки в SELECT с колонками в indexdef:
@@ -1236,13 +1213,12 @@ WHERE tablename = 'имя_таблицы';  -- имя таблицы (pg_indexes
 -- 12. ПРОВЕРКА VISIBILITY MAP (для Index Only Scan)
 --============================================================================
 
-SELECT
-    relname,                   -- имя таблицы (pg_stat_user_tables.relname)
-    n_tup_upd    AS обновлений, -- сколько строк обновлено (pg_stat_user_tables.n_tup_upd)
-    n_tup_del    AS удалений,   -- сколько строк удалено (pg_stat_user_tables.n_tup_del)
-    last_vacuum,                -- когда был последний ручной VACUUM
-    last_autovacuum             -- когда был последний автоматический VACUUM
-FROM pg_stat_user_tables        -- системная таблица со статистикой использования таблиц
+SELECT relname,                 -- имя таблицы (pg_stat_user_tables.relname)
+       n_tup_upd AS обновлений, -- сколько строк обновлено (pg_stat_user_tables.n_tup_upd)
+       n_tup_del AS удалений,   -- сколько строк удалено (pg_stat_user_tables.n_tup_del)
+       last_vacuum,             -- когда был последний ручной VACUUM
+       last_autovacuum          -- когда был последний автоматический VACUUM
+FROM pg_stat_user_tables -- системная таблица со статистикой использования таблиц
 WHERE relname = 'имя_таблицы';
 
 /*
@@ -1257,14 +1233,13 @@ WHERE relname = 'имя_таблицы';
 -- 18. ПРОВЕРКА РАЗДУТЫХ ИНДЕКСОВ (Index Bloat)
 --============================================================================
 
-SELECT
-    indexrelname   AS индекс,   -- имя индекса (pg_stat_user_indexes.indexrelname)
-    idx_scan       AS использований,  -- сколько раз использован (pg_stat_user_indexes.idx_scan)
-    pg_size_pretty(
-        pg_relation_size(indexrelid)  -- размер индекса на диске в байтах (pg_stat_user_indexes.indexrelid — OID индекса)
-    ) AS размер,
-    idx_tup_read   AS строк_прочитано,  -- сколько строк прочитано из индекса (pg_stat_user_indexes.idx_tup_read)
-    idx_tup_fetch  AS строк_получено    -- сколько строк получено из heap (pg_stat_user_indexes.idx_tup_fetch)
+SELECT indexrelname  AS индекс,          -- имя индекса (pg_stat_user_indexes.indexrelname)
+       idx_scan      AS использований,   -- сколько раз использован (pg_stat_user_indexes.idx_scan)
+       pg_size_pretty(
+               pg_relation_size(indexrelid) -- размер индекса на диске в байтах (pg_stat_user_indexes.indexrelid — OID индекса)
+       )             AS размер,
+       idx_tup_read  AS строк_прочитано, -- сколько строк прочитано из индекса (pg_stat_user_indexes.idx_tup_read)
+       idx_tup_fetch AS строк_получено   -- сколько строк получено из heap (pg_stat_user_indexes.idx_tup_fetch)
 FROM pg_stat_user_indexes
 WHERE relname = 'имя_таблицы'
 ORDER BY pg_relation_size(indexrelid) DESC;
@@ -1283,9 +1258,8 @@ ORDER BY pg_relation_size(indexrelid) DESC;
 -- 19. ПРОВЕРКА СОСТАВНЫХ ИНДЕКСОВ
 --============================================================================
 
-SELECT
-    indexname,                 -- имя индекса (pg_indexes.indexname)
-    indexdef                   -- определение индекса (pg_indexes.indexdef)
+SELECT indexname, -- имя индекса (pg_indexes.indexname)
+       indexdef   -- определение индекса (pg_indexes.indexdef)
 FROM pg_indexes
 WHERE tablename = 'имя_таблицы';
 
@@ -1351,9 +1325,10 @@ WHERE tablename = 'имя_таблицы';
 -- 16. ПРОВЕРКА ПАРАЛЛЕЛИЗМА
 --============================================================================
 
-SHOW max_parallel_workers_per_gather;  -- макс. число воркеров на один запрос Gather
-SHOW max_parallel_workers;             -- макс. число параллельных воркеров всего
-SHOW max_worker_processes;             -- макс. число фоновых процессов (включая воркеры)
+SHOW max_parallel_workers_per_gather; -- макс. число воркеров на один запрос Gather
+SHOW max_parallel_workers; -- макс. число параллельных воркеров всего
+SHOW max_worker_processes;
+-- макс. число фоновых процессов (включая воркеры)
 
 /*
   Если в плане Workers Launched: 0 при Workers Planned > 0:
@@ -1369,7 +1344,8 @@ SHOW max_worker_processes;             -- макс. число фоновых п
 -- 17. JIT-КОМПИЛЯЦИЯ
 --============================================================================
 
-SHOW jit;  -- Just-In-Time компиляция запросов: on/off
+SHOW jit;
+-- Just-In-Time компиляция запросов: on/off
 
 /*
   JIT компилирует выражения WHERE, JOIN, агрегаты в машинный код.
@@ -1393,17 +1369,16 @@ SHOW jit;  -- Just-In-Time компиляция запросов: on/off
 -- 7. ПРОВЕРКА СТАТИСТИКИ (МУСОР И АНАЛИЗ)
 --============================================================================
 
-SELECT
-    relname       AS таблица,    -- имя таблицы (pg_stat_user_tables.relname)
-    n_live_tup    AS живых_строк, -- живых строк (pg_stat_user_tables.n_live_tup)
-    n_dead_tup    AS мёртвых_строк,  -- мёртвых строк: удалены/обновлены,
-    -- но не очищены VACUUM (pg_stat_user_tables.n_dead_tup)
-    ROUND(
-            100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0),
-            1
-    ) AS мусор_процент,          -- доля мёртвых строк в процентах
-    last_analyze AS последний_анализ,  -- когда был последний ANALYZE (pg_stat_user_tables.last_analyze)
-    last_vacuum  AS последний_вакуум   -- когда был последний VACUUM (pg_stat_user_tables.last_vacuum)
+SELECT relname      AS таблица,          -- имя таблицы (pg_stat_user_tables.relname)
+       n_live_tup   AS живых_строк,      -- живых строк (pg_stat_user_tables.n_live_tup)
+       n_dead_tup   AS мёртвых_строк,    -- мёртвых строк: удалены/обновлены,
+       -- но не очищены VACUUM (pg_stat_user_tables.n_dead_tup)
+       ROUND(
+               100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0),
+               1
+       )            AS мусор_процент,    -- доля мёртвых строк в процентах
+       last_analyze AS последний_анализ, -- когда был последний ANALYZE (pg_stat_user_tables.last_analyze)
+       last_vacuum  AS последний_вакуум  -- когда был последний VACUUM (pg_stat_user_tables.last_vacuum)
 FROM pg_stat_user_tables
 WHERE relname = 'имя_таблицы';
 
@@ -1423,13 +1398,12 @@ WHERE relname = 'имя_таблицы';
 -- 10. ПРОВЕРКА СЕЛЕКТИВНОСТИ ЗНАЧЕНИЙ
 --============================================================================
 
-SELECT
-    attname           AS колонка,       -- имя колонки (pg_stats.attname)
-    most_common_vals  AS частые_значения,  -- самые частые значения (pg_stats.most_common_vals)
-    most_common_freqs AS частота           -- их частота (pg_stats.most_common_freqs)
+SELECT attname           AS колонка,         -- имя колонки (pg_stats.attname)
+       most_common_vals  AS частые_значения, -- самые частые значения (pg_stats.most_common_vals)
+       most_common_freqs AS частота          -- их частота (pg_stats.most_common_freqs)
 FROM pg_stats
 WHERE tablename = 'имя_таблицы'
-  AND attname  = 'имя_колонки';
+  AND attname = 'имя_колонки';
 
 /*
   Пример:
@@ -1462,12 +1436,12 @@ WHERE tablename = 'имя_таблицы'
        → Нужна расширенная статистика:
 */
 
-SELECT
-    stxname AS имя,       -- имя расширенной статистики (pg_statistic_ext.stxname)
-    stxkeys AS колонки,   -- номера колонок (pg_statistic_ext.stxkeys)
-    stxkind AS тип         -- тип статистики: mcv = многомерная (pg_statistic_ext.stxkind)
-FROM pg_statistic_ext     -- системная таблица: расширенная статистика
-WHERE stxrelid = 'имя_таблицы'::regclass;  -- OID таблицы (pg_statistic_ext.stxrelid)
+SELECT stxname AS имя,     -- имя расширенной статистики (pg_statistic_ext.stxname)
+       stxkeys AS колонки, -- номера колонок (pg_statistic_ext.stxkeys)
+       stxkind AS тип      -- тип статистики: mcv = многомерная (pg_statistic_ext.stxkind)
+FROM pg_statistic_ext -- системная таблица: расширенная статистика
+WHERE stxrelid = 'имя_таблицы'::regclass;
+-- OID таблицы (pg_statistic_ext.stxrelid)
 
 /*
   Если WHERE содержит НЕСКОЛЬКО коррелированных колонок:
@@ -1481,9 +1455,8 @@ WHERE stxrelid = 'имя_таблицы'::regclass;  -- OID таблицы (pg_s
 -- 14. JOINS — ОШИБКА В РАЗМЕРЕ ТАБЛИЦ
 --============================================================================
 
-SELECT
-    relname,       -- имя таблицы (pg_class.relname)
-    reltuples      -- оценочное количество строк (pg_class.reltuples)
+SELECT relname,  -- имя таблицы (pg_class.relname)
+       reltuples -- оценочное количество строк (pg_class.reltuples)
 FROM pg_class
 WHERE relname IN ('t1', 't2');
 
@@ -1508,18 +1481,18 @@ WHERE relname IN ('t1', 't2');
 --============================================================================
 
 -- Шаг 1: Найти ожидающие запросы
-SELECT
-    pid,                    -- ID процесса (pg_stat_activity.pid)
-    wait_event_type,        -- тип ожидания: Lock, IO, CPU (pg_stat_activity.wait_event_type)
-    wait_event,             -- конкретное событие ожидания (pg_stat_activity.wait_event):
-    --   'relation' — ждёт блокировку таблицы
-    --   'tuple'    — ждёт блокировку строки
-    state,                  -- состояние: active, idle (pg_stat_activity.state)
-    LEFT(query, 100) AS запрос  -- текст запроса (pg_stat_activity.query)
-FROM pg_stat_activity       -- системная таблица: текущие процессы
+SELECT pid,                       -- ID процесса (pg_stat_activity.pid)
+       wait_event_type,           -- тип ожидания: Lock, IO, CPU (pg_stat_activity.wait_event_type)
+       wait_event,                -- конкретное событие ожидания (pg_stat_activity.wait_event):
+       --   'relation' — ждёт блокировку таблицы
+       --   'tuple'    — ждёт блокировку строки
+       state,                     -- состояние: active, idle (pg_stat_activity.state)
+       LEFT(query, 100) AS запрос -- текст запроса (pg_stat_activity.query)
+FROM pg_stat_activity -- системная таблица: текущие процессы
 WHERE state = 'active'
   AND wait_event IS NOT NULL
-  AND pid <> pg_backend_pid();  -- исключаем свой собственный процесс
+  AND pid <> pg_backend_pid();
+-- исключаем свой собственный процесс
 
 /*
   Если wait_event = 'relation' или 'tuple':
@@ -1528,14 +1501,13 @@ WHERE state = 'active'
   Шаг 2: Найти блокирующий процесс:
 */
 
-SELECT
-    blocked.pid            AS заблокирован,    -- PID заблокированного процесса
-    blocked.query          AS запрос_ждёт,     -- его запрос
-    blocking.pid           AS блокирует,       -- PID блокирующего процесса
-    blocking.query         AS запрос_блокиратор, -- его запрос
-    blocked.wait_event_type,                   -- тип ожидания
-    blocked.wait_event                         -- событие ожидания
-FROM pg_stat_activity blocked
+SELECT blocked.pid    AS заблокирован,      -- PID заблокированного процесса
+       blocked.query  AS запрос_ждёт,       -- его запрос
+       blocking.pid   AS блокирует,         -- PID блокирующего процесса
+       blocking.query AS запрос_блокиратор, -- его запрос
+       blocked.wait_event_type,             -- тип ожидания
+       blocked.wait_event                   -- событие ожидания
+FROM pg_stat_activity          blocked
          JOIN pg_stat_activity blocking
          ON blocked.wait_event = 'relation'
              AND blocking.pid <> blocked.pid
