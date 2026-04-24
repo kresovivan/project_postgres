@@ -649,14 +649,374 @@ Limit
     Batches = 1  → всё в памяти (ОТЛИЧНО)
     Batches = 2-5 → на грани (увеличь work_mem в 2-4 раза)
     Batches > 10 → КАТАСТРОФА (срочно увеличить work_mem или сменить алгоритм)
+*/
 
 
 /*
 =============================================================================
-КАК ОПТИМИЗИРОВАТЬ ЗАПРОСЫ: ЧЕК-ЛИСТ
+ПОЛНОЕ ДЕРЕВО РЕШЕНИЙ ДЛЯ ОСНОВНЫХ АЛГОРИТМОВ POSTGRESQL
+С ДОПОЛНИТЕЛЬНЫМИ ПРИЗНАКАМИ ДЛЯ ЛУЧШЕГО ПОНИМАНИЯ
 =============================================================================
+*/
 
 /*
+═════════════════════════════════════════════════════════════════════════════
+1. МЕТОД ДОСТУПА К ДАННЫМ (Seq Scan / Index Scan / Bitmap Scan / Index Only Scan)
+═════════════════════════════════════════════════════════════════════════════
+
+КАК ОПРЕДЕЛИТЬ В ПЛАНЕ:
+  Seq Scan on t            — читает всю таблицу страница за страницей
+  Index Scan using idx     — читает индекс → heap (таблицу)
+  Index Only Scan using idx — читает ТОЛЬКО индекс (heap не трогает)
+  Bitmap Heap Scan         — битмап страниц → heap
+    -> Bitmap Index Scan   — построение битмапа из индекса
+
+═════════════════════════════════════════════════════════════════════════════
+
+WHERE использует колонку с индексом?
+│
+├─ НЕТ → Seq Scan
+│   │
+│   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+│   │   • Filter + Rows Removed by Filter > 70%? → СОЗДАТЬ ИНДЕКС
+│   │   • Таблица < 10 страниц? → Seq Scan ОПТИМАЛЕН (индекс не нужен)
+│   │   • Parallel Seq Scan? → читается в N потоков (Gather вверху)
+│   │
+│   └─ НЕТ индекса, но s < 5%? → СОЗДАТЬ ИНДЕКС (точечные запросы)
+│
+└─ ДА → Селективность s = строк_из_WHERE / всего_строк?
+    │
+    │   КАК ОЦЕНИТЬ s:
+    │   • EXPLAIN: rows в верхней строке / reltuples в pg_class
+    │   • pg_stats.most_common_freqs для частых значений
+    │   • SELECT count(*) FROM t WHERE условие — точный подсчёт
+    │
+    ├─ s > 30% → Seq Scan
+    │   │
+    │   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+    │   │   • Планировщик НЕ ошибся! 30%+ = sequential read быстрее random I/O
+    │   │   • Исключение: Index Only Scan может быть быстрее (если heap не читаем)
+    │   │   • Bitmap Scan здесь НЕ оптимлен (построение битмапа дороже Seq Scan)
+    │   │
+    │   └─ WHERE с частым значением (most_common_freqs > 0.3)? → Seq Scan ОПТИМАЛЕН
+    │
+    ├─ 5% ≤ s ≤ 30% → Bitmap Scan
+    │   │
+    │   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+    │   │   • Heap Blocks: exact=X → X >> rows? → данные разбросаны
+    │   │   • Recheck Cond → перепроверка на странице (нормально для Bitmap)
+    │   │   • BitmapOr/BitmapAnd → комбинация 2+ индексов
+    │   │   • work_mem влияет: битмап строится в памяти
+    │   │
+    │   └─ correlation > 0.8? (pg_stats) → Index Scan
+    │       │
+    │       │   ПОЧЕМУ: данные скучены → Index Scan = почти sequential read
+    │       │   ПРОВЕРИТЬ: SELECT correlation FROM pg_stats
+    │       │   ГДЕ: correlation → 1.0 = идеальный порядок, 0.0 = хаос
+    │       │
+    │       └─ УЖЕ сделали CLUSTER? → correlation ≈ 1.0 → Index Scan
+    │
+    └─ s < 5% → correlation > 0.7? (pg_stats)
+        │
+        ├─ ДА → Index Scan
+        │   │
+        │   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+        │   │   • buffers / rows > 1.0? → CLUSTER (каждая строка на своей странице!)
+        │   │   • buffers / rows < 0.1? → ОТЛИЧНО (много строк на странице)
+        │   │   • Index Cond (не Filter!) → поиск по индексу (хорошо)
+        │   │   • Filter поверх Index Cond → фильтрация после чтения heap (хуже)
+        │   │
+        │   └─ Все колонки SELECT есть в индексе? → Index Only Scan
+        │       │
+        │       │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+        │       │   • Heap Fetches: 0 → идеально (heap не читали)
+        │       │   • Heap Fetches > 0 → visibility map устарела → VACUUM
+        │       │   • indexdef в pg_indexes → проверь INCLUDE колонки
+        │       │   • n_tup_upd/del в pg_stat_user_tables → много после VACUUM?
+        │       │
+        │       └─ НЕТ Index Only Scan, хотя колонки в индексе?
+        │           → VACUUM таблица; (обновить visibility map)
+        │
+        └─ НЕТ → Bitmap Scan
+            │
+            │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+            │   • correlation < 0.3 → данные РАЗБРОСАНЫ → Bitmap выгоднее Index Scan
+            │   • Heap Blocks: exact ≈ rows → КАЖДАЯ строка на своей странице!
+            │   • Хочешь Index Scan? → CLUSTER
+            │
+            └─ После CLUSTER: correlation ≈ 1.0 → план переключится на Index Scan
+
+
+═════════════════════════════════════════════════════════════════════════════
+2. МЕТОД СОЕДИНЕНИЯ (Nested Loop / Hash Join / Merge Join)
+═════════════════════════════════════════════════════════════════════════════
+
+КАК ОПРЕДЕЛИТЬ В ПЛАНЕ:
+  Nested Loop              — внешний цикл × внутренний поиск
+  Hash Join                — Hash (inner) + Scan (outer)
+  Merge Join               — два отсортированных потока
+  Hash Semi Join           — EXISTS с хешом
+  Hash Anti Join           — NOT EXISTS с хешом
+
+КАК ОПРЕДЕЛИТЬ N_outer И N_inner:
+  • Первый дочерний узел (меньше отступ) = outer (внешняя таблица)
+  • Второй дочерний узел (больше отступ) = inner (внутренняя таблица)
+  • В EXPLAIN: читай СЛЕВА НАПРАВО и СВЕРХУ ВНИЗ по отступам
+
+═════════════════════════════════════════════════════════════════════════════
+
+N_outer = строк во внешней таблице (смотри actual ... rows=Y loops=1)
+N_inner = строк во внутренней таблице (смотри actual ... rows=Y loops=N)
+
+N_outer < 100?
+│
+├─ ДА → Индекс на inner по ключу JOIN?
+│   │
+│   │   ПРОВЕРИТЬ:
+│   │   • EXPLAIN: внутренний узел = Index Scan? → хорошо
+│   │   • EXPLAIN: внутренний узел = Seq Scan? → КАТАСТРОФА!
+│   │   • pg_indexes: indexdef содержит ключ JOIN?
+│   │
+│   ├─ ДА → Nested Loop
+│   │   │
+│   │   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+│   │   │   • loops=N во внутреннем узле → N итераций
+│   │   │   • loops до 500 → ОТЛИЧНО (мгновенно)
+│   │   │   • loops 500-5000 → НОРМАЛЬНО (терпимо)
+│   │   │   • loops > 5000 → Hash Join может быть лучше
+│   │   │   • buffers_inner / loops ≈ 1? → каждая итерация = 1 страница
+│   │   │   • buffers_inner / loops ≈ 100? → каждая итерация = 100 страниц (дорого!)
+│   │   │
+│   │   └─ ЕСЛИ loops > 1000 И buffers/rows > 1.0 для inner?
+│   │       → Может, Hash Join лучше (сравнить: loops × cost vs cost_hash)
+│   │
+│   └─ НЕТ → Hash Join
+│       │
+│       │   ПОЧЕМУ: Nested Loop без индекса = O(N_outer × N_inner) = КАТАСТРОФА
+│       │   ПРИМЕР: 50 × 1M = 50M чтений (vs Hash Join: 1M + 50)
+│       │
+│       └─ ЕСЛИ N_outer = 1 и нужна 1 строка → Nested Loop (Seq Scan 1 раз)
+│
+└─ НЕТ → N_outer < 10 000?
+    │
+    ├─ ДА → Индекс на inner?
+    │   │
+    │   ├─ ДА → Nested Loop ИЛИ Hash Join (планировщик сравнивает стоимость)
+    │   │   │
+    │   │   │   КАК ПЛАНИРОВЩИК ВЫБИРАЕТ:
+    │   │   │   • cost_nl = cost_outer + N_outer × cost_index_search
+    │   │   │   • cost_hash = cost_outer + cost_hash_build + N_outer × cost_probe
+    │   │   │   • Если N_outer × cost_index > cost_hash_build → Hash Join
+    │   │   │
+    │   │   └─ НЕТ явного победителя? → см. actual time в EXPLAIN
+    │   │
+    │   └─ НЕТ → Hash Join
+    │
+    └─ НЕТ → Hash Join
+        │
+        │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+        │   • Hash (inner) — какая таблица в хеше?
+        │   • МЕНЬШАЯ → ОТЛИЧНО (Batches = 1, Memory Usage мало)
+        │   • БОЛЬШАЯ → Планировщик ОШИБСЯ!
+        │     → ANALYZE обе таблицы; (уточнить reltuples в pg_class)
+        │     → Проверить: SELECT relname, reltuples FROM pg_class WHERE ...
+        │   • Batches = 1? → всё в памяти
+        │   • Batches > 1? → УВЕЛИЧИТЬ work_mem
+        │   • Batches > 10? → КАТАСТРОФА (диск!)
+        │
+        └─ Batches всё ещё > 1 после увеличения work_mem?
+            │
+            ├─ ДА → Merge Join (если есть индексы/ORDER BY по ключу JOIN)
+            │   │
+            │   │   УСЛОВИЯ ДЛЯ Merge Join:
+            │   │   • Индексы по ключу JOIN на ОБЕИХ таблицах → 0 сортировки
+            │   │   • ORDER BY по ключу JOIN → сортировка уже сделана
+            │   │   • НЕТ индексов? → Sort + Merge Join (дорого! 2 сортировки)
+            │   │
+            │   └─ НЕТ сортировки? → Sort + Merge Join
+            │       └─ Стоимость: 2 × O(N log N) + O(N+M)
+            │
+            └─ НЕТ → УВЕЛИЧИТЬ work_mem ещё
+
+ОСОБЫЕ СЛУЧАИ:
+  • ORDER BY по ключу JOIN + индексы → Merge Join (0 памяти, идеально!)
+    ПРИЗНАК: Merge Cond совпадает с ORDER BY
+  • Hash выбрал БОЛЬШУЮ таблицу как inner → ANALYZE (ошибка reltuples)
+    ПРИЗНАК: Hash над таблицей с бОльшим reltuples
+  • Nested Loop + loops > 1000 + Seq Scan на inner → ИНДЕКС НА INNER!
+    ПРИЗНАК: внутренний узел = Seq Scan, loops=5000 → 5000 × полное сканирование
+  • EXISTS → Hash Semi Join / Nested Loop Semi
+    ПРИЗНАК: останавливается на ПЕРВОМ совпадении
+  • NOT EXISTS → Hash Anti Join
+    ПРИЗНАК: ищет ОТСУТСТВИЕ совпадений
+
+
+═════════════════════════════════════════════════════════════════════════════
+3. МЕТОД ГРУППИРОВКИ (HashAggregate / GroupAggregate)
+═════════════════════════════════════════════════════════════════════════════
+
+КАК ОПРЕДЕЛИТЬ В ПЛАНЕ:
+  HashAggregate            — Group Key, Batches, Memory Usage
+  GroupAggregate            — Group Key (без Batches, без Memory Usage)
+  Partial HashAggregate     — внутри параллельного воркера
+  Finalize GroupAggregate   — финализация после Gather Merge
+
+═════════════════════════════════════════════════════════════════════════════
+
+Данные отсортированы по ключу GROUP BY?
+│
+│   КАК ПОНЯТЬ ЧТО ОТСОРТИРОВАНЫ:
+│   • Дочерний узел = Index Scan по GROUP BY → ДА (индекс = порядок)
+│   • Дочерний узел = Merge Join по GROUP BY → ДА
+│   • Дочерний узел = Sort по GROUP BY → ДА (но дорого!)
+│   • Дочерний узел = Seq Scan → НЕТ (данные в разнобой)
+│   • CLUSTER по GROUP BY + Index Scan → ДА (идеально!)
+│
+├─ ДА → GroupAggregate (0 памяти, стримовая агрегация)
+│   │
+│   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+│   │   • НЕТ Batches, НЕТ Memory Usage → 0 памяти!
+│   │   • Выдаёт результат СРАЗУ (не ждёт все строки)
+│   │   • Идеально для потоковой обработки
+│   │   • correlation > 0.7 для GROUP BY → Index Scan → GroupAggregate
+│   │
+│   └─ Дочерний узел = Sort? → HashAggregate может быть лучше
+│       │
+│       │   ПОЧЕМУ: Sort дорогой (O(N log N)), HashAggregate может быть дешевле
+│       │   СРАВНИ: cost_sort vs cost_hash_aggregate
+│       │
+│       └─ НО ЕСЛИ Sort уже нужен для ORDER BY → GroupAggregate БЕСПЛАТНО!
+│
+└─ НЕТ → HashAggregate
+    │
+    │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+    │   • Group Key — ключ группировки
+    │   • Batches = 1 → всё в памяти (ОПТИМАЛЕН)
+    │   • Memory Usage → сколько памяти занял хеш
+    │   • Число уникальных групп G = n_distinct в pg_stats
+    │   • G < 1000 → Memory Usage мало → ОТЛИЧНО
+    │   • G > 10 000 → Memory Usage может превысить work_mem → Batches > 1
+    │
+    ├─ Batches = 1? → ОПТИМАЛЕН
+    │
+    └─ Batches > 1? → УВЕЛИЧИТЬ work_mem
+        │
+        │   СКОЛЬКО УВЕЛИЧИТЬ:
+        │   • Batches = 2 → work_mem × 2
+        │   • Batches = 5 → work_mem × 5
+        │   • Batches = N → work_mem × N (чтобы Batches стало 1)
+        │
+        └─ Не помогло? → GroupAggregate (ORDER BY + индекс по GROUP BY)
+            │
+            │   КАК ПЕРЕКЛЮЧИТЬ:
+            │   • CREATE INDEX ON t (group_key);
+            │   • Добавь ORDER BY group_key в запрос
+            │   • План переключится на GroupAggregate
+            │
+            └─ G > 100 000? → GroupAggregate ЕДИНСТВЕННЫЙ выход
+
+ПАРАЛЛЕЛЬНЫЙ HashAggregate:
+  • Parallel Seq Scan → Partial HashAggregate (в каждом воркере)
+    → Gather Merge → Finalize GroupAggregate
+  • ПРИЗНАК: Workers Planned > 0
+  • Workers Launched = 0? → закончились воркеры → пункт 16
+  • Параллельный план МЕДЛЕННЕЕ? → SET max_parallel_workers_per_gather = 0
+
+DISTINCT:
+  • Работает как GROUP BY без агрегата
+  • HashAggregate (G мало) ИЛИ Unique + Sort (G много)
+
+
+═════════════════════════════════════════════════════════════════════════════
+4. СОРТИРОВКА И TOP-N (Sort / Index Scan Backward / Top-N Heapsort)
+═════════════════════════════════════════════════════════════════════════════
+
+КАК ОПРЕДЕЛИТЬ В ПЛАНЕ:
+  Sort                      — Sort Key, Sort Method, Memory/Disk
+  Index Scan Backward       — чтение индекса с конца (DESC)
+  Index Scan                — чтение индекса (ASC)
+  Limit                     — обрезает результат до N строк
+
+═════════════════════════════════════════════════════════════════════════════
+
+ORDER BY + LIMIT?
+│
+├─ ДА → Индекс по ORDER BY?
+│   │
+│   │   ПРОВЕРИТЬ:
+│   │   • pg_indexes: indexdef содержит колонку из ORDER BY?
+│   │   • Направление: ASC → Index Scan, DESC → Index Scan Backward
+│   │   • Index Only Scan? → все колонки SELECT в индексе
+│   │
+│   ├─ ДА → Index Scan (ASC) / Index Scan Backward (DESC)
+│   │   │
+│   │   │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+│   │   │   • actual time → 0.04ms (МГНОВЕННО!)
+│   │   │   • rows = LIMIT (не больше!)
+│   │   │   • buffers → только страницы индекса (очень мало)
+│   │   │   • Ускорение vs Top-N Heapsort: в 100-1000 раз!
+│   │   │
+│   │   └─ Все колонки SELECT есть в индексе? → Index Only Scan
+│   │       (вообще не читаем heap!)
+│   │
+│   └─ НЕТ → Top-N Heapsort
+│       │
+│       │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+│       │   • Sort Method: top-N heapsort → куча из N строк
+│       │   • Память: O(N) — очень мало
+│       │   • Время: O(N_total × log N) — один проход по таблице
+│       │   • Фильтр WHERE + оценка строк → если фильтр селективный → быстро
+│       │   • Фильтр НЕ селективный → может прочитать всю таблицу
+│       │
+│       └─ СОЗДАТЬ ИНДЕКС ПО ORDER BY (ускорение в 100-1000 раз!)
+│
+└─ НЕТ (ORDER BY без LIMIT) → Индекс по ORDER BY?
+    │
+    │   ДОПОЛНИТЕЛЬНЫЕ ПРИЗНАКИ:
+    │   • Sort Key — колонка сортировки
+    │   • Sort Method: quicksort → в памяти (ОК)
+    │   • Sort Method: external merge Disk: XXXkB → на диске (ПЛОХО!)
+    │
+    ├─ ДА → Index Scan
+    │   │
+    │   │   ПОЧЕМУ: индекс УЖЕ содержит отсортированные данные
+    │   │   ПЛЮС: 0 памяти, sequential read
+    │   │
+    │   └─ Все колонки SELECT есть в индексе? → Index Only Scan
+    │
+    └─ НЕТ → Sort
+        │
+        ├─ quicksort (в памяти) → ОК
+        │   └─ Memory: XkB → < work_mem → отлично
+        │
+        └─ external merge Disk: XXXkB → УВЕЛИЧИТЬ work_mem ИЛИ ИНДЕКС
+            │
+            │   ПОЧЕМУ НА ДИСКЕ:
+            │   • Объём данных > work_mem
+            │   • Сортировка разбивается на куски, сливается с диска
+            │   • Время: O(N log N) + disk I/O → МЕДЛЕННО!
+            │
+            └─ РЕШЕНИЕ:
+                ├─ SET work_mem = 'XXXMB'; (увеличь до объёма данных)
+                └─ CREATE INDEX ON t (order_col); (0 сортировки!)
+
+ОКОННЫЕ ФУНКЦИИ (OVER):
+  • Требуют Sort по PARTITION BY + ORDER BY
+  • ПРИЗНАК: WindowAgg + Sort
+  • Индекс покрывает (PARTITION BY, ORDER BY)? → Index Scan (без Sort!)
+  • ПРИМЕР: SUM() OVER (PARTITION BY dept ORDER BY date)
+    → CREATE INDEX ON t (dept, date);
+*/
+
+
+
+
+
+
+*/
+
+
+
 =============================================================================
 ПОЛНЫЙ ЧЕК-ЛИСТ ОПТИМИЗАЦИИ ЗАПРОСОВ POSTGRESQL (21 ПУНКТ)
 СГРУППИРОВАН ПО ЭТАПАМ С КОММЕНТАРИЯМИ КО ВСЕМ СТОЛБЦАМ
@@ -673,14 +1033,14 @@ Limit
 -- 1. ПОЛУЧАЕМ ПЛАН МЕДЛЕННОГО ЗАПРОСА
 --============================================================================
 
-EXPLAIN (ANALYZE, BUFFERS)
+EXPLAIN (ANALYZE, BUFFERS);
 ТВОЙ_ЗАПРОС;
 
 /*
 КОММЕНТАРИИ К ВЫВОДУ EXPLAIN:
 
   Ключевые метрики в плане:
-  • cost=начало..конец        — оценка стоимости (чем меньше, тем лучше)
+  • cost=начало..конец         — оценка стоимости (чем меньше, тем лучше)
   • actual time=начало..конец  — реальное время в мс (первое число — до первой строки)
   • rows=X                     — количество возвращённых строк
   • loops=N                    — сколько раз выполнен узел (для Nested Loop — число итераций)
@@ -1229,3 +1589,10 @@ WHERE blocked.wait_event IS NOT NULL;
   15. Запрос висит (wait_event)                — pg_terminate_backend
 
 */
+
+
+
+
+
+
+
