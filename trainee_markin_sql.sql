@@ -32535,19 +32535,56 @@ DROP TRIGGER Str_Delete ON Street;
 - вывод полной информации о системных и пользовательских триггерах:
 */
 
-SELECT * FROM pg_catalog.pg_trigger;
+SELECT *
+FROM pg_catalog.pg_trigger;
+
+
+
+SELECT
+    t.tgname AS trigger_name,
+    c.relname AS table_name,
+    p.proname AS function_name,
+    pg_get_functiondef(p.oid) AS function_body
+FROM pg_trigger t
+         JOIN pg_class c ON t.tgrelid = c.oid
+         JOIN pg_proc p ON t.tgfoid = p.oid;
 
 /*
 - вывод имен системных и пользовательских триггеров:
 */
 
-SELECT tgname FROM pg_trigger;
+SELECT tgname
+FROM pg_trigger;
 
 /*
 - вывод полной информации о пользовательских триггерах:
 */
 
-SELECT * FROM information_schema.triggers;
+SELECT *
+FROM information_schema.triggers;
+
+
+SELECT
+    -- из pg_trigger
+    t.tgname AS trigger_name,
+    c.relname AS table_name,
+    p.proname AS function_name,
+    pg_get_functiondef(p.oid) AS function_body,
+    -- переходные таблицы (из pg_trigger)
+    t.tgoldtable AS old_table_name,
+    t.tgnewtable AS new_table_name,
+    -- из information_schema.triggers
+    i.action_timing,
+    i.event_manipulation,
+    i.action_orientation,
+    i.action_statement
+FROM pg_trigger t
+         JOIN pg_class c ON t.tgrelid = c.oid
+         JOIN pg_proc p ON t.tgfoid = p.oid
+         LEFT JOIN information_schema.triggers i ON i.trigger_name = t.tgname
+    AND i.event_object_table = c.relname
+WHERE NOT t.tgisinternal;
+
 
 /*
 - вывод имен системных и пользовательских триггеров к определенной таблице:
@@ -32555,7 +32592,7 @@ SELECT * FROM information_schema.triggers;
 
 SELECT tgname
 FROM pg_trigger, pg_class
-WHERE tgrelid = pg_class.oid AND relname = 'таблица';
+WHERE tgrelid = pg_class.oid AND relname = 'abonent';
 
 /*
 Информацию о триггерах также можно получить при использовании утилиты DBeaver.
@@ -32568,5 +32605,5 @@ WHERE tgrelid = pg_class.oid AND relname = 'таблица';
 
 
 
-/*679 - Триггеры*/
+/*680 - Триггеры*/
 
