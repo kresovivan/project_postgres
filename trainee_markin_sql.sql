@@ -714,6 +714,17 @@ from abonent;
 SELECT DISTINCT ON (accountid) accountid, paydate, paysum
 FROM paysumma;
 
+
+SELECT DISTINCT ON (paydate) accountid, paydate, paysum
+FROM paysumma;
+
+
+
+
+select *
+FROM paysumma
+where Accountid= '005488';
+
 /*Для вывода кобинаций нескольких столбцов можно обмернут
   выражение из них в distinct
   Следующий запрос возвращает список уникальных комбиннаций
@@ -763,10 +774,12 @@ from abonent a;
 */
 
 select R.*
-from (values ('X', 50)
-           , ('Y', 60)
-           , ('X', 60)
-           , ('Y', 80)) As R(a, b);
+from (
+     values ('X', 50)
+          , ('Y', 60)
+          , ('X', 60)
+          , ('Y', 80)
+     ) As R(a, b);
 
 /*В СУБД Postgresql поддерживается запрос, содержащий только
   функцию select */
@@ -1911,9 +1924,10 @@ SELECT requestid,
        ' № л/с абонента ' || accountid    AS "Ab_Info",
        ' Код неисправности ' || failureid AS "Failure",
        CASE executed
-           WHEN FALSE THEN 'Не погашена'
+           WHEN FALSE
+               THEN 'Не погашена'
            ELSE 'Погашена'
-           END                               "Гашение"
+       END                                   "Гашение"
 FROM request
 WHERE accountid = '115705';
 
@@ -1941,7 +1955,7 @@ SELECT Payfactid,
                BETWEEN '01.01.2023' AND '31.12.2024'
                THEN 'Не очень давно'
            ELSE 'Недавно'
-           END AS "OpIata"
+       END AS "OpIata"
 FROM Paysumma
 WHERE Paysum BETWEEN 530 AND 600;
 
@@ -1955,11 +1969,12 @@ SELECT accountid,
        REPLACE(accountid,
                '6',
                CASE
-                   WHEN RANDOM() * 10 < 6 THEN
+                   WHEN RANDOM() * 10 < 6
+                       THEN
                        6 - RANDOM() * 6
                    ELSE
                        RANDOM() * 3 + 7
-                   END :: CHAR(1)
+               END :: CHAR(1)
        ) AS new_accountid,
        fio
 FROM abonent;
@@ -1979,18 +1994,20 @@ SELECT paydate,
                    WHEN EXTRACT(ISODOW FROM paydate) = 7
                        THEN 'Воскресенье'
                    ELSE 'Суббота'
-                   END
-           END "День"
+               END
+       END "День"
 FROM paysumma;
 
 /*или получить тоже самое без вложения:*/
 
 SELECT Paydate,
        CASE TRIM(TO_CHAR(Paydate, 'day'))
-           WHEN 'saturday' THEN 'Суббота'
-           WHEN 'sunday' THEN 'Воскресенье'
+           WHEN 'saturday'
+               THEN 'Суббота'
+           WHEN 'sunday'
+               THEN 'Воскресенье'
            ELSE 'Рабочий'
-           END AS "День"
+       END AS "День"
 FROM Paysumma;
 
 /*CASE может использоваться в качестве аргумента агрегатных
@@ -2016,12 +2033,12 @@ SELECT Requestid,
            WHEN Executiondate IS NOT NULL
                THEN 'Выполнена'
            ELSE 'Не выполнена'
-           END                               AS "Выполнение",
+       END                                   AS "Выполнение",
        CASE
            WHEN Executed ---CASE WHEN Executed = TRUE THEN 'Погашена' ELSE 'Не погашена' END
                THEN 'Погашена'
            ELSE 'Не погашена'
-           END                               AS "Гашение"
+       END                                   AS "Гашение"
 FROM Request
 WHERE Accountid = '115705';
 
@@ -2030,11 +2047,13 @@ SELECT requestid,
        executiondate,
        executed,
        CASE
-           WHEN executiondate IS NOT NULL AND executed THEN 'Выполнена и погашена'
-           WHEN executiondate IS NOT NULL AND NOT executed THEN 'Выполнена и не погашена'
+           WHEN executiondate IS NOT NULL AND executed
+               THEN 'Выполнена и погашена'
+           WHEN executiondate IS NOT NULL AND NOT executed
+               THEN 'Выполнена и не погашена'
 
            ELSE 'Не выполнена и не погашена'
-           END "Статус"
+       END "Статус"
 FROM request;
 
 
@@ -2050,10 +2069,12 @@ SELECT r.*
 FROM request r
 WHERE (COALESCE(executiondate, CURRENT_DATE) - incomingdate) >=
       CASE
-          WHEN failureid IN (1, 3, 6, 7, 8) THEN 31
-          WHEN failureid = 5 THEN 14
+          WHEN failureid IN (1, 3, 6, 7, 8)
+              THEN 31
+          WHEN failureid = 5
+              THEN 14
           ELSE NULL
-          END;
+      END;
 
 
 
@@ -2081,13 +2102,14 @@ SELECT requestid,
            WHEN executorid < 4 OR executiondate < '01.01.2024'
                THEN 'FALSE'
            ELSE 'UNKNOWN'
-           END " > 3 AND > 31.12.2023",
+       END " > 3 AND > 31.12.2023",
        CASE
            WHEN executorid >= 4 OR executiondate > '31.12.2023'
                THEN 'TRUE'
-           WHEN executorid < 4 THEN 'FALSE'
+           WHEN executorid < 4
+               THEN 'FALSE'
            ELSE 'UNKNOWN'
-           END " > 3 OR > 31.12.2023"
+       END " > 3 OR > 31.12.2023"
 FROM request;
 
 /*Если заявка не выполнена, то установить дату поступления заявки,
@@ -2138,11 +2160,14 @@ SELECT accountid, serviceid, paysum
 FROM paysumma
 WHERE serviceid =
       CASE
-          WHEN accountid = '136169' THEN 1
-          WHEN accountid = '136160' THEN 3
-          WHEN accountid = '080270' THEN 4
+          WHEN accountid = '136169'
+              THEN 1
+          WHEN accountid = '136160'
+              THEN 3
+          WHEN accountid = '080270'
+              THEN 4
           ELSE null
-          END;
+      END;
 
 
 /*
@@ -2493,7 +2518,7 @@ SELECT 'В среднем начислено ' || (
         WHEN nachislyear < 2024
             THEN 'до 2024 года'
         ELSE 'после 2023 года'
-        END)                     AS "Year",
+    END)                         AS "Year",
        ROUND(AVG(nachislsum), 2) AS "Average_Sum"
 FROM nachislsumma
 GROUP BY "Year";
@@ -2503,12 +2528,12 @@ GROUP BY "Year";
 */
 
 SELECT accountid,
-       COUNT(*) AS "Всего платежей",
+       COUNT(*)   AS "Всего платежей",
        COUNT(CASE
                  WHEN paysum > 300
                      THEN 1
                  ELSE NULL
-           END) AS "Из них больше 300"
+             END) AS "Из них больше 300"
 FROM paysumma
 GROUP BY accountid;
 
@@ -2689,12 +2714,12 @@ SELECT CASE
            WHEN GROUPING(Serviceid) = 1 AND GROUPING(Accountid) = 1
                THEN 'Итого по всем услугам'
            ELSE Serviceid::TEXT
-           END     AS      Serviceid,
+       END         AS      Serviceid,
        CASE
            WHEN GROUPING(Serviceid) = 0 AND GROUPING(Accountid) = 1
                THEN 'Итого по услуге'
            ELSE COALESCE(Accountid::TEXT, '')
-           END     AS      Accountid,
+       END         AS      Accountid,
        SUM(Paysum) AS      Sum,
        GROUPING(Serviceid) "Gs",
        GROUPING(Accountid) "Ga"
@@ -2920,11 +2945,13 @@ GROUP BY accountid, serviceid
 HAVING (MAX(CASE
                 WHEN serviceid = 2
                     THEN paysum
-                ELSE NULL END) > 600
+                ELSE NULL
+            END) > 600
     OR MAX(CASE
                WHEN serviceid = 4
                    THEN paysum
-               ELSE NULL END) > 300);
+               ELSE NULL
+           END) > 300);
 
 /*
 Как и условие поиска в секции WHERE, условие поиска в секции HAVING
@@ -3107,9 +3134,14 @@ ORDER BY RANDOM();
 SELECT *
 FROM paysumma
 WHERE payfactid >=
-      (SELECT FLOOR(1 + RANDOM() *
-                        (SELECT MAX(payfactid) FROM paysumma)
-              ))
+      (
+      SELECT FLOOR(1 + RANDOM() *
+                       (
+                       SELECT MAX(payfactid)
+                       FROM paysumma
+                       )
+             )
+      )
 LIMIT 1;
 
 /*
@@ -3164,9 +3196,10 @@ CASE, например так:
 SELECT *
 FROM disrepair
 ORDER BY CASE
-             WHEN failurenm LIKE '%плиты%' THEN 0
+             WHEN failurenm LIKE '%плиты%'
+                 THEN 0
              ELSE 1
-             END,
+         END,
          failurenm;
 
 /*
@@ -3178,9 +3211,10 @@ ORDER BY CASE
 SELECT *
 FROM abonent
 ORDER BY CASE
-             WHEN streetid = 4 THEN fio
+             WHEN streetid = 4
+                 THEN fio
              ELSE phone
-             END;
+         END;
 
 /*
 Следующий запрос осуществляет сортировку строк таблицы Request
@@ -3218,9 +3252,10 @@ SELECT *
 FROM abonent
 ORDER BY (phone IS NOT NULL),
          CASE
-             WHEN phone IS NULL THEN fio
+             WHEN phone IS NULL
+                 THEN fio
              ELSE phone
-             END;
+         END;
 
 /*
 Последующий запрос сортирует строки таблицы Abonent по идентификатору
@@ -3397,10 +3432,12 @@ ORDER BY accountid, paydate DESC;
 
 /*Аналог через оконную функцию*/
 
-WITH ranked AS (SELECT *,
-                       ROW_NUMBER() OVER (PARTITION BY accountid
-                           ORDER BY paydate DESC) AS rn
-                FROM paysumma)
+WITH ranked AS (
+               SELECT *,
+                      ROW_NUMBER() OVER (PARTITION BY accountid
+                          ORDER BY paydate DESC) AS rn
+               FROM paysumma
+               )
 SELECT *
 FROM ranked
 WHERE rn = 1;
@@ -3472,35 +3509,46 @@ POSITION(подстрока IN строка) — функция, которая 
 */
 
 SELECT s.*
-FROM (VALUES ('Воскресенье'),
-             ('Вторник'),
-             ('Понедельник'),
-             ('Пятница'),
-             ('Среда'),
-             ('Суббота'),
-             ('Четверг')) AS s ("День недели")
+FROM (
+     VALUES ('Воскресенье'),
+            ('Вторник'),
+            ('Понедельник'),
+            ('Пятница'),
+            ('Среда'),
+            ('Суббота'),
+            ('Четверг')
+     ) AS s ("День недели")
 ORDER BY POSITION("День недели" IN
                   'ПонедельникВторникСредаЧетвергПятницаСубботаВоскресенье'
          );
 
 /*Аналог*/
 SELECT s.*
-FROM (VALUES ('Воскресенье'),
-             ('Вторник'),
-             ('Понедельник'),
-             ('Пятница'),
-             ('Среда'),
-             ('Суббота'),
-             ('Четверг')) AS s("День недели")
+FROM (
+     VALUES ('Воскресенье'),
+            ('Вторник'),
+            ('Понедельник'),
+            ('Пятница'),
+            ('Среда'),
+            ('Суббота'),
+            ('Четверг')
+     ) AS s("День недели")
 ORDER BY CASE "День недели"
-             WHEN 'Понедельник' THEN 1
-             WHEN 'Вторник' THEN 2
-             WHEN 'Среда' THEN 3
-             WHEN 'Четверг' THEN 4
-             WHEN 'Пятница' THEN 5
-             WHEN 'Суббота' THEN 6
-             WHEN 'Воскресенье' THEN 7
-             END;
+             WHEN 'Понедельник'
+                 THEN 1
+             WHEN 'Вторник'
+                 THEN 2
+             WHEN 'Среда'
+                 THEN 3
+             WHEN 'Четверг'
+                 THEN 4
+             WHEN 'Пятница'
+                 THEN 5
+             WHEN 'Суббота'
+                 THEN 6
+             WHEN 'Воскресенье'
+                 THEN 7
+         END;
 
 /*
 UNNEST разворачивает массив в строки:
@@ -3664,7 +3712,7 @@ SELECT CASE
            WHEN :Par SIMILAR TO '[A-ЯЁ][a-яё]*([A-ЯЁ].){2}'
                THEN 'Да'
            ELSE 'Нет'
-           END
+       END
            AS "ФИО валидны";
 
 /*
@@ -3685,7 +3733,7 @@ SELECT CASE
                             '^[A-z0-9._%+-]+@[A-z0-9.-]+.[A-z]{2,}$')
                THEN 'Да'
            ELSE 'Нет'
-           END;
+       END;
 
 /*Многотабличные и вложенные запросы
 4.1. Соединения таблиц
@@ -3880,7 +3928,7 @@ WHERE abonent.streetid = street.streetid;
 
 SELECT a.fio, s.streetnm
 FROM abonent a,
-     street s
+     street  s
 WHERE a.streetid = s.streetid;
 
 /*
@@ -3897,7 +3945,7 @@ WHERE A.StreetId = S.StreetId;
 
 
 SELECT a.fio, n.nachislsum
-FROM abonent a,
+FROM abonent      a,
      nachislsumma n
 WHERE a.accountid = n.accountid
   AND nachislyear = 2025
@@ -3922,7 +3970,7 @@ WHERE a.accountid = n.accountid
 */
 
 SELECT a.fio, e.fio
-FROM abonent a,
+FROM abonent  a,
      executor e
 WHERE a.fio != e.fio;
 
@@ -3942,7 +3990,7 @@ WHERE a.fio != e.fio;
 значениями идентификаторов:
 */
 SELECT DISTINCT a.*
-FROM abonent a
+FROM abonent          a
          JOIN abonent b ON ABS(a.streetid - b.streetid) = 5;
 
 
@@ -3956,9 +4004,9 @@ FROM abonent a
 
 
 SELECT a.fio, n.nachislsum, p.paysum
-FROM abonent a,
+FROM abonent      a,
      nachislsumma n,
-     paysumma p
+     paysumma     p
 WHERE a.accountid = n.accountid
   AND a.accountid = p.accountid
   AND n.serviceid = p.serviceid
@@ -3996,9 +4044,9 @@ Accountid в таблице Abonent),
 */
 
 SELECT DISTINCT a.fio AS fio_abonent, e.fio AS fio_executor
-FROM abonent a,
+FROM abonent  a,
      executor e,
-     request r
+     request  r
 WHERE r.accountid = a.accountid
   AND r.executorid = e.executorid
 ORDER BY a.fio;
@@ -4152,27 +4200,27 @@ WHERE P.paysum > 1000;  -- убирает NULL-строки!
 */
 
 SELECT *
-FROM abonent a
+FROM abonent                a
          LEFT JOIN paysumma p
-                   ON a.accountid = p.accountid
-                       AND p.paysum > 1000;
+         ON a.accountid = p.accountid
+             AND p.paysum > 1000;
 -- присутствуют NULL-строки где нет сумм!
 
 
 SELECT *
-FROM abonent a
+FROM abonent                a
          LEFT JOIN paysumma p
-                   ON a.accountid = p.accountid
+         ON a.accountid = p.accountid
 WHERE p.paysum > 1000;
 -- убирает NULL-строки, где нет сумм!
 
 
 SELECT a.fio, s.streetnm
-FROM abonent a
+FROM abonent               a
          INNER JOIN street s ON a.streetid = s.streetid;
 
 SELECT a.fio, s.streetnm
-FROM abonent a
+FROM abonent                 a
          NATURAL JOIN street s;
 
 
@@ -4184,11 +4232,11 @@ FROM abonent a
 
 
 SELECT a.fio, s.streetnm
-FROM abonent a
+FROM abonent               a
          RIGHT JOIN street s ON a.streetid = s.streetid;
 
 SELECT a.fio, s.streetnm
-FROM abonent a
+FROM abonent                       a
          NATURAL RIGHT JOIN street s;
 
 /*
@@ -4208,12 +4256,12 @@ FROM abonent a
 */
 
 SELECT A.Fio, S.Streetnm
-FROM Abonent A
+FROM Abonent              A
          FULL JOIN Street S
-                   ON A.Streetid = S.Streetid;
+         ON A.Streetid = S.Streetid;
 
 SELECT A.Fio, S.Streetnm
-FROM Abonent A
+FROM Abonent                      A
          NATURAL FULL JOIN Street S;
 
 /*
@@ -4264,7 +4312,7 @@ USING (<список_столбцов>)
 */
 
 SELECT a.fio, streetid, s.streetnm
-FROM abonent a
+FROM abonent               a
          INNER JOIN street s USING (streetid);
 
 /*
@@ -4280,7 +4328,7 @@ STRING_AGG.
 */
 
 SELECT e.*, ARRAY_AGG(r.executiondate) AS "Дата выполнения"
-FROM executor e
+FROM executor         e
          JOIN request r USING (executorid)
 WHERE r.executiondate > '01.01.2024'
 GROUP BY e.executorid;
@@ -4296,7 +4344,7 @@ GROUP BY e.executorid;
 */
 
 SELECT e.fio, r.requestid
-FROM executor e
+FROM executor              e
          LEFT JOIN request r USING (executorid)
 WHERE r.executorid IS NULL;
 
@@ -4308,7 +4356,7 @@ WHERE r.executorid IS NULL;
 */
 
 SELECT e.fio, r.requestid
-FROM executor e
+FROM executor               e
          RIGHT JOIN request r USING (executorid)
 WHERE e.executorid IS NULL;
 
@@ -4324,7 +4372,7 @@ WHERE e.executorid IS NULL;
 */
 
 SELECT e.fio, r.requestid
-FROM executor e
+FROM executor                    e
          FULL OUTER JOIN request r USING (executorid)
 WHERE e.executorid IS NULL
    OR r.executorid IS NULL;
@@ -4336,7 +4384,7 @@ WHERE e.executorid IS NULL
 */
 
 SELECT a.fio AS "ФИО", ARRAY_AGG(DISTINCT s.servicenm) AS "услуги"
-FROM abonent a
+FROM abonent                a
          LEFT JOIN paysumma p USING (accountid)
          LEFT JOIN services s USING (serviceid)
 GROUP BY a.fio;
@@ -4352,7 +4400,7 @@ GROUP BY a.fio;
 */
 
 SELECT r.accountid, d.failurenm, r.executorid, COUNT(r.failureid)
-FROM disrepair d
+FROM disrepair              d
          RIGHT JOIN request r ON d.failureid = r.failureid
     AND r.executorid = 3
 GROUP BY d.failurenm, r.executorid, r.accountid;
@@ -4366,9 +4414,9 @@ GROUP BY d.failurenm, r.executorid, r.accountid;
 */
 
 SELECT r.accountid, d.failurenm, COUNT(r.failureid)
-FROM disrepair d
+FROM disrepair              d
          RIGHT JOIN request r
-                    ON d.failureid = r.failureid
+         ON d.failureid = r.failureid
 WHERE r.executorid = 3
 GROUP BY d.failurenm, r.accountid;
 
@@ -4404,9 +4452,9 @@ SELECT r.accountid,
        d.failurenm,
        d.failureid,
        COUNT(*) AS request_count
-FROM request r
+FROM request                 r
          LEFT JOIN disrepair d
-                   ON r.failureid = d.failureid
+         ON r.failureid = d.failureid
 WHERE 1 = 1
   --r.executorid = 3
   and d.failureid = 2
@@ -4416,9 +4464,9 @@ SELECT r.accountid,
        d.failurenm,
        d.failureid,
        COUNT(*) AS request_count
-FROM request r
+FROM request                  r
          INNER JOIN disrepair d
-                    ON r.failureid = d.failureid
+         ON r.failureid = d.failureid
 WHERE 1 = 1
   --r.executorid = 3
   AND d.failureid = 2
@@ -4435,7 +4483,7 @@ GROUP BY r.accountid, d.failurenm, d.failureid;
 */
 
 SELECT a.fio, s.streetid, s.streetnm
-FROM abonent a
+FROM abonent               a
          RIGHT JOIN street s USING (streetid)
 WHERE a.streetid IS NULL;
 
@@ -4446,7 +4494,7 @@ WHERE a.streetid IS NULL;
 */
 
 SELECT a.fio, p.paysum, p.serviceid
-FROM abonent a
+FROM abonent           a
          JOIN paysumma p USING (accountid)
 WHERE p.serviceid = 2
   AND p.paydate > '01.10.2023';
@@ -4467,7 +4515,7 @@ WHERE p.serviceid = 2
 SELECT A.Fio     AS "ФИО",
        P.Paysum  AS "Платеж",
        P.Paydate AS "Дата"
-FROM Abonent A
+FROM Abonent           A
          JOIN Paysumma P USING (AccountId)
 WHERE P.Paydate >= :C_даты::DATE
   AND P.Paydate < :C_даты::DATE + :Дней
@@ -4509,7 +4557,7 @@ COUNT(*) здесь корректен, потому что строки буд�
 */
 
 SELECT a.accountid, a.fio, COUNT(*) req_count
-FROM abonent a
+FROM abonent          a
          JOIN request r USING (accountid)
 GROUP BY a.accountid
 ORDER BY a.accountid;
@@ -4526,7 +4574,7 @@ Request) — будет считать только ненулевые запи�
 */
 
 SELECT a.accountid, a.fio, COUNT(r.requestid) req_count
-FROM abonent a
+FROM abonent               a
          LEFT JOIN request r USING (accountid)
 GROUP BY a.accountid
 ORDER BY a.accountid;
@@ -4545,7 +4593,7 @@ COUNT(*) снова посчитает строку, даже если A.Account
 
 
 SELECT a.accountid, a.fio, COUNT(*) req_count
-FROM abonent a
+FROM abonent                a
          RIGHT JOIN request r USING (accountid)
 WHERE a.accountid IS NOT NULL
 GROUP BY a.accountid
@@ -4568,7 +4616,7 @@ SELECT n.accountid,
        p.paysum,
        n.nachislmonth,
        n.nachislyear
-FROM nachislsumma n
+FROM nachislsumma           n
          LEFT JOIN paysumma p ON n.accountid = p.accountid
     AND n.serviceid = p.serviceid
     AND n.nachislmonth = p.paymonth
@@ -4595,9 +4643,9 @@ ORDER BY n.accountid, n.serviceid, n.nachislmonth, n.nachislyear;
 */
 
 SELECT s.streetnm, a.houseno AS house, a.flatno AS flat, a.fio, n.nachislsum
-FROM abonent a
-         RIGHT JOIN street s USING (streetid)
-         FULL JOIN nachislsumma n USING (accountid)
+FROM abonent                     a
+         RIGHT JOIN street       s USING (streetid)
+         FULL JOIN  nachislsumma n USING (accountid)
 WHERE (s.streetnm LIKE '%М%')
    OR (s.streetnm LIKE '%Г%')
 ORDER BY 1, 2, 3
@@ -4612,15 +4660,15 @@ ORDER BY 1, 2, 3
 */
 
 SELECT a.fio, e.fio
-FROM abonent a
+FROM abonent                 a
          INNER JOIN executor e
-                    ON SUBSTR(e.fio, 1, LENGTH(e.fio) - 6)
-                           = SUBSTR(a.fio, 1, LENGTH(a.fio) - 7)
-                        OR SUBSTR(e.fio, 1, LENGTH(e.fio) - 6)
-                           = SUBSTR(a.fio, 1, LENGTH(a.fio) - 6);
+         ON SUBSTR(e.fio, 1, LENGTH(e.fio) - 6)
+                = SUBSTR(a.fio, 1, LENGTH(a.fio) - 7)
+             OR SUBSTR(e.fio, 1, LENGTH(e.fio) - 6)
+                = SUBSTR(a.fio, 1, LENGTH(a.fio) - 6);
 
 SELECT a.fio AS abonent_fio, e.fio AS executor_fio
-FROM abonent a
+FROM abonent           a
          JOIN executor e ON a.fio != e.fio -- не сравниваем сами с собой
     AND SUBSTR(a.fio, 1, POSITION(' ' IN a.fio) - 1)
                                 = SUBSTR(e.fio, 1, POSITION(' ' IN e.fio) - 1);
@@ -4628,13 +4676,13 @@ FROM abonent a
 
 -- SPLIT_PART(строка, разделитель, номер_части)
 SELECT a.fio, e.fio
-FROM abonent a
+FROM abonent           a
          JOIN executor e ON a.fio != e.fio
     AND SPLIT_PART(a.fio, ' ', 1) = SPLIT_PART(e.fio, ' ', 1);
 
 -- С учётом регистра (приводим к нижнему)
 SELECT a.fio, e.fio
-FROM abonent a
+FROM abonent           a
          JOIN executor e ON a.fio != e.fio
     AND LOWER(SPLIT_PART(a.fio, ' ', 1))
                                 = LOWER(SPLIT_PART(e.fio, ' ', 1));
@@ -4646,7 +4694,7 @@ FROM abonent a
 SELECT SPLIT_PART(a.fio, ' ', 1)                AS surname,
        STRING_AGG(DISTINCT 'А:' || a.fio, ', ') AS abonents,
        STRING_AGG(DISTINCT 'И:' || e.fio, ', ') AS executors
-FROM abonent a
+FROM abonent           a
          JOIN executor e ON LOWER(SPLIT_PART(a.fio, ' ', 1))
     = LOWER(SPLIT_PART(e.fio, ' ', 1))
 GROUP BY surname
@@ -4654,7 +4702,7 @@ ORDER BY surname;
 
 -- Извлекаем фамилию как последовательность русских букв в начале строки
 SELECT a.fio, e.fio
-FROM abonent a
+FROM abonent           a
          JOIN executor e ON a.fio != e.fio
     AND SUBSTRING(a.fio FROM '^[А-Яа-яЁё]+')
                                 = SUBSTRING(e.fio FROM '^[А-Яа-яЁё]+');
@@ -4662,13 +4710,13 @@ FROM abonent a
 
 -- Компактное решение в одном запросе
 SELECT a.fio, e.fio
-FROM abonent a
+FROM abonent           a
          JOIN executor e
-              ON LOWER(
-                         REGEXP_REPLACE(SPLIT_PART(a.fio, ' ', 1), '(ова|ева|ина|ына|ая|а)$', '')
-                 ) = LOWER(
-                         REGEXP_REPLACE(SPLIT_PART(e.fio, ' ', 1), '(ова|ева|ина|ына|ая|а)$', '')
-                     );
+         ON LOWER(
+                    REGEXP_REPLACE(SPLIT_PART(a.fio, ' ', 1), '(ова|ева|ина|ына|ая|а)$', '')
+            ) = LOWER(
+                    REGEXP_REPLACE(SPLIT_PART(e.fio, ' ', 1), '(ова|ева|ина|ына|ая|а)$', '')
+                );
 /*
 Примечание: Данный запрос использует обрезание строки по длине,
 предполагая, что в конце ФИО указаны инициалы (например, "Иванов И.И.").
@@ -4726,7 +4774,7 @@ FROM Abonent,
 
 SELECT *
 FROM abonent a,
-     street s
+     street  s
 WHERE a.streetid = s.streetid;
 
 /*
@@ -4748,7 +4796,7 @@ FROM abonent
 
 SELECT accountid, s.streetid, streetnm, houseno, flatno, fio, phone
 FROM Abonent A,
-     Street S
+     Street  S
 WHERE A.Streetid = S.Streetid;
 
 
@@ -4767,7 +4815,7 @@ FROM abonent
 
 SELECT accountid, streetnm, houseno, flatno, fio, phone
 FROM abonent a,
-     street s
+     street  s
 WHERE a.streetid = s.streetid;
 
 /*
@@ -4803,7 +4851,7 @@ Asof-соединение. Применяется для столбцов с р�
 SELECT requestid                            AS "№ заявки",
        r.accountid                          AS "№ л. с.",
        MIN(ABS(r.incomingdate - p.paydate)) AS "Дней"
-FROM paysumma p
+FROM paysumma         p
          JOIN request r USING (accountid)
 GROUP BY requestid, r.accountid
 ORDER BY r.requestid;
@@ -4817,13 +4865,13 @@ ORDER BY r.requestid;
 */
 
 SELECT s.streetid
-FROM street s
+FROM street                s
          LEFT JOIN abonent a USING (streetid)
 WHERE a.streetid IS NULL
 ORDER BY 1;
 
 SELECT s.streetid
-FROM abonent a
+FROM abonent               a
          RIGHT JOIN street s USING (streetid)
 WHERE a.streetid IS NULL
 ORDER BY 1;
@@ -4841,7 +4889,7 @@ ORDER BY 1;
 */
 
 SELECT DISTINCT s.streetid
-FROM street s
+FROM street                 s
          INNER JOIN abonent a USING (streetid)
 ORDER BY 1;
 
@@ -4865,7 +4913,7 @@ ORDER BY 1;
 */
 
 SELECT DISTINCT a.*
-FROM abonent a
+FROM abonent          a
          JOIN request r USING (accountid)
 WHERE r.failureid = 2;
 
@@ -4919,7 +4967,7 @@ SQL выполняет операцию соединения, как для дв
 */
 
 SELECT a.fio, s.fio
-FROM abonent a
+FROM abonent          a
          JOIN abonent s USING (streetid)
 WHERE a.fio < s.fio;
 
@@ -4930,8 +4978,8 @@ WHERE a.fio < s.fio;
 */
 
 SELECT DISTINCT failurenm, r.accountid, b.accountid
-FROM request r,
-     request b,
+FROM request   r,
+     request   b,
      disrepair d
 WHERE r.failureid = b.failureid
   AND d.failureid = r.failureid
@@ -4951,7 +4999,7 @@ Paysumma соединяется сама с собой сравнением Pays
 */
 
 SELECT p1.paysum, COUNT(DISTINCT p2.paysum) AS paysum_rank
-FROM paysumma p1
+FROM paysumma          p1
          JOIN paysumma p2 ON p1.paysum <= p2.paysum
 GROUP BY p1.payfactid, p1.paysum
 ORDER BY 1 DESC;
@@ -4976,7 +5024,7 @@ ALTER TABLE Abonent
 */
 
 SELECT a.fio "Абонент", b.fio "Управляющий"
-FROM abonent a
+FROM abonent                a
          INNER JOIN abonent b ON a.head_account = b.accountid;
 
 /*
@@ -4995,7 +5043,7 @@ Abonent (под псевдонимом A) извлекаются ФИО абон
 */
 
 SELECT a.fio "Абонент", b.fio, a.fio, COALESCE(b.fio, a.fio) "Управляющий"
-FROM abonent a
+FROM abonent                     a
          LEFT OUTER JOIN abonent b ON a.head_account = b.accountid
 ORDER BY a.fio;
 
@@ -5015,9 +5063,11 @@ ORDER BY p.paydate;
 
 SELECT p.paydate,
        SUM(DISTINCT p.paysum),
-       COALESCE(SUM(p1.paysum) / (SELECT COUNT(p1.payfactid)
-                                  FROM paysumma p1
-                                  WHERE p1.paydate = p.paydate), 0) AS "Нарастающий итог"
+       COALESCE(SUM(p1.paysum) / (
+                                 SELECT COUNT(p1.payfactid)
+                                 FROM paysumma p1
+                                 WHERE p1.paydate = p.paydate
+                                 ), 0) AS "Нарастающий итог"
 FROM paysumma p,
      paysumma p1
 WHERE p1.paydate <= p.paydate
@@ -5119,7 +5169,7 @@ SELECT p.serviceid,
        p.paydate,
        p.paysum,
        COALESCE(SUM(p1.paysum), 0) AS "Нарастающий итог"
-FROM paysumma p
+FROM paysumma                p
          INNER JOIN paysumma p1 ON p1.serviceid = p.serviceid
 WHERE p1.paydate <= p.paydate
   AND p1.serviceid = p.serviceid
@@ -5390,7 +5440,9 @@ SELECT может быть только одна секция ORDER BY, и он�
 */
 
 SELECT 'sin(x)^2 + cos(x)^2 =' AS "Выражение",
-       (SELECT POWER(SIN(PI() / 4), 2) + POWER(COS(PI() / 4), 2))
+       (
+       SELECT POWER(SIN(PI() / 4), 2) + POWER(COS(PI() / 4), 2)
+       )
                                AS "Результат";
 
 /*Использование подзапроса позволяет «выдернуть» отдельное значение
@@ -5403,8 +5455,11 @@ SELECT 'sin(x)^2 + cos(x)^2 =' AS "Выражение",
 
 
 SELECT accountid,
-       ROUND(AVG(paysum), 2)                                AS avg_pay,
-       (SELECT ROUND(AVG(nachislsum), 2) FROM nachislsumma) AS avg_all_nachis
+       ROUND(AVG(paysum), 2) AS avg_pay,
+       (
+       SELECT ROUND(AVG(nachislsum), 2)
+       FROM nachislsumma
+       )                     AS avg_all_nachis
 FROM paysumma
 GROUP BY accountid;
 
@@ -5418,7 +5473,10 @@ GROUP BY accountid;
 
 
 SELECT AccountId,
-       AVG(Nachislsum) > (SELECT AVG(Nachislsum) FROM Nachislsumma) AS Exceeds_average
+       AVG(Nachislsum) > (
+                         SELECT AVG(Nachislsum)
+                         FROM Nachislsumma
+                         ) AS Exceeds_average
 FROM Nachislsumma
 GROUP BY AccountId;
 
@@ -5432,24 +5490,32 @@ GROUP BY AccountId;
 значения плат:
 */
 
-SELECT (SELECT MAX(paysum) AS "MAX(Paysum)",
-               MIN(paysum) AS "MIN(Paysum)"
-        FROM paysumma);
+SELECT (
+       SELECT MAX(paysum) AS "MAX(Paysum)",
+              MIN(paysum) AS "MIN(Paysum)"
+       FROM paysumma
+       );
 
 /*
 В этом случае подзапрос нужно указать столько раз, сколько значений
 он должен возвратить
 */
 
-SELECT (SELECT MAX(Paysum)
-        FROM Paysumma) AS "MAX(Paysum)",
-       (SELECT MIN(Paysum)
-        FROM Paysumma) AS "MIN(Paysum)";
+SELECT (
+       SELECT MAX(Paysum)
+       FROM Paysumma
+       ) AS "MAX(Paysum)",
+       (
+       SELECT MIN(Paysum)
+       FROM Paysumma
+       ) AS "MIN(Paysum)";
 
 /*ли вернуть значение составного типа */
 
-SELECT (SELECT ROW (MAX(paysum), MIN(paysum))
-        FROM paysumma);
+SELECT (
+       SELECT ROW (MAX(paysum), MIN(paysum))
+       FROM paysumma
+       );
 
 /*
 Рассмотрим более полезный пример использования независимых подзапросов
@@ -5460,7 +5526,10 @@ SELECT (SELECT ROW (MAX(paysum), MIN(paysum))
 
 
 SELECT nachislyear AS "Год",
-       (SELECT COUNT(accountid) FROM abonent) - COUNT(DISTINCT accountid)
+       (
+       SELECT COUNT(accountid)
+       FROM abonent
+       ) - COUNT(DISTINCT accountid)
                    AS "Число абонентов без начислений"
 FROM nachislsumma
 GROUP BY nachislyear;
@@ -5498,16 +5567,22 @@ GROUP BY nachislyear;
 */
 
 SELECT *
-FROM (SELECT accountid, fio, phone
-      FROM abonent) AS a(id, full_name, tel);
+FROM (
+     SELECT accountid, fio, phone
+     FROM abonent
+     ) AS a(id, full_name, tel);
 
 SELECT *
-FROM (SELECT accountid id, fio full_name, phone tel
-      FROM abonent) a;
+FROM (
+     SELECT accountid id, fio full_name, phone tel
+     FROM abonent
+     ) a;
 
 SELECT *
-FROM (SELECT accountid id, fio full_name, phone tel
-      FROM abonent);
+FROM (
+     SELECT accountid id, fio full_name, phone tel
+     FROM abonent
+     );
 
 /*
 где A — псевдоним производной таблицы;
@@ -5517,12 +5592,16 @@ Accountid, Full_name и Phone.
 */
 
 SELECT *
-FROM (SELECT Accountid AS Id, Fio, Phone
-      FROM Abonent) AS A(Accountid, Full_name);
+FROM (
+     SELECT Accountid AS Id, Fio, Phone
+     FROM Abonent
+     ) AS A(Accountid, Full_name);
 
 SELECT *
-FROM (SELECT Accountid, Fio Full_name, Phone
-      FROM Abonent);
+FROM (
+     SELECT Accountid, Fio Full_name, Phone
+     FROM Abonent
+     );
 
 /*
 Данные примеры иллюстрируют особенности использования подзапроса
@@ -5552,8 +5631,10 @@ WHERE "Full_name" LIKE '%';
 */
 
 SELECT *
-FROM (SELECT fio AS "Full_name"
-      FROM abonent)
+FROM (
+     SELECT fio AS "Full_name"
+     FROM abonent
+     )
 WHERE "Full_name" LIKE '%';
 
 /*
@@ -5563,10 +5644,12 @@ WHERE "Full_name" LIKE '%';
 */
 
 SELECT AVG("Число заявок") AS "Среднее число заявок"
-FROM (SELECT COUNT(requestid) AS "Число заявок"
-      FROM request
-      WHERE executiondate IS NOT NULL
-      GROUP BY executorid);
+FROM (
+     SELECT COUNT(requestid) AS "Число заявок"
+     FROM request
+     WHERE executiondate IS NOT NULL
+     GROUP BY executorid
+     );
 
 /*
 Особенность данного запроса заключается в расчёте среднего значения
@@ -5577,9 +5660,11 @@ FROM (SELECT COUNT(requestid) AS "Число заявок"
 
 
 SELECT "Max(Paysum)", "Min(Paysum)"
-FROM (SELECT MIN(Paysum) AS "Min(Paysum)",
-             MAX(Paysum) AS "Max(Paysum)"
-      FROM Paysumma);
+FROM (
+     SELECT MIN(Paysum) AS "Min(Paysum)",
+            MAX(Paysum) AS "Max(Paysum)"
+     FROM Paysumma
+     );
 
 /*Рассмотрим варианты, когда использование подзапроса в секции FROM
 может оказаться более полезным
@@ -5589,10 +5674,12 @@ FROM (SELECT MIN(Paysum) AS "Min(Paysum)",
 все ли эти абоненты подавали по две заявки:*/
 
 SELECT EVERY(Count = 2) AS All_two
-FROM (SELECT accountid, COUNT(Requestid) AS Count
-      FROM Request
-      WHERE Accountid IN ('136160', '080270', '136169', '443069')
-      GROUP BY Accountid);
+FROM (
+     SELECT accountid, COUNT(Requestid) AS Count
+     FROM Request
+     WHERE Accountid IN ('136160', '080270', '136169', '443069')
+     GROUP BY Accountid
+     );
 
 /*
 Порядок конкатенации строк функцией STRING_AGG без ORDER BY
@@ -5603,9 +5690,11 @@ FROM (SELECT accountid, COUNT(Requestid) AS Count
 */
 
 SELECT STRING_AGG(servicenm, ', ')
-FROM (SELECT servicenm
-      FROM services
-      ORDER BY servicenm);
+FROM (
+     SELECT servicenm
+     FROM services
+     ORDER BY servicenm
+     );
 
 /*
 В секции FROM могут быть определены две и более производные таблицы.
@@ -5619,8 +5708,14 @@ FROM (SELECT servicenm
 
 SELECT (CAST(r.req_count AS NUMERIC(5, 2)) / a.ab_count)
            AS "Req_On_Ab"
-FROM (SELECT COUNT(*) FROM abonent) AS a(ab_count),
-     (SELECT COUNT(*) FROM request) AS r(req_count);
+FROM (
+     SELECT COUNT(*)
+     FROM abonent
+     ) AS a(ab_count),
+     (
+     SELECT COUNT(*)
+     FROM request
+     ) AS r(req_count);
 
 /*
 В настоящем запросе используется функция CAST для преобразования
@@ -5636,12 +5731,19 @@ NUMERIC(5,2). Если не сделать такое преобразовани
 */
 
 SELECT CASE
-           WHEN ab_count > 0 THEN
+           WHEN ab_count > 0
+               THEN
                TO_CHAR(CAST(req_count AS NUMERIC(5, 2)) / ab_count, '99.99')
            ELSE 'Нет ни одного абонента'
-           END AS "Req_On_Ab"
-FROM (SELECT COUNT(*) AS ab_count FROM abonent),
-     (SELECT COUNT(*) AS req_count FROM request);
+       END AS "Req_On_Ab"
+FROM (
+     SELECT COUNT(*) AS ab_count
+     FROM abonent
+     ),
+     (
+     SELECT COUNT(*) AS req_count
+     FROM request
+     );
 
 /*
 Рассмотрим более сложный пример вложенного запроса, когда производная
@@ -5659,10 +5761,12 @@ FROM (SELECT COUNT(*) AS ab_count FROM abonent),
 */
 
 SELECT (COUNT(*) || ' абонентов подали по ' || reg_count || ' заявки') AS info
-FROM (SELECT a.accountid, COUNT(r.requestid) AS reg_count
-      FROM abonent a
-               JOIN request r USING (accountid)
-      GROUP BY a.accountid)
+FROM (
+     SELECT a.accountid, COUNT(r.requestid) AS reg_count
+     FROM abonent          a
+              JOIN request r USING (accountid)
+     GROUP BY a.accountid
+     )
 GROUP BY reg_count;
 
 /*
@@ -5673,10 +5777,12 @@ GROUP BY reg_count;
 */
 
 SELECT e.fio, total
-FROM executor e
-         INNER JOIN (SELECT COUNT(requestid) AS total, executorid
-                     FROM request
-                     GROUP BY executorid) stat USING (executorid)
+FROM executor         e
+         INNER JOIN (
+                    SELECT COUNT(requestid) AS total, executorid
+                    FROM request
+                    GROUP BY executorid
+                    ) stat USING (executorid)
 WHERE total > 3;
 
 /*
@@ -5685,10 +5791,12 @@ WHERE total > 3;
 */
 
 SELECT gs.cnt AS "Месяц", COUNT(incomingdate) AS "Число заявок"
-FROM (SELECT incomingdate
-      FROM request) ns
+FROM (
+     SELECT incomingdate
+     FROM request
+     )                                     ns
          RIGHT JOIN GENERATE_SERIES(1, 12) gs(cnt)
-                    ON EXTRACT(MONTH FROM ns.incomingdate) = gs.cnt
+         ON EXTRACT(MONTH FROM ns.incomingdate) = gs.cnt
 GROUP BY gs.cnt
 ORDER BY gs.cnt;
 
@@ -5719,7 +5827,7 @@ ORDER BY gs.cnt;
 SELECT gs.cnt                AS "Месяц",
        COUNT(r.incomingdate) AS "Число заявок"
 FROM GENERATE_SERIES(1, 12) AS gs(cnt)
-         LEFT JOIN request r ON EXTRACT(MONTH FROM r.incomingdate) = gs.cnt
+         LEFT JOIN request     r ON EXTRACT(MONTH FROM r.incomingdate) = gs.cnt
 GROUP BY gs.cnt
 ORDER BY gs.cnt;
 
@@ -5738,10 +5846,12 @@ ORDER BY gs.cnt;
 SELECT D.*, R.*
 FROM Request R
          INNER JOIN
-     (SELECT FailureId
-      FROM Disrepair
-      WHERE Failurenm = 'Засорилась водогрейная колонка') D
-     USING (FailureId);
+     (
+     SELECT FailureId
+     FROM Disrepair
+     WHERE Failurenm = 'Засорилась водогрейная колонка'
+     )       D
+         USING (FailureId);
 
 /*
 В этом запросе в секции FROM производится соединение таблицы Request
@@ -5753,11 +5863,13 @@ FROM Request R
 */
 
 SELECT a.*, r.*, d.*
-FROM request r
+FROM request                r
          INNER JOIN
-     (SELECT failureid
-      FROM disrepair
-      WHERE failurenm = 'Засорилась водогрейная колонка') d USING (failureid)
+                    (
+                    SELECT failureid
+                    FROM disrepair
+                    WHERE failurenm = 'Засорилась водогрейная колонка'
+                    )       d USING (failureid)
          INNER JOIN abonent a USING (accountid);
 
 /*
@@ -5769,9 +5881,11 @@ FROM request r
 */
 
 SELECT MIN(avg_paysum)
-FROM (SELECT AVG(paysum) AS avg_paysum
-      FROM paysumma
-      GROUP BY serviceid);
+FROM (
+     SELECT AVG(paysum) AS avg_paysum
+     FROM paysumma
+     GROUP BY serviceid
+     );
 
 /*
 Подзапросы могут быть вложенными друг в друга. Так, следующий запрос
@@ -5782,10 +5896,14 @@ FROM (SELECT AVG(paysum) AS avg_paysum
 
 SELECT EXTRACT(YEAR FROM paydate) AS "Год",
        allavg - SUM(paysum)       AS "Разность"
-FROM (SELECT AVG(yearsum) AS allavg
-      FROM (SELECT SUM(paysum) AS yearsum
-            FROM paysumma
-            GROUP BY EXTRACT(YEAR FROM paydate)) t1) t2,
+FROM (
+     SELECT AVG(yearsum) AS allavg
+     FROM (
+          SELECT SUM(paysum) AS yearsum
+          FROM paysumma
+          GROUP BY EXTRACT(YEAR FROM paydate)
+          ) t1
+     )        t2,
      paysumma p
 GROUP BY EXTRACT(YEAR FROM paydate), allavg
 ORDER BY 1;
@@ -5808,10 +5926,12 @@ SELECT d.failurenm,
        REPEAT('#', COALESCE(fail_count, 0)) AS "Визуализация"
 FROM disrepair d
          LEFT JOIN
-     (SELECT failureid, COUNT(*)::INTEGER AS fail_count
-      FROM request
-      GROUP BY failureid) r
-     USING (failureid)
+     (
+     SELECT failureid, COUNT(*)::INTEGER AS fail_count
+     FROM request
+     GROUP BY failureid
+     )         r
+         USING (failureid)
 ORDER BY d.failurenm;
 
 /*
@@ -5851,9 +5971,11 @@ Nachislsumma все данные о начислениях абоненту с �
 
 SELECT *
 FROM nachislsumma
-WHERE accountid = (SELECT accountid
-                   FROM abonent
-                   WHERE fio = 'Шмаков С. В.')
+WHERE accountid = (
+                  SELECT accountid
+                  FROM abonent
+                  WHERE fio = 'Шмаков С. В.'
+                  )
 ORDER BY nachislfactid;
 
 /*
@@ -5893,10 +6015,12 @@ ORDER BY nachislfactid;
 
 SELECT *
 FROM Abonent
-WHERE AccountId = (SELECT AccountId
-                   FROM Request
-                   WHERE Executed
-                   GROUP BY AccountId);
+WHERE AccountId = (
+                  SELECT AccountId
+                  FROM Request
+                  WHERE Executed
+                  GROUP BY AccountId
+                  );
 
 
 /*
@@ -5908,18 +6032,22 @@ WHERE AccountId = (SELECT AccountId
 SELECT *
 FROM Abonent
 WHERE Accountid IN
-      (SELECT Accountid
-       FROM Request
-       WHERE Executed
-       GROUP BY Accountid);
+      (
+      SELECT Accountid
+      FROM Request
+      WHERE Executed
+      GROUP BY Accountid
+      );
 
 SELECT *
 FROM Abonent
 WHERE Accountid IN
-      (SELECT Accountid
-       FROM Request
-       WHERE Executed = 'YES'
-       GROUP BY Accountid);
+      (
+      SELECT Accountid
+      FROM Request
+      WHERE Executed = 'YES'
+      GROUP BY Accountid
+      );
 
 /*
 В этом примере подзапрос в условии поиска представляет собой
@@ -5947,13 +6075,17 @@ Accountid ('005488', '080047', '080270', '080613' и т.д.), где Executed
 SELECT *
 FROM abonent
 WHERE accountid IN
-      (SELECT accountid
-       FROM request
-       WHERE executed)
+      (
+      SELECT accountid
+      FROM request
+      WHERE executed
+      )
   AND accountid NOT IN
-      (SELECT accountid
-       FROM request
-       WHERE NOT executed);
+      (
+      SELECT accountid
+      FROM request
+      WHERE NOT executed
+      );
 
 /*
 Следует привести однотабличные запросы для нахождения соответственно
@@ -5984,7 +6116,10 @@ HAVING NOT EVERY(executed);
 
 SELECT s.streetid
 FROM street s
-WHERE streetid NOT IN (SELECT streetid FROM abonent)
+WHERE streetid NOT IN (
+                      SELECT streetid
+                      FROM abonent
+                      )
 ORDER BY s.streetid;
 
 /*
@@ -6004,9 +6139,11 @@ ORDER BY s.streetid;
 
 SELECT *
 FROM abonent
-WHERE streetid = (SELECT streetid
-                  FROM abonent
-                  WHERE fio = 'Аксенов С. А.');
+WHERE streetid = (
+                 SELECT streetid
+                 FROM abonent
+                 WHERE fio = 'Аксенов С. А.'
+                 );
 
 /*
 В данном примере подзапрос выполняется отдельно от внешнего запроса,
@@ -6028,7 +6165,10 @@ Abonent строки со значением столбца Streetid, равны
 
 SELECT *
 FROM request
-WHERE executiondate IN (SELECT executiondate FROM request);
+WHERE executiondate IN (
+                       SELECT executiondate
+                       FROM request
+                       );
 
 /*
 Более того, при наличии неопределённых значений можно получить
@@ -6040,7 +6180,10 @@ WHERE executiondate IN (SELECT executiondate FROM request);
 
 SELECT executorid
 FROM executor
-WHERE executorid NOT IN (SELECT executorid FROM request);
+WHERE executorid NOT IN (
+                        SELECT executorid
+                        FROM request
+                        );
 
 /*
 будет получен пустой результат. Такой результат является следствием
@@ -6057,9 +6200,11 @@ Executorid. Для предотвращения подобных ошибок н
 
 SELECT executorid
 FROM executor
-WHERE executorid NOT IN (SELECT executorid
-                         FROM request
-                         WHERE executorid IS NOT NULL);
+WHERE executorid NOT IN (
+                        SELECT executorid
+                        FROM request
+                        WHERE executorid IS NOT NULL
+                        );
 
 
 /*
@@ -6077,21 +6222,27 @@ WHERE executorid NOT IN (SELECT executorid
 
 SELECT fio, phone
 FROM abonent
-WHERE COALESCE(LEFT(phone, 1), '0') < (SELECT LEFT(phone, 1)
-                                       FROM abonent
-                                       WHERE fio = 'Стародубцев Е. В.');
+WHERE COALESCE(LEFT(phone, 1), '0') < (
+                                      SELECT LEFT(phone, 1)
+                                      FROM abonent
+                                      WHERE fio = 'Стародубцев Е. В.'
+                                      );
 
 SELECT fio, phone
 FROM abonent
-WHERE COALESCE(LEFT(phone, 1), '0') = (SELECT LEFT(phone, 1)
-                                       FROM abonent
-                                       WHERE fio = 'Стародубцев Е. В.');
+WHERE COALESCE(LEFT(phone, 1), '0') = (
+                                      SELECT LEFT(phone, 1)
+                                      FROM abonent
+                                      WHERE fio = 'Стародубцев Е. В.'
+                                      );
 
 SELECT fio, phone
 FROM abonent
-WHERE COALESCE(LEFT(phone, 1), '0') > (SELECT LEFT(phone, 1)
-                                       FROM abonent
-                                       WHERE fio = 'Стародубцев Е. В.');
+WHERE COALESCE(LEFT(phone, 1), '0') > (
+                                      SELECT LEFT(phone, 1)
+                                      FROM abonent
+                                      WHERE fio = 'Стародубцев Е. В.'
+                                      );
 
 
 SELECT Fio, Phone
@@ -6099,9 +6250,11 @@ FROM Abonent
 WHERE COALESCE(TO_NUMBER(SUBSTRING(Phone, 1, 1), '0'), '0')
           ---SUBSTRING(строка, от_какой_позиции, сколько_символов)
           ---TO_NUMBER(что_превращаем, 'формат')
-          < (SELECT TO_NUMBER(SUBSTRING(Phone, 1, 1), '0')
-             FROM Abonent
-             WHERE Fio = 'Стародубцев Е. В.');
+          < (
+            SELECT TO_NUMBER(SUBSTRING(Phone, 1, 1), '0')
+            FROM Abonent
+            WHERE Fio = 'Стародубцев Е. В.'
+            );
 
 
 /*
@@ -6130,15 +6283,19 @@ SELECT accountid,
        nachislsum,
        nachislmonth,
        nachislyear,
-       (SELECT ROUND(AVG(nachislsum), 2)
-        FROM nachislsumma
-        GROUP BY nachislyear
-        HAVING nachislyear = 2025) AS avg_
+       (
+       SELECT ROUND(AVG(nachislsum), 2)
+       FROM nachislsumma
+       GROUP BY nachislyear
+       HAVING nachislyear = 2025
+       ) AS avg_
 FROM nachislsumma
-WHERE nachislsum > (SELECT ROUND(AVG(nachislsum), 2)
-                    FROM nachislsumma
-                    GROUP BY nachislyear
-                    HAVING nachislyear = 2025)
+WHERE nachislsum > (
+                   SELECT ROUND(AVG(nachislsum), 2)
+                   FROM nachislsumma
+                   GROUP BY nachislyear
+                   HAVING nachislyear = 2025
+                   )
   AND nachislyear = 2025
 ORDER BY accountid;
 
@@ -6158,15 +6315,19 @@ ORDER BY accountid;
 
 SELECT requestid, incomingdate, executiondate, executed
 FROM request
-WHERE incomingdate = (SELECT MAX(incomingdate)
-                      FROM request
-                      WHERE executed);
+WHERE incomingdate = (
+                     SELECT MAX(incomingdate)
+                     FROM request
+                     WHERE executed
+                     );
 
 SELECT requestid, incomingdate, executiondate, executed
 FROM request
-WHERE incomingdate = (SELECT MAX(incomingdate)
-                      FROM request
-                      WHERE executed = '1');
+WHERE incomingdate = (
+                     SELECT MAX(incomingdate)
+                     FROM request
+                     WHERE executed = '1'
+                     );
 
 
 /*
@@ -6177,8 +6338,10 @@ WHERE incomingdate = (SELECT MAX(incomingdate)
 SELECT fio, paysumma.payfactid, paysumma.paysum
 FROM paysumma
          JOIN abonent USING (accountid)
-WHERE paysum = (SELECT MAX(paysum)
-                FROM paysumma);
+WHERE paysum = (
+               SELECT MAX(paysum)
+               FROM paysumma
+               );
 
 /*
 В секции WHERE, как и в секции FROM, подзапросы могут быть вложенными
@@ -6190,26 +6353,38 @@ WHERE paysum = (SELECT MAX(paysum)
 
 
 SELECT t.servicenm, t.totalsum
-FROM (SELECT s.servicenm, SUM(p.paysum) AS totalsum
-      FROM paysumma p
-               INNER JOIN services s USING (serviceid)
-      GROUP BY s.serviceid, s.servicenm) t
-WHERE t.totalsum = (SELECT MAX(totalsum)
-                    FROM (SELECT SUM(paysum) AS totalsum
-                          FROM paysumma
-                          GROUP BY serviceid) t2);
+FROM (
+     SELECT s.servicenm, SUM(p.paysum) AS totalsum
+     FROM paysumma                p
+              INNER JOIN services s USING (serviceid)
+     GROUP BY s.serviceid, s.servicenm
+     ) t
+WHERE t.totalsum = (
+                   SELECT MAX(totalsum)
+                   FROM (
+                        SELECT SUM(paysum) AS totalsum
+                        FROM paysumma
+                        GROUP BY serviceid
+                        ) t2
+                   );
 
 
 
 SELECT tnsfio, tnscount
-FROM (SELECT fio AS tnsfio, COUNT(paysum) AS tnscount
-      FROM paysumma
-               INNER JOIN abonent USING (accountid)
-      GROUP BY fio) t
-WHERE tnscount = (SELECT MIN(tscount)
-                  FROM (SELECT COUNT(paysum) AS tscount
-                        FROM paysumma
-                        GROUP BY accountid) t2);
+FROM (
+     SELECT fio AS tnsfio, COUNT(paysum) AS tnscount
+     FROM paysumma
+              INNER JOIN abonent USING (accountid)
+     GROUP BY fio
+     ) t
+WHERE tnscount = (
+                 SELECT MIN(tscount)
+                 FROM (
+                      SELECT COUNT(paysum) AS tscount
+                      FROM paysumma
+                      GROUP BY accountid
+                      ) t2
+                 );
 
 
 /*Однако существует ещё более элегантное решение подобных задач вообще
@@ -6271,9 +6446,11 @@ WHERE <условие_поиска>
 
 SELECT accountid, serviceid, paysum, paydate
 FROM paysumma
-WHERE (serviceid, paydate) IN (SELECT serviceid, MAX(paydate)
-                               FROM paysumma
-                               GROUP BY serviceid)
+WHERE (serviceid, paydate) IN (
+                              SELECT serviceid, MAX(paydate)
+                              FROM paysumma
+                              GROUP BY serviceid
+                              )
 ORDER BY serviceid DESC;
 
 
@@ -6286,9 +6463,11 @@ ORDER BY serviceid DESC;
 
 SELECT *
 FROM abonent
-WHERE (streetid, houseno) = (SELECT streetid, houseno
-                             FROM abonent
-                             WHERE accountid = '015527')
+WHERE (streetid, houseno) = (
+                            SELECT streetid, houseno
+                            FROM abonent
+                            WHERE accountid = '015527'
+                            )
   AND accountid != '015527';
 
 /*
@@ -6304,9 +6483,11 @@ SELECT accountid,
        nachislyear
 FROM nachislsumma
 WHERE (nachislmonth, nachislyear) IN
-      (SELECT DISTINCT nachislmonth, nachislyear
-       FROM nachislsumma
-       WHERE accountid = '015527')
+      (
+      SELECT DISTINCT nachislmonth, nachislyear
+      FROM nachislsumma
+      WHERE accountid = '015527'
+      )
   AND accountid != '015527'
 ORDER BY accountid;
 
@@ -6326,15 +6507,24 @@ ORDER BY accountid;
 
 
 SELECT CASE
-           WHEN nachislsum > (SELECT AVG(nachislsum) FROM nachislsumma)
+           WHEN nachislsum > (
+                             SELECT AVG(nachislsum)
+                             FROM nachislsumma
+                             )
                THEN 'Выше среднего'
            ELSE 'Ниже или равно среднему'
-           END  AS "Группа начислений",
+       END      AS "Группа начислений",
        COUNT(*) AS "Количество",
-       (SELECT AVG(nachislsum) FROM nachislsumma)
+       (
+       SELECT AVG(nachislsum)
+       FROM nachislsumma
+       )
 
 FROM nachislsumma
-GROUP BY nachislsum > (SELECT AVG(nachislsum) FROM nachislsumma);
+GROUP BY nachislsum > (
+                      SELECT AVG(nachislsum)
+                      FROM nachislsumma
+                      );
 /*
 Группировка по вычисляемому выражению
 GROUP BY nachislsum > (SELECT AVG(nachislsum) FROM nachislsumma)
@@ -6373,9 +6563,11 @@ SELECT → AVG(nachislsum) вычисляется ещё раз для кажд�
 SELECT COUNT(DISTINCT accountid), paysum
 FROM paysumma
 GROUP BY paysum
-HAVING paysum = (SELECT MAX(paysum)
-                 FROM paysumma
-                 WHERE payyear = 2024);
+HAVING paysum = (
+                SELECT MAX(paysum)
+                FROM paysumma
+                WHERE payyear = 2024
+                );
 
 
 /*
@@ -6394,10 +6586,14 @@ SELECT servicenm, COUNT(*)
 FROM paysumma
          JOIN services USING (serviceid)
 GROUP BY servicenm
-HAVING COUNT(*) = (SELECT MAX(a)
-                   FROM (SELECT serviceid, COUNT(*) AS a
-                         FROM paysumma
-                         GROUP BY serviceid) t);
+HAVING COUNT(*) = (
+                  SELECT MAX(a)
+                  FROM (
+                       SELECT serviceid, COUNT(*) AS a
+                       FROM paysumma
+                       GROUP BY serviceid
+                       ) t
+                  );
 
 
 /*
@@ -6412,9 +6608,11 @@ SELECT servicenm
 FROM services
          INNER JOIN nachislsumma USING (serviceid)
 GROUP BY servicenm
-HAVING SUM(nachislsum) > (SELECT :Pr + MAX(nachislsum)
-                          FROM services
-                                   INNER JOIN nachislsumma USING (serviceid));
+HAVING SUM(nachislsum) > (
+                         SELECT :Pr + MAX(nachislsum)
+                         FROM services
+                                  INNER JOIN nachislsumma USING (serviceid)
+                         );
 
 
 /*
@@ -6426,8 +6624,10 @@ HAVING SUM(nachislsum) > (SELECT :Pr + MAX(nachislsum)
 SELECT accountid
 FROM paysumma
 GROUP BY accountid
-HAVING COUNT(*) FILTER (WHERE paysum < (SELECT AVG(paysum)
-                                        FROM paysumma)) > 5;
+HAVING COUNT(*) FILTER (WHERE paysum < (
+                                       SELECT AVG(paysum)
+                                       FROM paysumma
+                                       )) > 5;
 
 
 /*
@@ -6445,14 +6645,24 @@ HAVING COUNT(*) FILTER (WHERE paysum < (SELECT AVG(paysum)
 SELECT *
 FROM abonent
 ORDER BY accountid
-OFFSET (SELECT COUNT(*) FROM services) ROWS FETCH NEXT (SELECT COUNT(*)
-                                                        FROM request) ROWS ONLY;
+OFFSET (
+SELECT COUNT(*)
+FROM services
+       ) ROWS FETCH NEXT (
+SELECT COUNT(*)
+FROM request
+                         ) ROWS ONLY;
 
 SELECT *
 FROM Abonent
 ORDER BY AccountId
-OFFSET (SELECT COUNT(*) FROM Services) ROWS LIMIT (SELECT COUNT(*)
-                                                   FROM Request);
+OFFSET (
+SELECT COUNT(*)
+FROM Services
+       ) ROWS LIMIT (
+SELECT COUNT(*)
+FROM Request
+                    );
 
 /*
 Используя такой же подход, можно выбирать из определённой таблицы
@@ -6475,7 +6685,10 @@ OFFSET (SELECT COUNT(*) FROM Services) ROWS LIMIT (SELECT COUNT(*)
 SELECT *
 FROM Paysumma
 ORDER BY RANDOM()
-    FETCH NEXT (SELECT COUNT(*) * 75.0 / 100 FROM Paysumma) ROWS ONLY;
+    FETCH NEXT (
+               SELECT COUNT(*) * 75.0 / 100
+               FROM Paysumma
+               ) ROWS ONLY;
 
 /*
 или первую половину строк:
@@ -6484,7 +6697,10 @@ ORDER BY RANDOM()
 SELECT *
 FROM Paysumma
 ORDER BY Accountid
-OFFSET 0 ROWS FETCH NEXT (SELECT COUNT(*) / 2 FROM Paysumma) ROWS ONLY;
+OFFSET 0 ROWS FETCH NEXT (
+SELECT COUNT(*) / 2
+FROM Paysumma
+                         ) ROWS ONLY;
 
 /*
 Обобщённые табличные выражения.
@@ -6554,8 +6770,9 @@ CTE (имя_производной_таблицы) с необязательны
 WITH "Абонент" (Accountid, Fio) -- имя таблицы и столбцов подзапроса
          AS (
 -- Далее указывается подзапрос
-        SELECT Accountid, Fio
-        FROM Abonent)
+            SELECT Accountid, Fio
+            FROM Abonent
+            )
 -- Вывод результата выполнения основного запроса
 SELECT *
 FROM "Абонент"
@@ -6566,8 +6783,10 @@ ORDER BY Fio;
 ---или такой без перечисления имён столбцов, так как они уникальные:
 
 WITH "Абонент" -- имя таблицы подзапроса
-         AS (SELECT Accountid, Fio
-             FROM Abonent)
+         AS (
+            SELECT Accountid, Fio
+            FROM Abonent
+            )
 SELECT *
 FROM "Абонент"
 ORDER BY Fio;
@@ -6607,12 +6826,16 @@ FROM Paysumma;
 
 SELECT Accountid, Fio
 FROM Abonent A
-WHERE (SELECT ROUND(AVG(Paysum), 2) AS Avg_ab
-       FROM Paysumma
-       GROUP BY Accountid
-       HAVING Accountid = A.Accountid)
-          > (SELECT ROUND(AVG(Paysum), 2) AS Avg_total
-             FROM Paysumma);
+WHERE (
+      SELECT ROUND(AVG(Paysum), 2) AS Avg_ab
+      FROM Paysumma
+      GROUP BY Accountid
+      HAVING Accountid = A.Accountid
+      )
+          > (
+            SELECT ROUND(AVG(Paysum), 2) AS Avg_total
+            FROM Paysumma
+            );
 
 /*
 
@@ -6624,19 +6847,28 @@ WHERE (SELECT ROUND(AVG(Paysum), 2) AS Avg_ab
 */
 
 
-WITH avg_ab AS (SELECT Accountid, ROUND(AVG(Paysum), 2) AS avg_ab
-                FROM Paysumma
-                GROUP BY Accountid),
-     avg_total AS (SELECT ROUND(AVG(Paysum), 2) AS avg_total
-                   FROM Paysumma)
+WITH avg_ab AS (
+               SELECT Accountid, ROUND(AVG(Paysum), 2) AS avg_ab
+               FROM Paysumma
+               GROUP BY Accountid
+               ),
+     avg_total AS (
+               SELECT ROUND(AVG(Paysum), 2) AS avg_total
+               FROM Paysumma
+               )
 
 SELECT A.Accountid, A.Fio, avg_ab.avg_ab
 FROM Abonent A
          inner join avg_ab on avg_ab.Accountid = A.Accountid
-WHERE (SELECT avg_ab
-       FROM avg_ab
-       WHERE Accountid = A.Accountid)
-          > (SELECT avg_total FROM avg_total);
+WHERE (
+      SELECT avg_ab
+      FROM avg_ab
+      WHERE Accountid = A.Accountid
+      )
+          > (
+            SELECT avg_total
+            FROM avg_total
+            );
 
 /*
 В секции WITH может быть определено несколько подзапросов.
@@ -6668,15 +6900,22 @@ SELECT * FROM outer_cte;
 результат первого, может быть такой запрос:
 */
 
-WITH Sum_pay AS (SELECT Servicenm AS "Услуга", SUM(Paysum) AS "Сумма"
-                 FROM Paysumma
-                          NATURAL JOIN Services
-                 GROUP BY Servicenm),
-     Avg_pay AS (SELECT SUM("Сумма") / COUNT(*) AS "Среднее"
-                 FROM Sum_pay)
+WITH Sum_pay AS (
+                SELECT Servicenm AS "Услуга", SUM(Paysum) AS "Сумма"
+                FROM Paysumma
+                         NATURAL JOIN Services
+                GROUP BY Servicenm
+                ),
+     Avg_pay AS (
+                SELECT SUM("Сумма") / COUNT(*) AS "Среднее"
+                FROM Sum_pay
+                )
 SELECT *
 FROM Sum_pay
-WHERE "Сумма" > (SELECT "Среднее" FROM Avg_pay)
+WHERE "Сумма" > (
+                SELECT "Среднее"
+                FROM Avg_pay
+                )
 ORDER BY "Услуга";
 
 /*
@@ -6692,17 +6931,27 @@ ORDER BY "Услуга";
 WITH Initial_date
 /* блок создаёт временную таблицу Initial_date с одной строкой,
 содержащей MIN(Incomingdate)*/
-         AS (SELECT MIN(Incomingdate) AS Dat
-             FROM Request),
+         AS (
+            SELECT MIN(Incomingdate) AS Dat
+            FROM Request
+            ),
      Generated_dates
 /* блок использует функцию GENERATE_SERIES для создания списка дат,
 начиная с Initial_date и до трёх лет вперед, с шагом в один год.
 Каждая дата преобразуется в тип DATE */
-         AS (SELECT GENERATE_SERIES(
-                            (SELECT Dat FROM Initial_date),
-                            (SELECT Dat + INTERVAL '3 YEARS' FROM Initial_date),
-                            '1 YEAR'
-                    )::DATE AS Generated_date)
+         AS (
+            SELECT GENERATE_SERIES(
+                           (
+                           SELECT Dat
+                           FROM Initial_date
+                           ),
+                           (
+                           SELECT Dat + INTERVAL '3 YEARS'
+                           FROM Initial_date
+                           ),
+                           '1 YEAR'
+                   )::DATE AS Generated_date
+            )
 SELECT
 /* запрос вернёт таблицу, где каждая строка будет содержать год
 и день недели для заданной даты (MIN(Incomingdate)
@@ -6716,14 +6965,24 @@ FROM Generated_dates;
 WITH Initial_date
 /* блок создаёт временную таблицу Initial_date с одной строкой,
 содержащей MIN(Incomingdate)*/
-         AS (SELECT MIN(Incomingdate) AS Dat
-             FROM Request),
+         AS (
+            SELECT MIN(Incomingdate) AS Dat
+            FROM Request
+            ),
      Generated_dates
-         AS (SELECT GENERATE_SERIES(
-                            (SELECT Dat FROM Initial_date),
-                            (SELECT Dat + INTERVAL '3 YEARS' FROM Initial_date),
-                            '1 YEAR'
-                    )::DATE AS Generated_date)
+         AS (
+            SELECT GENERATE_SERIES(
+                           (
+                           SELECT Dat
+                           FROM Initial_date
+                           ),
+                           (
+                           SELECT Dat + INTERVAL '3 YEARS'
+                           FROM Initial_date
+                           ),
+                           '1 YEAR'
+                   )::DATE AS Generated_date
+            )
 
 select *
 from Generated_dates;
@@ -6751,37 +7010,63 @@ from Generated_dates;
 */
 
 
-WITH Pdates AS (SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY')::DATE AS Dates
-                FROM Paysumma P),
-     Daa AS (SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'), COUNT(DISTINCT Accountid) AS Acc
-             FROM Paysumma P
-                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
-             GROUP BY 1),
-     Waa AS (SELECT TO_CHAR(D.Dates, 'YYYY-WW'), COUNT(DISTINCT Accountid) AS Acc
-             FROM Paysumma P
-                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
-             GROUP BY 1),
-     Maa AS (SELECT TO_CHAR(D.Dates, 'YYYY-MM') AS Mon, COUNT(DISTINCT Accountid) AS Acc
-             FROM Paysumma P
-                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
-             GROUP BY Mon),
-     Yaa AS (SELECT TO_CHAR(D.Dates, 'YYYY'), COUNT(DISTINCT Accountid) AS Acc
-             FROM Paysumma P
-                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
-             GROUP BY 1)
+WITH Pdates AS (
+               SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY')::DATE AS Dates
+               FROM Paysumma P
+               ),
+     Daa AS (
+               SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'), COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              P
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY 1
+               ),
+     Waa AS (
+               SELECT TO_CHAR(D.Dates, 'YYYY-WW'), COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              P
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY 1
+               ),
+     Maa AS (
+               SELECT TO_CHAR(D.Dates, 'YYYY-MM') AS Mon, COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              P
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY Mon
+               ),
+     Yaa AS (
+               SELECT TO_CHAR(D.Dates, 'YYYY'), COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              P
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY 1
+               )
 
-SELECT ROUND((SELECT AVG(Acc) FROM Daa), 2) AS Daa,
-       ROUND((SELECT AVG(Acc) FROM Waa), 2) AS Waa,
-       ROUND((SELECT AVG(Acc) FROM Maa), 2) AS Maa,
-       ROUND((SELECT AVG(Acc) FROM Yaa), 2) AS Yaa;
+SELECT ROUND((
+             SELECT AVG(Acc)
+             FROM Daa
+             ), 2) AS Daa,
+       ROUND((
+             SELECT AVG(Acc)
+             FROM Waa
+             ), 2) AS Waa,
+       ROUND((
+             SELECT AVG(Acc)
+             FROM Maa
+             ), 2) AS Maa,
+       ROUND((
+             SELECT AVG(Acc)
+             FROM Yaa
+             ), 2) AS Yaa;
 
 
-WITH Pdates AS (SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY')::DATE AS Dates
-                FROM Paysumma P),
-     Daa AS (SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'), COUNT(DISTINCT Accountid) AS Acc
-             FROM Paysumma P
-                      RIGHT JOIN Pdates D ON D.Dates = P.Paydate
-             GROUP BY 1)
+WITH Pdates AS (
+               SELECT GENERATE_SERIES(MIN(P.Paydate), MAX(P.Paydate), '1 DAY')::DATE AS Dates
+               FROM Paysumma P
+               ),
+     Daa AS (
+               SELECT TO_CHAR(D.Dates, 'YYYY-MM-DD'), COUNT(DISTINCT Accountid) AS Acc
+               FROM Paysumma              P
+                        RIGHT JOIN Pdates D ON D.Dates = P.Paydate
+               GROUP BY 1
+               )
 
 select sum(acc) / 1413, avg(acc)
 from Daa;
@@ -6806,19 +7091,26 @@ from Daa;
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM Abonent
-WHERE AccountID IN (SELECT AccountID
-                    FROM Request
-                    WHERE Incomingdate < '01.01.2024');
+WHERE AccountID IN (
+                   SELECT AccountID
+                   FROM Request
+                   WHERE Incomingdate < '01.01.2024'
+                   );
 
 
 ---Запрос с CTE:
 EXPLAIN (ANALYZE, BUFFERS)
-WITH Cte_n AS (SELECT *
-               FROM Request
-               WHERE Incomingdate < '01.01.2024')
+WITH Cte_n AS (
+              SELECT *
+              FROM Request
+              WHERE Incomingdate < '01.01.2024'
+              )
 SELECT *
 FROM Abonent
-WHERE AccountID IN (SELECT AccountID FROM Cte_n);
+WHERE AccountID IN (
+                   SELECT AccountID
+                   FROM Cte_n
+                   );
 
 
 /*
@@ -6827,17 +7119,25 @@ WHERE AccountID IN (SELECT AccountID FROM Cte_n);
 в секции WITH, а затем используя в самом запросе:
 */
 
-WITH Fact_avg AS (SELECT ROUND(AVG(Nachislsum), 2) AS Avg_nach
-                  FROM Nachislsumma
-                  GROUP BY Nachislyear
-                  HAVING Nachislyear = 2025)
+WITH Fact_avg AS (
+                 SELECT ROUND(AVG(Nachislsum), 2) AS Avg_nach
+                 FROM Nachislsumma
+                 GROUP BY Nachislyear
+                 HAVING Nachislyear = 2025
+                 )
 SELECT Ns.Accountid,
        Ns.Nachislsum,
        Ns.Nachislmonth,
        Ns.Nachislyear,
-       (SELECT Avg_nach FROM Fact_avg) AS Avg_all
+       (
+       SELECT Avg_nach
+       FROM Fact_avg
+       ) AS Avg_all
 FROM Nachislsumma Ns
-WHERE Ns.Nachislsum > (SELECT Avg_nach FROM Fact_avg)
+WHERE Ns.Nachislsum > (
+                      SELECT Avg_nach
+                      FROM Fact_avg
+                      )
   AND Ns.Nachislyear = 2025
 ORDER BY 1;
 
@@ -6862,20 +7162,22 @@ Year_abon_pay для года 2024 (Year_2024.Total_sum) и 2025
 оплат, возвращается NULL.
 */
 
-WITH Year_abon_pay AS (SELECT Payyear, Accountid, SUM(Paysum) AS Total_sum
-                       FROM Paysumma
-                       GROUP BY Payyear, Accountid)
+WITH Year_abon_pay AS (
+                      SELECT Payyear, Accountid, SUM(Paysum) AS Total_sum
+                      FROM Paysumma
+                      GROUP BY Payyear, Accountid
+                      )
 SELECT A.Accountid,
        A.Fio,
        Year_2024.Total_sum AS Total_2024,
        Year_2025.Total_sum AS Total_2025
-FROM Abonent A
+FROM Abonent                        A
          LEFT JOIN Year_abon_pay AS Year_2024
-                   ON A.Accountid = Year_2024.Accountid
-                       AND Year_2024.Payyear = 2024
+         ON A.Accountid = Year_2024.Accountid
+             AND Year_2024.Payyear = 2024
          LEFT JOIN Year_abon_pay AS Year_2025
-                   ON A.Accountid = Year_2025.Accountid
-                       AND Year_2025.Payyear = 2025
+         ON A.Accountid = Year_2025.Accountid
+             AND Year_2025.Payyear = 2025
 ORDER BY Accountid;
 
 
@@ -6883,7 +7185,7 @@ SELECT A.Accountid,
        A.Fio,
        SUM(CASE WHEN P.Payyear = 2024 THEN P.Paysum ELSE 0 END) AS Total_2024,
        SUM(CASE WHEN P.Payyear = 2025 THEN P.Paysum ELSE 0 END) AS Total_2025
-FROM Abonent A
+FROM Abonent                A
          LEFT JOIN Paysumma P ON A.Accountid = P.Accountid
 GROUP BY A.Accountid, A.Fio
 ORDER BY A.Accountid;
@@ -6893,7 +7195,7 @@ SELECT A.Accountid,
        A.Fio,
        SUM(P.Paysum) FILTER (WHERE P.Payyear = 2024) AS Total_2024,
        SUM(P.Paysum) FILTER (WHERE P.Payyear = 2025) AS Total_2025
-FROM Abonent A
+FROM Abonent                A
          LEFT JOIN Paysumma P ON A.Accountid = P.Accountid
 GROUP BY A.Accountid, A.Fio
 ORDER BY A.Accountid;
@@ -6948,12 +7250,16 @@ SELECT, причём при использовании рекурсии <таб�
 значение начисления, может следующий запрос:
 */
 
-WITH Maxnach AS (SELECT MAX(Nachislsum) AS Maxpayment
-                 FROM Nachislsumma),
-     Servicenach AS (SELECT S.Servicenm, SUM(N.Nachislsum) AS Totalnach
-                     FROM Services S
-                              JOIN Nachislsumma N USING (Serviceid)
-                     GROUP BY S.Servicenm)
+WITH Maxnach AS (
+                SELECT MAX(Nachislsum) AS Maxpayment
+                FROM Nachislsumma
+                ),
+     Servicenach AS (
+                SELECT S.Servicenm, SUM(N.Nachislsum) AS Totalnach
+                FROM Services              S
+                         JOIN Nachislsumma N USING (Serviceid)
+                GROUP BY S.Servicenm
+                )
 
 SELECT Sn.Servicenm
 FROM Servicenach Sn
@@ -6997,7 +7303,7 @@ SELECT A.Accountid,
        COALESCE(SUM(CASE WHEN P.Serviceid = 3 THEN P.Paysum END), 0) AS "Тепло",
        COALESCE(SUM(CASE WHEN P.Serviceid = 4 THEN P.Paysum END), 0) AS "Вода",
        COALESCE(SUM(P.Paysum), 0)                                    AS "ВСЕГО"
-FROM Abonent A
+FROM Abonent                A
          LEFT JOIN Paysumma P USING (Accountid)
 WHERE P.Serviceid IN (1, 2, 3, 4)
 GROUP BY A.Accountid, A.Fio
@@ -7015,7 +7321,7 @@ SELECT A.Accountid,
        COALESCE(SUM(CASE WHEN P.Serviceid = 3 THEN P.Paysum END), 0) AS "Тепло",
        COALESCE(SUM(CASE WHEN P.Serviceid = 4 THEN P.Paysum END), 0) AS "Вода",
        COALESCE(SUM(P.Paysum), 0)                                    AS "ВСЕГО"
-FROM Abonent A
+FROM Abonent                A
          LEFT JOIN Paysumma P USING (Accountid)
 WHERE P.Serviceid IN (1, 2, 3, 4)
 GROUP BY A.Accountid, A.Fio
@@ -7025,9 +7331,11 @@ ORDER BY A.Accountid;
 ---или CTE
 
 
-WITH Serv AS (SELECT Accountid, Serviceid, SUM(Paysum) AS S
-              FROM Paysumma P
-              GROUP BY Accountid, Serviceid)
+WITH Serv AS (
+             SELECT Accountid, Serviceid, SUM(Paysum) AS S
+             FROM Paysumma P
+             GROUP BY Accountid, Serviceid
+             )
 SELECT A.Accountid,
        A.Fio,
        COALESCE(S1.S, 0)                                                             AS "Газ",
@@ -7035,7 +7343,7 @@ SELECT A.Accountid,
        COALESCE(S3.S, 0)                                                             AS "Тепло",
        COALESCE(S4.S, 0)                                                             AS "Вода",
        COALESCE(S1.S, 0) + COALESCE(S2.S, 0) + COALESCE(S3.S, 0) + COALESCE(S4.S, 0) AS "ВСЕГО"
-FROM Abonent A
+FROM Abonent            A
          LEFT JOIN Serv S1 ON A.Accountid = S1.Accountid AND S1.Serviceid = 1
          LEFT JOIN Serv S2 ON A.Accountid = S2.Accountid AND S2.Serviceid = 2
          LEFT JOIN Serv S3 ON A.Accountid = S3.Accountid AND S3.Serviceid = 3
@@ -7050,21 +7358,23 @@ SELECT A.Accountid,
        COALESCE(SUM(P.Paysum) FILTER (WHERE P.Serviceid = 3), 0) AS "Тепло",
        COALESCE(SUM(P.Paysum) FILTER (WHERE P.Serviceid = 4), 0) AS "Вода",
        COALESCE(SUM(P.Paysum), 0)                                AS "ВСЕГО"
-FROM Abonent A
+FROM Abonent                A
          LEFT JOIN Paysumma P ON A.Accountid = P.Accountid AND P.Serviceid IN (1, 2, 3, 4)
 GROUP BY A.Accountid, A.Fio
 ORDER BY A.Accountid;
 
 
-WITH Serv AS MATERIALIZED (SELECT Accountid,
-                                  SUM(Paysum) FILTER (WHERE Serviceid = 1) AS Gas,
-                                  SUM(Paysum) FILTER (WHERE Serviceid = 2) AS Electr,
-                                  SUM(Paysum) FILTER (WHERE Serviceid = 3) AS Heat,
-                                  SUM(Paysum) FILTER (WHERE Serviceid = 4) AS Water,
-                                  SUM(Paysum)                              AS Total
-                           FROM Paysumma
-                           WHERE Serviceid IN (1, 2, 3, 4)
-                           GROUP BY Accountid)
+WITH Serv AS MATERIALIZED (
+                          SELECT Accountid,
+                                 SUM(Paysum) FILTER (WHERE Serviceid = 1) AS Gas,
+                                 SUM(Paysum) FILTER (WHERE Serviceid = 2) AS Electr,
+                                 SUM(Paysum) FILTER (WHERE Serviceid = 3) AS Heat,
+                                 SUM(Paysum) FILTER (WHERE Serviceid = 4) AS Water,
+                                 SUM(Paysum)                              AS Total
+                          FROM Paysumma
+                          WHERE Serviceid IN (1, 2, 3, 4)
+                          GROUP BY Accountid
+                          )
 SELECT A.Accountid,
        A.Fio,
        COALESCE(S.Gas, 0)    AS "Газ",
@@ -7072,24 +7382,26 @@ SELECT A.Accountid,
        COALESCE(S.Heat, 0)   AS "Тепло",
        COALESCE(S.Water, 0)  AS "Вода",
        COALESCE(S.Total, 0)  AS "ВСЕГО"
-FROM Abonent A
+FROM Abonent            A
          LEFT JOIN Serv S ON A.Accountid = S.Accountid
 ORDER BY A.Accountid;
 
 
 
-WITH aggregated AS (SELECT DISTINCT A.Accountid,
-                                    A.Fio,
-                                    SUM(P.Paysum) FILTER (WHERE P.Serviceid = 1) OVER (PARTITION BY A.Accountid) AS Gas,
-                                    SUM(P.Paysum)
-                                    FILTER (WHERE P.Serviceid = 2) OVER (PARTITION BY A.Accountid)               AS Electr,
-                                    SUM(P.Paysum)
-                                    FILTER (WHERE P.Serviceid = 3) OVER (PARTITION BY A.Accountid)               AS Heat,
-                                    SUM(P.Paysum)
-                                    FILTER (WHERE P.Serviceid = 4) OVER (PARTITION BY A.Accountid)               AS Water,
-                                    SUM(P.Paysum) OVER (PARTITION BY A.Accountid)                                AS Total
-                    FROM Abonent A
-                             LEFT JOIN Paysumma P ON A.Accountid = P.Accountid AND P.Serviceid IN (1, 2, 3, 4))
+WITH aggregated AS (
+                   SELECT DISTINCT A.Accountid,
+                                   A.Fio,
+                                   SUM(P.Paysum) FILTER (WHERE P.Serviceid = 1) OVER (PARTITION BY A.Accountid) AS Gas,
+                                   SUM(P.Paysum)
+                                   FILTER (WHERE P.Serviceid = 2) OVER (PARTITION BY A.Accountid)               AS Electr,
+                                   SUM(P.Paysum)
+                                   FILTER (WHERE P.Serviceid = 3) OVER (PARTITION BY A.Accountid)               AS Heat,
+                                   SUM(P.Paysum)
+                                   FILTER (WHERE P.Serviceid = 4) OVER (PARTITION BY A.Accountid)               AS Water,
+                                   SUM(P.Paysum) OVER (PARTITION BY A.Accountid)                                AS Total
+                   FROM Abonent                A
+                            LEFT JOIN Paysumma P ON A.Accountid = P.Accountid AND P.Serviceid IN (1, 2, 3, 4)
+                   )
 SELECT Accountid,
        Fio,
        COALESCE(Gas, 0)    AS "Газ",
@@ -7255,13 +7567,15 @@ HAVING
 Это поведение LEFT JOIN !!!
 */
 SELECT A.Fio,
-       (SELECT S.Streetnm
-        FROM Street S
-        WHERE S.Streetid = A.Streetid)
+       (
+       SELECT S.Streetnm
+       FROM Street S
+       WHERE S.Streetid = A.Streetid
+       )
 FROM Abonent A;
 
 SELECT A.Fio, S.Streetnm
-FROM Abonent A
+FROM Abonent              A
          LEFT JOIN Street S ON A.Streetid = S.Streetid;
 
 
@@ -7300,9 +7614,11 @@ FROM Abonent A
 
 SELECT A.Accountid,
        A.Fio,
-       (SELECT COUNT(*)
-        FROM Request R
-        WHERE A.Accountid = R.Accountid) AS Request_count
+       (
+       SELECT COUNT(*)
+       FROM Request R
+       WHERE A.Accountid = R.Accountid
+       ) AS Request_count
 FROM Abonent A
 ORDER BY A.Accountid;
 
@@ -7332,10 +7648,12 @@ COUNT подсчитывается общее количество таких с
 */
 
 SELECT A.Accountid, A.Fio, COALESCE(Request_count, 0) AS Request_count
-FROM Abonent A
-         LEFT JOIN (SELECT Accountid, COUNT(*) AS Request_count
-                    FROM Request
-                    GROUP BY Accountid) R USING (Accountid)
+FROM Abonent         A
+         LEFT JOIN (
+                   SELECT Accountid, COUNT(*) AS Request_count
+                   FROM Request
+                   GROUP BY Accountid
+                   ) R USING (Accountid)
 ORDER BY A.Accountid;
 
 
@@ -7392,45 +7710,57 @@ ORDER BY A.Accountid;
 */
 
 SELECT R.Accountid,
-       (SELECT SUM(Nachislsum)
-        FROM Nachislsumma
-        WHERE Accountid = R.Accountid
-          AND Serviceid = 2) AS Nachisl,
-       (SELECT SUM(Paysum)
-        FROM Paysumma
-        WHERE Accountid = R.Accountid
-          AND Serviceid = 2) AS Pay
+       (
+       SELECT SUM(Nachislsum)
+       FROM Nachislsumma
+       WHERE Accountid = R.Accountid
+         AND Serviceid = 2
+       ) AS Nachisl,
+       (
+       SELECT SUM(Paysum)
+       FROM Paysumma
+       WHERE Accountid = R.Accountid
+         AND Serviceid = 2
+       ) AS Pay
 FROM Request R
 GROUP BY R.Accountid;
 
 
-WITH nachisl_agg AS (SELECT Accountid, SUM(Nachislsum) AS Nachisl
-                     FROM Nachislsumma
-                     WHERE Serviceid = 2
-                     GROUP BY Accountid),
-     pay_agg AS (SELECT Accountid, SUM(Paysum) AS Pay
-                 FROM Paysumma
-                 WHERE Serviceid = 2
-                 GROUP BY Accountid)
+WITH nachisl_agg AS (
+                    SELECT Accountid, SUM(Nachislsum) AS Nachisl
+                    FROM Nachislsumma
+                    WHERE Serviceid = 2
+                    GROUP BY Accountid
+                    ),
+     pay_agg AS (
+                    SELECT Accountid, SUM(Paysum) AS Pay
+                    FROM Paysumma
+                    WHERE Serviceid = 2
+                    GROUP BY Accountid
+                    )
 SELECT R.Accountid, N.Nachisl, P.Pay
-FROM Request R
+FROM Request                   R
          LEFT JOIN nachisl_agg N ON R.Accountid = N.Accountid
-         LEFT JOIN pay_agg P ON R.Accountid = P.Accountid
+         LEFT JOIN pay_agg     P ON R.Accountid = P.Accountid
 GROUP BY R.Accountid, N.Nachisl, P.Pay
 ORDER BY R.Accountid;
 
 
 
 SELECT R.AccountId, N.Nachisl, P.Pay
-FROM Request R
-         LEFT JOIN (SELECT Accountid, SUM(Nachislsum) AS Nachisl
-                    FROM Nachislsumma
-                    WHERE Serviceid = 2
-                    GROUP BY Accountid) N ON R.Accountid = N.Accountid
-         LEFT JOIN (SELECT Accountid, SUM(Paysum) AS Pay
-                    FROM Paysumma
-                    WHERE Serviceid = 2
-                    GROUP BY Accountid) P ON R.Accountid = P.Accountid
+FROM Request         R
+         LEFT JOIN (
+                   SELECT Accountid, SUM(Nachislsum) AS Nachisl
+                   FROM Nachislsumma
+                   WHERE Serviceid = 2
+                   GROUP BY Accountid
+                   ) N ON R.Accountid = N.Accountid
+         LEFT JOIN (
+                   SELECT Accountid, SUM(Paysum) AS Pay
+                   FROM Paysumma
+                   WHERE Serviceid = 2
+                   GROUP BY Accountid
+                   ) P ON R.Accountid = P.Accountid
 GROUP BY R.Accountid, N.Nachisl, P.Pay
 ORDER BY R.Accountid;
 
@@ -7442,15 +7772,23 @@ ORDER BY R.Accountid;
 
 
 SELECT R.AccountId,
-       (SELECT Fio FROM Abonent WHERE Accountid = R.Accountid),
-       (SELECT SUM(Nachislsum)
-        FROM Nachislsumma N
-        WHERE N.Accountid = R.Accountid
-          AND N.Serviceid = 2) AS Nachisl,
-       (SELECT SUM(Paysum)
-        FROM Paysumma P
-        WHERE P.Accountid = R.Accountid
-          AND P.Serviceid = 2) AS Pay
+       (
+       SELECT Fio
+       FROM Abonent
+       WHERE Accountid = R.Accountid
+       ),
+       (
+       SELECT SUM(Nachislsum)
+       FROM Nachislsumma N
+       WHERE N.Accountid = R.Accountid
+         AND N.Serviceid = 2
+       ) AS Nachisl,
+       (
+       SELECT SUM(Paysum)
+       FROM Paysumma P
+       WHERE P.Accountid = R.Accountid
+         AND P.Serviceid = 2
+       ) AS Pay
 FROM Request R
 GROUP BY R.Accountid
 ORDER BY 1;
@@ -7476,9 +7814,9 @@ ORDER BY 1;
 SELECT R.AccountId,
        SUM(N.Nachislsum) AS Nachisl,
        SUM(P.Paysum)     AS Pay
-FROM Request R
+FROM Request                    R
          LEFT JOIN Nachislsumma N USING (AccountId)
-         LEFT JOIN Paysumma P USING (AccountId)
+         LEFT JOIN Paysumma     P USING (AccountId)
 WHERE P.Serviceid = 2
 GROUP BY R.AccountId
 ORDER BY 1;
@@ -7493,11 +7831,14 @@ ORDER BY 1;
 SELECT Requestid,
        Accountid,
        CASE
-           WHEN Executed = TRUE THEN (SELECT Fio
-                                      FROM Executor
-                                      WHERE Executorid = R.Executorid)
+           WHEN Executed = TRUE
+               THEN (
+           SELECT Fio
+           FROM Executor
+           WHERE Executorid = R.Executorid
+                    )
            ELSE 'Not Executed'
-           END AS "ExecutorNameOrStatus",
+       END AS "ExecutorNameOrStatus",
        Failureid,
        Incomingdate,
        Executiondate
@@ -7509,13 +7850,13 @@ SELECT R.Requestid,
        R.Failureid,
        R.Incomingdate,
        R.Executiondate
-FROM Request R
+FROM Request             R
          LEFT JOIN LATERAL (
-    SELECT Fio
-    FROM Executor
-    WHERE Executorid = R.Executorid
-      AND R.Executed = TRUE
-    ) E ON TRUE;
+                       SELECT Fio
+                       FROM Executor
+                       WHERE Executorid = R.Executorid
+                         AND R.Executed = TRUE
+                       ) E ON TRUE;
 
 --- ON TRUE =
 ---"берём всё что подзапрос вернул"
@@ -7527,10 +7868,10 @@ SELECT R.Requestid,
        R.Failureid,
        R.Incomingdate,
        R.Executiondate
-FROM Request R
+FROM Request                R
          LEFT JOIN Executor E
-                   ON E.Executorid = R.Executorid -- соединяем по ID
-                       AND R.Executed = TRUE;
+         ON E.Executorid = R.Executorid -- соединяем по ID
+             AND R.Executed = TRUE;
 -- и только если Executed = TRUE
 
 
@@ -7544,12 +7885,15 @@ FROM Request R
 SELECT Requestid,
        Accountid,
        CASE
-           WHEN Executorid IS NOT NULL THEN
-               (SELECT Fio
-                FROM Executor
-                WHERE Executorid = R.Executorid)
+           WHEN Executorid IS NOT NULL
+               THEN
+               (
+           SELECT Fio
+           FROM Executor
+           WHERE Executorid = R.Executorid
+               )
            ELSE 'Исполнитель не назначен'
-           END AS "ExecutorName"
+       END AS "ExecutorName"
 FROM Request R
 ORDER BY Requestid;
 
@@ -7562,18 +7906,26 @@ ORDER BY Requestid;
 */
 
 SELECT R.AccountId,
-       (SELECT SUM(Nachislsum)
-        FROM Nachislsumma N
-        WHERE N.AccountId = R.AccountId
-          AND N.Serviceid = (SELECT Serviceid
-                             FROM Services
-                             WHERE Servicenm = 'Электроснабжение')) AS Nachisl,
-       (SELECT SUM(Paysum)
-        FROM Paysumma P
-        WHERE P.AccountId = R.AccountId
-          AND P.Serviceid = (SELECT Serviceid
-                             FROM Services
-                             WHERE Servicenm = 'Электроснабжение')) AS Pay
+       (
+       SELECT SUM(Nachislsum)
+       FROM Nachislsumma N
+       WHERE N.AccountId = R.AccountId
+         AND N.Serviceid = (
+                           SELECT Serviceid
+                           FROM Services
+                           WHERE Servicenm = 'Электроснабжение'
+                           )
+       ) AS Nachisl,
+       (
+       SELECT SUM(Paysum)
+       FROM Paysumma P
+       WHERE P.AccountId = R.AccountId
+         AND P.Serviceid = (
+                           SELECT Serviceid
+                           FROM Services
+                           WHERE Servicenm = 'Электроснабжение'
+                           )
+       ) AS Pay
 FROM Request R
 GROUP BY R.AccountId;
 
@@ -7581,18 +7933,30 @@ GROUP BY R.AccountId;
 Если независимый подзапрос вынести в секцию WITH, то получится запрос:
 */
 
-WITH Service AS (SELECT Serviceid
-                 FROM Services
-                 WHERE Servicenm = 'Электроснабжение')
+WITH Service AS (
+                SELECT Serviceid
+                FROM Services
+                WHERE Servicenm = 'Электроснабжение'
+                )
 SELECT R.Accountid,
-       (SELECT SUM(Nachislsum)
-        FROM Nachislsumma N
-        WHERE N.Accountid = R.Accountid
-          AND N.Serviceid = (SELECT Serviceid FROM Service)) AS Nachisl,
-       (SELECT SUM(Paysum)
-        FROM Paysumma P
-        WHERE P.Accountid = R.Accountid
-          AND P.Serviceid = (SELECT Serviceid FROM Service)) AS Pay
+       (
+       SELECT SUM(Nachislsum)
+       FROM Nachislsumma N
+       WHERE N.Accountid = R.Accountid
+         AND N.Serviceid = (
+                           SELECT Serviceid
+                           FROM Service
+                           )
+       ) AS Nachisl,
+       (
+       SELECT SUM(Paysum)
+       FROM Paysumma P
+       WHERE P.Accountid = R.Accountid
+         AND P.Serviceid = (
+                           SELECT Serviceid
+                           FROM Service
+                           )
+       ) AS Pay
 FROM Request R
 GROUP BY R.Accountid;
 
@@ -7618,15 +7982,17 @@ Abonent и Street для получения ФИО абонентов и их а
 */
 
 SELECT A.Fio,
-       (SELECT S.Streetnm
-        FROM Street S
-        WHERE S.Streetid = A.Streetid) ||
+       (
+       SELECT S.Streetnm
+       FROM Street S
+       WHERE S.Streetid = A.Streetid
+       ) ||
        ', д.' ||
        A.Houseno ||
        ', кв.' ||
        A.Flatno AS Address,
        R.Incomingdate
-FROM Abonent A
+FROM Abonent                A
          INNER JOIN Request R USING (Accountid)
 ORDER BY 1;
 
@@ -7653,10 +8019,12 @@ from Abonent A;
 SELECT P.Serviceid,
        P.Paydate,
        SUM(P.Paysum),
-       (SELECT SUM(Paysum)
-        FROM Paysumma
-        WHERE Paydate <= P.Paydate
-          AND Serviceid = P.Serviceid) AS "Нарастающий итог"
+       (
+       SELECT SUM(Paysum)
+       FROM Paysumma
+       WHERE Paydate <= P.Paydate
+         AND Serviceid = P.Serviceid
+       ) AS "Нарастающий итог"
 FROM Paysumma P
 GROUP BY P.Serviceid, P.Paydate
 ORDER BY P.Serviceid, P.Paydate;
@@ -7696,70 +8064,90 @@ ORDER BY Serviceid, Paydate;
 
 SELECT A.AccountId,
        A.FIO,
-       (SELECT SUM(N.Nachislsum)
-        FROM Nachislsumma N
-        WHERE N.AccountId = A.AccountId)
+       (
+       SELECT SUM(N.Nachislsum)
+       FROM Nachislsumma N
+       WHERE N.AccountId = A.AccountId
+       )
            -
-       (SELECT SUM(P.Paysum)
-        FROM Paysumma P
-        WHERE P.AccountId = A.AccountId) AS "Debet/Credit"
+       (
+       SELECT SUM(P.Paysum)
+       FROM Paysumma P
+       WHERE P.AccountId = A.AccountId
+       ) AS "Debet/Credit"
 FROM Abonent A;
 
 
 SELECT a.accountid,
        a.fio,
-       (SELECT SUM(n.nachislsum)
-        FROM nachislsumma n
-        WHERE n.accountid = a.accountid)
+       (
+       SELECT SUM(n.nachislsum)
+       FROM nachislsumma n
+       WHERE n.accountid = a.accountid
+       )
            -
-       (SELECT SUM(p.paysum)
-        FROM paysumma p
-        WHERE p.accountid = a.accountid) AS "Debet/Credit"
+       (
+       SELECT SUM(p.paysum)
+       FROM paysumma p
+       WHERE p.accountid = a.accountid
+       ) AS "Debet/Credit"
 FROM abonent a;
 
 
 
-WITH nachisl AS (SELECT accountid,
-                        nachislyear,
-                        nachislmonth,
-                        SUM(nachislsum) AS nachislsum
-                 FROM nachislsumma
-                 GROUP BY accountid, nachislyear, nachislmonth),
-     payment AS (SELECT accountid,
-                        payyear,
-                        paymonth,
-                        SUM(paysum) AS paysum
-                 FROM paysumma
-                 GROUP BY accountid, payyear, paymonth),
+WITH nachisl AS (
+                SELECT accountid,
+                       nachislyear,
+                       nachislmonth,
+                       SUM(nachislsum) AS nachislsum
+                FROM nachislsumma
+                GROUP BY accountid, nachislyear, nachislmonth
+                ),
+     payment AS (
+                SELECT accountid,
+                       payyear,
+                       paymonth,
+                       SUM(paysum) AS paysum
+                FROM paysumma
+                GROUP BY accountid, payyear, paymonth
+                ),
 -- Объединяем все уникальные периоды для каждого абонента
-     periods AS (SELECT accountid, year, month
-                 FROM (SELECT accountid, nachislyear AS year, nachislmonth AS month
-                       FROM nachisl
-                       UNION
-                       SELECT accountid, payyear, paymonth
-                       FROM payment) t),
+     periods AS (
+                SELECT accountid, year, month
+                FROM (
+                     SELECT accountid, nachislyear AS year, nachislmonth AS month
+                     FROM nachisl
+                     UNION
+                     SELECT accountid, payyear, paymonth
+                     FROM payment
+                     ) t
+                ),
 -- Собираем данные по периодам
-     monthly_data AS (SELECT p.accountid,
-                             p.year,
-                             p.month,
-                             COALESCE(n.nachislsum, 0) AS nachisl,
-                             COALESCE(pm.paysum, 0)    AS pay
-                      FROM periods p
-                               LEFT JOIN nachisl n ON p.accountid = n.accountid AND p.year = n.nachislyear AND
-                                                      p.month = n.nachislmonth
-                               LEFT JOIN payment pm ON p.accountid = pm.accountid AND p.year = pm.payyear AND
-                                                       p.month = pm.paymonth),
+     monthly_data AS (
+                SELECT p.accountid,
+                       p.year,
+                       p.month,
+                       COALESCE(n.nachislsum, 0) AS nachisl,
+                       COALESCE(pm.paysum, 0)    AS pay
+                FROM periods               p
+                         LEFT JOIN nachisl n ON p.accountid = n.accountid AND p.year = n.nachislyear AND
+                                                p.month = n.nachislmonth
+                         LEFT JOIN payment pm ON p.accountid = pm.accountid AND p.year = pm.payyear AND
+                                                 p.month = pm.paymonth
+                ),
 -- Добавляем накопленное сальдо
-     balance AS (SELECT accountid,
-                        year,
-                        month,
-                        nachisl,
-                        pay,
-                        nachisl - pay             AS change,
-                        SUM(nachisl - pay)
-                        OVER (PARTITION BY accountid
-                            ORDER BY year, month) AS balance_end
-                 FROM monthly_data)
+     balance AS (
+                SELECT accountid,
+                       year,
+                       month,
+                       nachisl,
+                       pay,
+                       nachisl - pay             AS change,
+                       SUM(nachisl - pay)
+                       OVER (PARTITION BY accountid
+                           ORDER BY year, month) AS balance_end
+                FROM monthly_data
+                )
 -- Финальный вывод с информацией об абоненте
 SELECT a.accountid,
        a.fio,
@@ -7774,7 +8162,7 @@ SELECT a.accountid,
                     ORDER BY b.year, b.month),
                 0)                                  AS "Сальдо на начало",
        b.balance_end                                AS "Сальдо на конец"
-FROM abonent a
+FROM abonent          a
          JOIN balance b ON a.accountid = b.accountid
 WHERE a.accountid = '136160' -- ← подставьте нужный лицевой счёт
 ORDER BY b.year, b.month;
@@ -7789,12 +8177,16 @@ ORDER BY b.year, b.month;
 
 SELECT A.AccountId,
        A.FIO,
-       (SELECT COUNT(*)
-        FROM Nachislsumma N
-        WHERE N.AccountId = A.AccountId
-          AND N.Nachislsum > (SELECT AVG(N1.Nachislsum)
-                              FROM Nachislsumma N1
-                              WHERE N1.AccountId = A.AccountId)) AS Above_average_accruals
+       (
+       SELECT COUNT(*)
+       FROM Nachislsumma N
+       WHERE N.AccountId = A.AccountId
+         AND N.Nachislsum > (
+                            SELECT AVG(N1.Nachislsum)
+                            FROM Nachislsumma N1
+                            WHERE N1.AccountId = A.AccountId
+                            )
+       ) AS Above_average_accruals
 FROM Abonent A;
 
 /*
@@ -7813,13 +8205,17 @@ FROM Abonent A;
 */
 
 SELECT t.accountid, ABS(t."Долг")
-FROM (SELECT p.accountid,
-             (SUM(p.paysum) - (SELECT SUM(n.nachislsum)
-                               FROM nachislsumma n
-                               WHERE n.accountid = p.accountid
-                               GROUP BY n.accountid)) AS "Долг"
-      FROM paysumma AS p
-      GROUP BY p.accountid) t
+FROM (
+     SELECT p.accountid,
+            (SUM(p.paysum) - (
+                             SELECT SUM(n.nachislsum)
+                             FROM nachislsumma n
+                             WHERE n.accountid = p.accountid
+                             GROUP BY n.accountid
+                             )) AS "Долг"
+     FROM paysumma AS p
+     GROUP BY p.accountid
+     ) t
 WHERE t."Долг" < 0
 ORDER BY t."Долг";
 
@@ -7837,16 +8233,20 @@ ORDER BY t."Долг";
 SELECT SUM(CASE WHEN "Сальдо" > 0 THEN "Сальдо" ELSE 0 END)      AS "Переплата"
         ,
        SUM(CASE WHEN "Сальдо" < 0 THEN ABS("Сальдо") ELSE 0 END) AS "Долг"
-FROM (SELECT P.Accountid
-              ,
-             (
-                 SUM(P.Paysum) - (SELECT SUM(N.Nachislsum)
-                                  FROM Nachislsumma N
-                                  WHERE N.Accountid = P.Accountid
-                                  GROUP BY N.Accountid)
-                 ) AS "Сальдо"
-      FROM Paysumma AS P
-      GROUP BY P.Accountid) t;
+FROM (
+     SELECT P.Accountid
+             ,
+            (
+                SUM(P.Paysum) - (
+                                SELECT SUM(N.Nachislsum)
+                                FROM Nachislsumma N
+                                WHERE N.Accountid = P.Accountid
+                                GROUP BY N.Accountid
+                                )
+                ) AS "Сальдо"
+     FROM Paysumma AS P
+     GROUP BY P.Accountid
+     ) t;
 
 /*
 Коррелированный подзапрос в секции FROM применяется с помощью
@@ -7876,16 +8276,16 @@ SELECT a.accountid
        fio
         ,
        last_request.*
-FROM abonent a
+FROM abonent                 a
          INNER JOIN LATERAL
-    (
-    SELECT *
-    FROM request r
-    WHERE accountid = a.accountid
-    ORDER BY r.incomingdate DESC
-    LIMIT 1
-    ) AS last_request ON
-    TRUE;
+                        (
+                        SELECT *
+                        FROM request r
+                        WHERE accountid = a.accountid
+                        ORDER BY r.incomingdate DESC
+                        LIMIT 1
+                        ) AS last_request ON
+             TRUE;
 
 
 /*
@@ -7922,14 +8322,14 @@ LATERAL позволяет подзапросу в FROM обращаться к 
 */
 
 SELECT *
-FROM Request R
+FROM Request                     R
          LEFT JOIN LATERAL
-    (SELECT p.Payfactid, p.Paysum, p.Paydate
-     FROM Paysumma p
-     WHERE p.Accountid = R.Accountid
-       AND p.Paydate <= R.Incomingdate
-     ORDER BY Paydate DESC
-     LIMIT 1) t ON TRUE ---можно использовать CROSS JOIN LATERAL
+                       (SELECT p.Payfactid, p.Paysum, p.Paydate
+                        FROM Paysumma p
+                        WHERE p.Accountid = R.Accountid
+                          AND p.Paydate <= R.Incomingdate
+                        ORDER BY Paydate DESC
+                        LIMIT 1) t ON TRUE ---можно использовать CROSS JOIN LATERAL
 ORDER BY r.Incomingdate - t.Paydate, r.Requestid;
 
 
@@ -8010,10 +8410,12 @@ GROUP BY Serviceid;
 
 SELECT P.Accountid, P.Serviceid, P.Paysum, p.Paydate, p.payfactid
 FROM Paysumma P
-WHERE P.Paysum = (SELECT MAX(Paysum)
-                  FROM Paysumma
-                  GROUP BY Serviceid
-                  HAVING Serviceid = P.Serviceid)
+WHERE P.Paysum = (
+                 SELECT MAX(Paysum)
+                 FROM Paysumma
+                 GROUP BY Serviceid
+                 HAVING Serviceid = P.Serviceid
+                 )
 order by p.accountid, p.serviceid;
 
 -- Найдём все платежи абонента 115705 по услуге 2
@@ -8032,18 +8434,22 @@ WHERE Accountid = '115705'
 SELECT *
 FROM Abonent Out
 WHERE '17.12.2023' IN
-      (SELECT Incomingdate
-       FROM Request Inn
-       WHERE Out.Accountid = Inn.Accountid);
+      (
+      SELECT Incomingdate
+      FROM Request Inn
+      WHERE Out.Accountid = Inn.Accountid
+      );
 
 ---или
 
 SELECT *
 FROM Abonent Out
 WHERE TO_DATE('17.12.2023', 'DD.MM.YYYY') IN
-      (SELECT Incomingdate
-       FROM Request Inn
-       WHERE Out.Accountid = Inn.Accountid);
+      (
+      SELECT Incomingdate
+      FROM Request Inn
+      WHERE Out.Accountid = Inn.Accountid
+      );
 
 /*
 В этом примере Out и Inn — это соответственно псевдонимы таблиц
@@ -8081,7 +8487,7 @@ Accountid = '005488' анализируется условие поиска ос
 
 explain analyze
 SELECT A.*
-FROM Abonent A
+FROM Abonent                  A
          NATURAL JOIN Request Inn
 WHERE Inn.Incomingdate = '17.12.2023';
 
@@ -8089,7 +8495,7 @@ WHERE Inn.Incomingdate = '17.12.2023';
 
 explain analyze
 SELECT A.*
-FROM Abonent A
+FROM Abonent                  A
          NATURAL JOIN Request Inn
 WHERE Inn.Incomingdate = TO_DATE('17.12.2023', 'DD.MM.YYYY');
 
@@ -8120,9 +8526,11 @@ SELECT внешнего запроса, в то время как соедине
 explain analyze
 SELECT *
 FROM Paysumma P
-WHERE Paysum IN (SELECT Nachislsum + 10
-                 FROM Nachislsumma
-                 WHERE Accountid = P.Accountid);
+WHERE Paysum IN (
+                SELECT Nachislsum + 10
+                FROM Nachislsumma
+                WHERE Accountid = P.Accountid
+                );
 
 /*Хорошим примером выборки из таблицы нужных строк является такой
 запрос:
@@ -8131,7 +8539,11 @@ WHERE Paysum IN (SELECT Nachislsum + 10
 explain analyze
 SELECT *
 FROM Nachislsumma N
-WHERE (SELECT Fio FROM Abonent WHERE Accountid = N.Accountid)
+WHERE (
+      SELECT Fio
+      FROM Abonent
+      WHERE Accountid = N.Accountid
+      )
           ILIKE '%д%'
 order by N.Accountid;
 
@@ -8168,9 +8580,11 @@ order by N.Accountid;
 
 SELECT *
 FROM Executor e
-WHERE 4 <= (SELECT COUNT(r.Requestid)
-            FROM Request r
-            WHERE e.Executorid = r.Executorid);
+WHERE 4 <= (
+           SELECT COUNT(r.Requestid)
+           FROM Request r
+           WHERE e.Executorid = r.Executorid
+           );
 
 
 /*
@@ -8199,14 +8613,18 @@ WHERE 4 <= (SELECT COUNT(r.Requestid)
 SELECT A.AccountId,
        A.Fio,
        N.Nachislsum,
-       (SELECT ROUND(AVG(Nachislsum), 2)
-        FROM Nachislsumma
-        WHERE AccountId = N.AccountId) AS Avg_d
-FROM Abonent A
+       (
+       SELECT ROUND(AVG(Nachislsum), 2)
+       FROM Nachislsumma
+       WHERE AccountId = N.AccountId
+       ) AS Avg_d
+FROM Abonent                     A
          INNER JOIN Nachislsumma N USING (AccountId)
-WHERE Nachislsum > (SELECT ROUND(AVG(Nachislsum), 2)
-                    FROM Nachislsumma
-                    WHERE AccountId = N.AccountId)
+WHERE Nachislsum > (
+                   SELECT ROUND(AVG(Nachislsum), 2)
+                   FROM Nachislsumma
+                   WHERE AccountId = N.AccountId
+                   )
 ORDER BY 1, 3
     FETCH FIRST 8 ROWS ONLY;
 
@@ -8236,12 +8654,14 @@ Nachislsumma с самого начала, чтобы найти все стро
 Построим запрос на основе CTE, выбирающий ту же информацию:
 */
 
-WITH T AS (SELECT Accountid, ROUND(AVG(Nachislsum), 2) AS Avg_d
-           FROM Nachislsumma
-           GROUP BY Accountid)
+WITH T AS (
+          SELECT Accountid, ROUND(AVG(Nachislsum), 2) AS Avg_d
+          FROM Nachislsumma
+          GROUP BY Accountid
+          )
 
 SELECT A.Accountid, A.Fio, N.Nachislsum, T.Avg_d
-FROM Nachislsumma N
+FROM Nachislsumma          N
          LEFT JOIN T USING (Accountid)
          LEFT JOIN Abonent A USING (Accountid)
 WHERE N.Nachislsum > T.Avg_d
@@ -8283,47 +8703,64 @@ ORDER BY 1, 3
 
 SELECT a.accountid,
        a.fio,
-       (SELECT SUM(p.paysum)
-        FROM paysumma p
-        WHERE p.accountid = a.accountid) AS total_payments
+       (
+       SELECT SUM(p.paysum)
+       FROM paysumma p
+       WHERE p.accountid = a.accountid
+       ) AS total_payments
 
 FROM abonent a
-WHERE (SELECT AVG(total_sum)
-       FROM (SELECT SUM(p.paysum) AS total_sum
-             FROM paysumma p
-             GROUP BY p.accountid) AS subquery)
+WHERE (
+      SELECT AVG(total_sum)
+      FROM (
+           SELECT SUM(p.paysum) AS total_sum
+           FROM paysumma p
+           GROUP BY p.accountid
+           ) AS subquery
+      )
           <
-      (SELECT SUM(p.paysum)
-       FROM paysumma p
-       WHERE p.accountid = a.accountid)
+      (
+      SELECT SUM(p.paysum)
+      FROM paysumma p
+      WHERE p.accountid = a.accountid
+      )
 ORDER BY a.accountid;
 
 
-WITH payments AS (SELECT accountid, SUM(paysum) AS total_payments
-                  FROM paysumma
-                  GROUP BY accountid),
+WITH payments AS (
+                 SELECT accountid, SUM(paysum) AS total_payments
+                 FROM paysumma
+                 GROUP BY accountid
+                 ),
 
-     ranked AS (SELECT accountid,
-                       total_payments,
-                       AVG(total_payments) OVER () AS avg_total
-                FROM payments)
+     ranked AS (
+                 SELECT accountid,
+                        total_payments,
+                        AVG(total_payments) OVER () AS avg_total
+                 FROM payments
+                 )
 
 SELECT a.accountid, a.fio, r.total_payments
-FROM abonent a
+FROM abonent         a
          JOIN ranked r ON a.accountid = r.accountid
 WHERE r.total_payments > r.avg_total
 ORDER BY a.accountid;
 
 
 
-WITH payments AS (SELECT accountid, SUM(paysum) AS total_payments
-                  FROM paysumma
-                  GROUP BY accountid)
+WITH payments AS (
+                 SELECT accountid, SUM(paysum) AS total_payments
+                 FROM paysumma
+                 GROUP BY accountid
+                 )
 
 SELECT a.accountid, a.fio, p.total_payments
-FROM abonent a
+FROM abonent           a
          JOIN payments p ON a.accountid = p.accountid
-WHERE p.total_payments > (SELECT AVG(total_payments) FROM payments)
+WHERE p.total_payments > (
+                         SELECT AVG(total_payments)
+                         FROM payments
+                         )
 ORDER BY a.accountid;
 
 /*
@@ -8341,38 +8778,50 @@ ORDER BY a.accountid;
 
 SELECT a.accountid,
        a.fio,
-       (SELECT COALESCE(SUM(n.nachislsum), 0)
-        FROM nachislsumma n
-        WHERE n.accountid = a.accountid) AS total_charges,
+       (
+       SELECT COALESCE(SUM(n.nachislsum), 0)
+       FROM nachislsumma n
+       WHERE n.accountid = a.accountid
+       ) AS total_charges,
 
-       (SELECT COALESCE(SUM(p.paysum), 0)
-        FROM paysumma p
-        WHERE p.accountid = a.accountid) AS total_payments
+       (
+       SELECT COALESCE(SUM(p.paysum), 0)
+       FROM paysumma p
+       WHERE p.accountid = a.accountid
+       ) AS total_payments
 
 FROM abonent a
-WHERE (SELECT COALESCE(SUM(n.nachislsum), 0)
-       FROM nachislsumma n
-       WHERE n.accountid = a.accountid) >
-      (SELECT COALESCE(SUM(p.paysum), 0)
-       FROM paysumma p
-       WHERE p.accountid = a.accountid);
+WHERE (
+      SELECT COALESCE(SUM(n.nachislsum), 0)
+      FROM nachislsumma n
+      WHERE n.accountid = a.accountid
+      ) >
+      (
+      SELECT COALESCE(SUM(p.paysum), 0)
+      FROM paysumma p
+      WHERE p.accountid = a.accountid
+      );
 
 
 
-WITH charges AS (SELECT accountid, COALESCE(SUM(nachislsum), 0) AS total_charges
-                 FROM nachislsumma
-                 GROUP BY accountid),
+WITH charges AS (
+                SELECT accountid, COALESCE(SUM(nachislsum), 0) AS total_charges
+                FROM nachislsumma
+                GROUP BY accountid
+                ),
 
-     payments AS (SELECT accountid, COALESCE(SUM(paysum), 0) AS total_payments
-                  FROM paysumma
-                  GROUP BY accountid)
+     payments AS (
+                SELECT accountid, COALESCE(SUM(paysum), 0) AS total_payments
+                FROM paysumma
+                GROUP BY accountid
+                )
 
 SELECT a.accountid,
        a.fio,
        COALESCE(c.total_charges, 0)  AS total_charges,
        COALESCE(p.total_payments, 0) AS total_payments
-FROM abonent a
-         LEFT JOIN charges c ON a.accountid = c.accountid
+FROM abonent                a
+         LEFT JOIN charges  c ON a.accountid = c.accountid
          LEFT JOIN payments p ON a.accountid = p.accountid
 WHERE COALESCE(c.total_charges, 0) > COALESCE(p.total_payments, 0);
 
@@ -8400,10 +8849,12 @@ WHERE COALESCE(c.total_charges, 0) > COALESCE(p.total_payments, 0);
 SELECT n.accountid, SUM(n.nachislsum) AS summ
 FROM nachislsumma n
 GROUP BY accountid
-HAVING accountid = (SELECT a.accountid
-                    FROM abonent a
-                    WHERE a.accountid = n.accountid
-                      AND a.fio LIKE 'С%')
+HAVING accountid = (
+                   SELECT a.accountid
+                   FROM abonent a
+                   WHERE a.accountid = n.accountid
+                     AND a.fio LIKE 'С%'
+                   )
 ORDER BY n.accountid;
 
 /*
@@ -8435,14 +8886,18 @@ Accountid таблицы Abonent (столбец Accountid содержит ун
 
 
 SELECT a.fio, p.*
-FROM paysumma p
+FROM paysumma         p
          JOIN abonent a USING (accountid)
-WHERE p.paysum < (SELECT AVG(paysum)
-                  FROM paysumma
-                  WHERE accountid = a.accountid)
-ORDER BY (SELECT servicenm
-          FROM services
-          WHERE serviceid = p.serviceid);
+WHERE p.paysum < (
+                 SELECT AVG(paysum)
+                 FROM paysumma
+                 WHERE accountid = a.accountid
+                 )
+ORDER BY (
+         SELECT servicenm
+         FROM services
+         WHERE serviceid = p.serviceid
+         );
 
 
 /*
@@ -8475,10 +8930,12 @@ ORDER BY (SELECT servicenm
 
 SELECT *
 FROM paysumma
-WHERE paysum > ANY (SELECT paysum
-                    FROM paysumma
-                    WHERE payyear = 2025
-                      AND serviceid = 4)
+WHERE paysum > ANY (
+                   SELECT paysum
+                   FROM paysumma
+                   WHERE payyear = 2025
+                     AND serviceid = 4
+                   )
 
 ---ANY означает «хотя бы один» (логическое ИЛИ).
 ---x > значение1 OR x > значение2 OR x > значение3 OR ...
@@ -8508,10 +8965,12 @@ ORDER BY payfactid;
 
 SELECT *
 FROM paysumma
-WHERE paysum > (SELECT MIN(paysum)
-                FROM paysumma
-                WHERE payyear = 2025
-                  AND serviceid = 4)
+WHERE paysum > (
+               SELECT MIN(paysum)
+               FROM paysumma
+               WHERE payyear = 2025
+                 AND serviceid = 4
+               )
   AND payyear < 2025
   AND serviceid = 4
 ORDER BY payfactid;
@@ -8531,18 +8990,22 @@ ORDER BY payfactid;
 
 SELECT *
 FROM paysumma
-WHERE accountid = ANY (SELECT accountid
-                       FROM paysumma
-                       WHERE paysum > 2300)
+WHERE accountid = ANY (
+                      SELECT accountid
+                      FROM paysumma
+                      WHERE paysum > 2300
+                      )
 ORDER BY accountid;
 
 --или
 
 SELECT *
 FROM paysumma
-WHERE accountid IN (SELECT accountid
-                    FROM paysumma
-                    WHERE paysum > 2300)
+WHERE accountid IN (
+                   SELECT accountid
+                   FROM paysumma
+                   WHERE paysum > 2300
+                   )
 ORDER BY accountid;
 
 /*
@@ -8562,9 +9025,11 @@ ORDER BY accountid;
 
 SELECT *
 FROM request
-WHERE incomingdate < ALL (SELECT incomingdate
-                          FROM request
-                          WHERE failureid = 7)
+WHERE incomingdate < ALL (
+                         SELECT incomingdate
+                         FROM request
+                         WHERE failureid = 7
+                         )
 ORDER BY requestid;
 
 /*
@@ -8582,9 +9047,11 @@ Executiondate > ALL (24.10.2024, 10.08.2023, 11.10.2023, 14.09.2023).
 
 SELECT *
 FROM Request
-WHERE Executiondate > ALL (SELECT Executiondate
-                           FROM Request
-                           WHERE Failureid = 2)
+WHERE Executiondate > ALL (
+                          SELECT Executiondate
+                          FROM Request
+                          WHERE Failureid = 2
+                          )
 ORDER BY Requestid;
 
 /*
@@ -8603,9 +9070,11 @@ MAX и MIN. Таким образом, предыдущий запрос мож�
 
 SELECT *
 FROM request
-WHERE executiondate > (SELECT MAX(executiondate)
-                       FROM request
-                       WHERE failureid = 2)
+WHERE executiondate > (
+                      SELECT MAX(executiondate)
+                      FROM request
+                      WHERE failureid = 2
+                      )
 ORDER BY requestid;
 
 /*
@@ -8619,12 +9088,14 @@ ORDER BY requestid;
 */
 
 SELECT s.servicenm, sum(p.paysum), count(*)
-FROM services s
+FROM services          s
          JOIN paysumma p USING (serviceid)
 GROUP BY s.servicenm
-HAVING COUNT(*) >= ALL (SELECT COUNT(*)
-                        FROM paysumma
-                        GROUP BY serviceid);
+HAVING COUNT(*) >= ALL (
+                       SELECT COUNT(*)
+                       FROM paysumma
+                       GROUP BY serviceid
+                       );
 
 /*
 Рассмотрим использование связанного подзапроса с квантором ALL.
@@ -8636,17 +9107,21 @@ HAVING COUNT(*) >= ALL (SELECT COUNT(*)
 
 SELECT d.failurenm
 FROM disrepair d
-WHERE '01.05.2023' < ALL (SELECT r.incomingdate
-                          FROM request r
-                          WHERE d.failureid = r.failureid);
+WHERE '01.05.2023' < ALL (
+                         SELECT r.incomingdate
+                         FROM request r
+                         WHERE d.failureid = r.failureid
+                         );
 
 
 SELECT d.failurenm
 FROM disrepair d
 WHERE TO_DATE('01.05.2023', 'DD.MM.YYYY') < ALL
-      (SELECT r.incomingdate
-       FROM request r
-       WHERE d.failureid = r.failureid);
+      (
+      SELECT r.incomingdate
+      FROM request r
+      WHERE d.failureid = r.failureid
+      );
 
 /*
 Поскольку в этом примере используется связанный подзапрос, он
@@ -8676,9 +9151,11 @@ SELECT P.AccountId
 FROM Paysumma P
 GROUP BY P.AccountId
 HAVING MAX(P.Paysum) >= ALL
-       (SELECT 2.8 * AVG(P1.Paysum)
-        FROM Paysumma P1
-        WHERE P.AccountId <> P1.AccountId);
+       (
+       SELECT 2.8 * AVG(P1.Paysum)
+       FROM Paysumma P1
+       WHERE P.AccountId <> P1.AccountId
+       );
 
 /*
 
@@ -8742,15 +9219,19 @@ Paysum, которые находятся в строках этой групп�
 SELECT *
 FROM paysumma
          INNER JOIN request USING (accountid)
-WHERE paysum > ANY (SELECT MIN(paysum)
-                    FROM paysumma
-                    WHERE payyear = 2025
-                      AND serviceid = 4)
+WHERE paysum > ANY (
+                   SELECT MIN(paysum)
+                   FROM paysumma
+                   WHERE payyear = 2025
+                     AND serviceid = 4
+                   )
   AND payyear < 2025
   AND serviceid = 4
-  AND incomingdate < ALL (SELECT incomingdate
-                          FROM request
-                          WHERE failureid = 7)
+  AND incomingdate < ALL (
+                         SELECT incomingdate
+                         FROM request
+                         WHERE failureid = 7
+                         )
 ORDER BY payfactid;
 
 /*
@@ -8763,18 +9244,22 @@ ORDER BY payfactid;
 
 SELECT *
 FROM request
-WHERE executiondate > ANY (SELECT executiondate
-                           FROM request
-                           WHERE failureid = 4);
+WHERE executiondate > ANY (
+                          SELECT executiondate
+                          FROM request
+                          WHERE failureid = 4
+                          );
 
 --не возвращает выходных данных (в учебной базе нет заявок с
 -- неисправностью с кодом 4), в то время как запрос
 
 SELECT *
 FROM request
-WHERE executiondate > ALL (SELECT executiondate
-                           FROM request
-                           WHERE failureid = 4);
+WHERE executiondate > ALL (
+                          SELECT executiondate
+                          FROM request
+                          WHERE failureid = 4
+                          );
 
 /*
 Проверка существования результата запроса
@@ -8805,9 +9290,11 @@ WHERE executiondate > ALL (SELECT executiondate
 проверяющий, есть ли среди абонентов хотя бы один с ФИО Иванов И.И.:
 */
 SELECT EXISTS
-           (SELECT 1
-            FROM Abonent
-            WHERE Fio = 'Иванов И. И.');
+       (
+       SELECT 1
+       FROM Abonent
+       WHERE Fio = 'Иванов И. И.'
+       );
 
 /*
 Данный запрос выдаст FALSE.
@@ -8817,14 +9304,20 @@ SELECT EXISTS
 
 SELECT CASE
            WHEN NOT EXISTS
-               ((SELECT OVERLAY(phone PLACING '66' FROM 1)
-                 FROM abonent)
-                EXCEPT
-                (SELECT SUBSTR(phone, 1, 0) || '66' || SUBSTR(phone, 3)
-                 FROM abonent))
+           (
+           (
+           SELECT OVERLAY(phone PLACING '66' FROM 1)
+           FROM abonent
+           )
+           EXCEPT
+           (
+           SELECT SUBSTR(phone, 1, 0) || '66' || SUBSTR(phone, 3)
+           FROM abonent
+           )
+           )
                THEN 'Наборы данных совпадают'
            ELSE 'Наборы данных не совпадают'
-           END;
+       END;
 
 /*
 В данном случае наборы данных являются идентичными.
@@ -8843,13 +9336,22 @@ SELECT CASE
 SELECT accountid, fio
 FROM abonent
 WHERE EXISTS
-              (SELECT * FROM request WHERE executed IS FALSE);
+      (
+      SELECT *
+      FROM request
+      WHERE executed IS FALSE
+      );
 
 --или
 
 SELECT accountid, fio
 FROM abonent
-WHERE EXISTS (SELECT * FROM request WHERE executed = 'NO');
+WHERE EXISTS
+      (
+      SELECT *
+      FROM request
+      WHERE executed = 'NO'
+      );
 
 /*
 В этих запросах независимый подзапрос выбирает все данные о непогашенных
@@ -8869,7 +9371,12 @@ WHERE EXISTS (SELECT * FROM request WHERE executed = 'NO');
 
 SELECT accountid, fio
 FROM abonent
-WHERE EXISTS (SELECT 1 FROM request WHERE executed IS FALSE);
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM request
+      WHERE executed IS FALSE
+      );
 
 /*
 Вместо табличного подзапроса и подсчёта числа строк,
@@ -8878,9 +9385,11 @@ WHERE EXISTS (SELECT 1 FROM request WHERE executed IS FALSE);
 
 SELECT accountid, fio
 FROM abonent
-WHERE 0 < (SELECT COUNT(*)
-           FROM request
-           WHERE executed = FALSE);
+WHERE 0 < (
+          SELECT COUNT(*)
+          FROM request
+          WHERE executed = FALSE
+          );
 /*позволяет существенно сократить объём выбираемых данных.*/
 
 
@@ -8891,9 +9400,12 @@ WHERE 0 < (SELECT COUNT(*)
 
 SELECT serviceid, servicenm
 FROM services
-WHERE EXISTS (SELECT 1
-              FROM services
-              WHERE servicenm = 'Водоснабжение');
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM services
+      WHERE servicenm = 'Водоснабжение'
+      );
 
 /*
 которым предполагается выбор всей информации об услуге «Водоснабжение».
@@ -8913,10 +9425,13 @@ WHERE EXISTS (SELECT 1
 
 SELECT DISTINCT failureid
 FROM request out
-WHERE EXISTS (SELECT 1
-              FROM request inn
-              WHERE inn.failureid = out.failureid
-                AND inn.accountid <> out.accountid)
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM request inn
+      WHERE inn.failureid = out.failureid
+        AND inn.accountid <> out.accountid
+      )
 ORDER BY failureid;
 
 /*
@@ -8950,10 +9465,12 @@ ORDER BY failureid;
 SELECT a.*
 FROM abonent a
 WHERE EXISTS
-          (SELECT *
-           FROM request r
-           WHERE a.accountid = r.accountid
-             AND r.failureid = 2);
+      (
+      SELECT *
+      FROM request r
+      WHERE a.accountid = r.accountid
+        AND r.failureid = 2
+      );
 
 
 /*
@@ -8967,11 +9484,14 @@ WHERE EXISTS
 
 SELECT DISTINCT d.*
 FROM disrepair d,
-     request out
-WHERE EXISTS (SELECT 1
-              FROM request inn
-              WHERE inn.failureid = out.failureid
-                AND inn.accountid <> out.accountid)
+     request   out
+WHERE EXISTS
+(
+SELECT 1
+FROM request inn
+WHERE inn.failureid = out.failureid
+  AND inn.accountid <> out.accountid
+)
   AND d.failureid = out.failureid
 ORDER BY 1;
 
@@ -8987,9 +9507,12 @@ ORDER BY 1;
 
 SELECT s.streetid
 FROM street s
-WHERE NOT EXISTS (SELECT 1
-                  FROM abonent a
-                  WHERE s.streetid = a.streetid);
+WHERE NOT EXISTS
+      (
+      SELECT 1
+      FROM abonent a
+      WHERE s.streetid = a.streetid
+      );
 
 /*
 Запрос возвращает данные об улицах, на которых не проживают абоненты.
@@ -9010,16 +9533,21 @@ WHERE NOT EXISTS (SELECT 1
 */
 
 SELECT a.accountid, a.fio, SUM(p.paysum) AS total_sum
-FROM abonent a
+FROM abonent           a
          JOIN paysumma p USING (accountid)
-WHERE p.serviceid = (SELECT serviceid
-                     FROM services
-                     WHERE servicenm = 'Газоснабжение')
+WHERE p.serviceid = (
+                    SELECT serviceid
+                    FROM services
+                    WHERE servicenm = 'Газоснабжение'
+                    )
 GROUP BY a.accountid, a.fio
 HAVING SUM(p.paysum) > 2000
-   AND EXISTS (SELECT 1
-               FROM request r
-               WHERE EXTRACT(YEAR FROM r.incomingdate) = 2024)
+   AND EXISTS
+(
+SELECT 1
+FROM request r
+WHERE EXTRACT(YEAR FROM r.incomingdate) = 2024
+)
 ORDER BY a.fio;
 
 
@@ -9040,12 +9568,15 @@ ORDER BY a.fio;
 
 
 SELECT CASE
-           WHEN EXISTS (SELECT 1
-                        FROM Abonent A
-                        WHERE A.Streetid = S.Streetid)
+           WHEN EXISTS
+           (
+           SELECT 1
+           FROM Abonent A
+           WHERE A.Streetid = S.Streetid
+           )
                THEN CAST(S.Streetid AS TEXT)
            ELSE S.Streetnm
-           END AS "Улица"
+       END AS "Улица"
 FROM Street S
 ORDER BY 1;
 
@@ -9069,10 +9600,13 @@ ORDER BY 1;
 
 SELECT accountid
 FROM request r
-WHERE EXISTS (SELECT accountid
-              FROM request
-              WHERE failureid = 3
-                AND accountid = r.accountid)
+WHERE EXISTS
+      (
+      SELECT accountid
+      FROM request
+      WHERE failureid = 3
+        AND accountid = r.accountid
+      )
 GROUP BY accountid
 HAVING COUNT(requestid) > 4;
 
@@ -9084,12 +9618,17 @@ HAVING COUNT(requestid) > 4;
 
 SELECT failurenm
 FROM disrepair d
-WHERE EXISTS (SELECT 1
-              FROM request r
-              WHERE d.failureid = r.failureid
-                AND r.accountid = (SELECT accountid
-                                   FROM abonent
-                                   WHERE fio = 'Аксенов С. А.'));
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM request r
+      WHERE d.failureid = r.failureid
+        AND r.accountid = (
+                          SELECT accountid
+                          FROM abonent
+                          WHERE fio = 'Аксенов С. А.'
+                          )
+      );
 
 
 /*
@@ -9116,13 +9655,17 @@ WHERE EXISTS (SELECT 1
 SELECT DISTINCT p.accountid
 FROM paysumma p
 WHERE NOT EXISTS
-          (SELECT 1
-           FROM services s
-           WHERE NOT EXISTS
-                     (SELECT 1
-                      FROM paysumma p1
-                      WHERE p1.accountid = p.accountid
-                        AND p1.serviceid = s.serviceid))
+      (
+      SELECT 1
+      FROM services s
+      WHERE NOT EXISTS
+            (
+            SELECT 1
+            FROM paysumma p1
+            WHERE p1.accountid = p.accountid
+              AND p1.serviceid = s.serviceid
+            )
+      )
 ORDER BY p.accountid;
 
 /*
@@ -9135,8 +9678,10 @@ ORDER BY p.accountid;
 SELECT accountid
 FROM paysumma
 GROUP BY accountid
-HAVING COUNT(DISTINCT serviceid) = (SELECT COUNT(serviceid)
-                                    FROM services)
+HAVING COUNT(DISTINCT serviceid) = (
+                                   SELECT COUNT(serviceid)
+                                   FROM services
+                                   )
 ORDER BY accountid;
 
 
@@ -9147,12 +9692,16 @@ ORDER BY accountid;
 
 SELECT DISTINCT p.accountid
 FROM paysumma p
-WHERE serviceid = ALL (SELECT serviceid
-                       FROM services s
-                       WHERE serviceid NOT IN (SELECT serviceid
-                                               FROM paysumma p1
-                                               WHERE p1.accountid = p.accountid
-                                                 AND p1.serviceid = s.serviceid))
+WHERE serviceid = ALL (
+                      SELECT serviceid
+                      FROM services s
+                      WHERE serviceid NOT IN (
+                                             SELECT serviceid
+                                             FROM paysumma p1
+                                             WHERE p1.accountid = p.accountid
+                                               AND p1.serviceid = s.serviceid
+                                             )
+                      )
 ORDER BY accountid;
 
 
@@ -9166,10 +9715,13 @@ ORDER BY accountid;
 SELECT DISTINCT a.*---r.*
 FROM abonent a
 ---left join request r on a.accountid = r.accountid
-WHERE EXISTS (SELECT 1
-              FROM request r
-              WHERE a.accountid = r.accountid
-                AND r.failureid = 2);
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM request r
+      WHERE a.accountid = r.accountid
+        AND r.failureid = 2
+      );
 
 /*
 Список выбора содержит столбцы только из таблицы Abonent.
@@ -9204,16 +9756,21 @@ EXISTS будет истинным, и соответствующая строк
 
 SELECT *
 FROM abonent
-WHERE LENGTH(fio) < ANY (SELECT LENGTH(fio)
-                         FROM abonent
-                         WHERE streetid = 3);
+WHERE LENGTH(fio) < ANY (
+                        SELECT LENGTH(fio)
+                        FROM abonent
+                        WHERE streetid = 3
+                        );
 
 SELECT *
 FROM abonent a
-WHERE NOT EXISTS (SELECT 1
-                  FROM abonent d
-                  WHERE LENGTH(a.fio) >= LENGTH(d.fio)
-                    AND streetid = 3);
+WHERE NOT EXISTS
+      (
+      SELECT 1
+      FROM abonent d
+      WHERE LENGTH(a.fio) >= LENGTH(d.fio)
+        AND streetid = 3
+      );
 
 /*
 При наличии NULL, как при обработке в двух других запросах,
@@ -9222,16 +9779,21 @@ WHERE NOT EXISTS (SELECT 1
 
 SELECT *
 FROM abonent
-WHERE phone < ANY (SELECT phone
-                   FROM abonent
-                   WHERE accountid = '005488');
+WHERE phone < ANY (
+                  SELECT phone
+                  FROM abonent
+                  WHERE accountid = '005488'
+                  );
 
 SELECT *
 FROM abonent a
-WHERE NOT EXISTS (SELECT 1
-                  FROM abonent d
-                  WHERE a.phone >= d.phone
-                    AND accountid = '005488');
+WHERE NOT EXISTS
+      (
+      SELECT 1
+      FROM abonent d
+      WHERE a.phone >= d.phone
+        AND accountid = '005488'
+      );
 
 /*
 Это является следствием того, что EXISTS всегда принимает значения
@@ -9257,17 +9819,22 @@ Phone с NULL, предикат принимает значение UNKNOWN и �
 
 SELECT *
 FROM abonent a
-WHERE 1 > (SELECT COUNT(*)
-           FROM abonent d
-           WHERE LENGTH(a.fio) >= LENGTH(d.fio)
-             AND accountid = '005488');
+WHERE 1 > (
+          SELECT COUNT(*)
+          FROM abonent d
+          WHERE LENGTH(a.fio) >= LENGTH(d.fio)
+            AND accountid = '005488'
+          );
 
 SELECT *
 FROM abonent a
-WHERE NOT EXISTS (SELECT fio
-                  FROM abonent d
-                  WHERE LENGTH(a.fio) >= LENGTH(d.fio)
-                    AND accountid = '005488');
+WHERE NOT EXISTS
+      (
+      SELECT fio
+      FROM abonent d
+      WHERE LENGTH(a.fio) >= LENGTH(d.fio)
+        AND accountid = '005488'
+      );
 
 /*
 Выбор между независимыми и зависимыми подзапросами зависит от задачи,
@@ -9302,15 +9869,20 @@ WHERE NOT EXISTS (SELECT fio
 SELECT accountid, MAX(paysum) AS max_pay
 FROM paysumma
 GROUP BY accountid
-HAVING MAX(paysum) > (SELECT AVG(paysum) FROM paysumma);
+HAVING MAX(paysum) > (
+                     SELECT AVG(paysum)
+                     FROM paysumma
+                     );
 --                    ↑ независимый подзапрос (одно число)
 
 
 ---3
 SELECT serviceid, total
-FROM (SELECT serviceid, SUM(paysum) AS total
-      FROM paysumma
-      GROUP BY serviceid) AS subquery -- ↑ независимый подзапрос
+FROM (
+     SELECT serviceid, SUM(paysum) AS total
+     FROM paysumma
+     GROUP BY serviceid
+     ) AS subquery -- ↑ независимый подзапрос
 WHERE total > 10000;
 
 /*
@@ -9505,9 +10077,10 @@ WHERE fio LIKE '%';
 ----ИЛИ ТАК:
 
 SELECT CASE
-           WHEN phone IS NULL THEN fio || ' - абонент, нет телефона'
+           WHEN phone IS NULL
+               THEN fio || ' - абонент, нет телефона'
            ELSE fio || ' - абонент, телефон: ' || phone
-           END AS "ФИО, кто, телефон"
+       END AS "ФИО, кто, телефон"
 FROM abonent
 WHERE fio LIKE '%'
 UNION
@@ -9707,13 +10280,15 @@ SELECT accountid,
        serviceid
 FROM paysumma
          JOIN abonent USING (accountid)
-WHERE accountid IN (SELECT accountid
-                    FROM abonent
-                    WHERE fio LIKE 'М%'
-                    UNION
-                    SELECT accountid
-                    FROM request
-                    WHERE failureid = 1)
+WHERE accountid IN (
+                   SELECT accountid
+                   FROM abonent
+                   WHERE fio LIKE 'М%'
+                   UNION
+                   SELECT accountid
+                   FROM request
+                   WHERE failureid = 1
+                   )
   AND serviceid = 1
 ORDER BY CASE WHEN fio LIKE 'М%' THEN fio ELSE accountid END DESC;
 
@@ -9755,8 +10330,10 @@ UNION двух запросов, запрашиваются все данные 
 Nachislsum > 2300 и со значениями Nachislsum < 650:
 */
 
-WITH nach AS (SELECT *
-              FROM nachislsumma)
+WITH nach AS (
+             SELECT *
+             FROM nachislsumma
+             )
 SELECT *
 FROM nach
 WHERE nachislsum > 2300
@@ -9777,16 +10354,20 @@ ORDER BY 4;
 оператора UNION ALL выводится требуемая итоговая строка:
 */
 
-WITH serv AS (SELECT accountid, serviceid, SUM(paysum) AS s
-              FROM paysumma
-              GROUP BY accountid, serviceid),
+WITH serv AS (
+             SELECT accountid, serviceid, SUM(paysum) AS s
+             FROM paysumma
+             GROUP BY accountid, serviceid
+             ),
 
-     totals AS (SELECT SUM(CASE WHEN serviceid = 1 THEN paysum ELSE 0 END) AS газ,
-                       SUM(CASE WHEN serviceid = 2 THEN paysum ELSE 0 END) AS электр,
-                       SUM(CASE WHEN serviceid = 3 THEN paysum ELSE 0 END) AS тепло,
-                       SUM(CASE WHEN serviceid = 4 THEN paysum ELSE 0 END) AS вода,
-                       SUM(paysum)                                         AS всего
-                FROM paysumma)
+     totals AS (
+             SELECT SUM(CASE WHEN serviceid = 1 THEN paysum ELSE 0 END) AS газ,
+                    SUM(CASE WHEN serviceid = 2 THEN paysum ELSE 0 END) AS электр,
+                    SUM(CASE WHEN serviceid = 3 THEN paysum ELSE 0 END) AS тепло,
+                    SUM(CASE WHEN serviceid = 4 THEN paysum ELSE 0 END) AS вода,
+                    SUM(paysum)                                         AS всего
+             FROM paysumma
+             )
 
 SELECT a.accountid,
        a.fio,
@@ -9795,7 +10376,7 @@ SELECT a.accountid,
        COALESCE(s3.s, 0)                                                             AS "Тепло",
        COALESCE(s4.s, 0)                                                             AS "Вода",
        COALESCE(s1.s, 0) + COALESCE(s2.s, 0) + COALESCE(s3.s, 0) + COALESCE(s4.s, 0) AS "ВСЕГО"
-FROM abonent a
+FROM abonent            a
          LEFT JOIN serv s1 ON a.accountid = s1.accountid AND s1.serviceid = 1
          LEFT JOIN serv s2 ON a.accountid = s2.accountid AND s2.serviceid = 2
          LEFT JOIN serv s3 ON a.accountid = s3.accountid AND s3.serviceid = 3
@@ -9818,15 +10399,22 @@ ORDER BY 1;
 */
 
 
-WITH number AS (SELECT GENERATE_SERIES(3, 1000, 2) AS nm),
+WITH number AS (
+               SELECT GENERATE_SERIES(3, 1000, 2) AS nm
+               ),
 
-     primer AS (SELECT nm
-                FROM number
-                WHERE NOT EXISTS (SELECT 1
-                                  FROM number n
-                                  WHERE n.nm > 2
-                                    AND n.nm < number.nm
-                                    AND number.nm % n.nm = 0))
+     primer AS (
+               SELECT nm
+               FROM number
+               WHERE NOT EXISTS
+                     (
+                     SELECT 1
+                     FROM number n
+                     WHERE n.nm > 2
+                       AND n.nm < number.nm
+                       AND number.nm % n.nm = 0
+                     )
+               )
 
 SELECT 2 AS простые_числа_от_2_до_1000
 UNION ALL
@@ -9843,14 +10431,14 @@ INNER JOIN
 */
 
 SELECT e.fio, r.requestid
-FROM executor e
+FROM executor              e
          LEFT JOIN request r USING (executorid)
 WHERE r.executorid IS NULL
 
 UNION ALL
 
 SELECT e.fio, r.requestid
-FROM executor e
+FROM executor               e
          RIGHT JOIN request r USING (executorid)
 WHERE e.executorid IS NULL;
 
@@ -9938,19 +10526,23 @@ INTERSECT [ALL]
 следующим образом:
 */
 
-(SELECT accountid, 'Абонент' AS "Кто"
- FROM abonent
- EXCEPT
- SELECT accountid, 'Абонент'
- FROM request
- WHERE executed = FALSE)
+(
+SELECT accountid, 'Абонент' AS "Кто"
+FROM abonent
+EXCEPT
+SELECT accountid, 'Абонент'
+FROM request
+WHERE executed = FALSE
+)
 UNION
-(SELECT executorid::TEXT, 'Слесарь'
- FROM executor
- EXCEPT
- SELECT executorid::TEXT, 'Слесарь'
- FROM request
- WHERE executed = TRUE)
+(
+SELECT executorid::TEXT, 'Слесарь'
+FROM executor
+EXCEPT
+SELECT executorid::TEXT, 'Слесарь'
+FROM request
+WHERE executed = TRUE
+)
 ORDER BY 1;
 
 /*
@@ -10066,23 +10658,24 @@ S — это имя временной таблицы (CTE), которую вы
 
 */
 
-WITH RECURSIVE S(K) AS (SELECT 1 AS K
-                        -- не рекурсивная часть, создаётся временная таблица S с одной строкой:
+WITH RECURSIVE S(K) AS (
+                       SELECT 1 AS K
+                       -- не рекурсивная часть, создаётся временная таблица S с одной строкой:
 -- Это начальная точка рекурсии.
-                        UNION
-                        ---В запросе используется UNION (не UNION ALL).
+                       UNION
+                       ---В запросе используется UNION (не UNION ALL).
 -- Это означает, что дубликаты автоматически удаляются.
 -- В данном случае дубликатов нет, но если бы были, UNION их убрал бы,
 -- а UNION ALL оставил.
-                        SELECT K + 1
-                        FROM S
-                        WHERE K < 10
+                       SELECT K + 1
+                       FROM S
+                       WHERE K < 10
 -- рекурсивная часть
 -- Берём текущие строки из S (пока только K=1) и для каждой,
 -- где K < 10, добавляем K+1.
 -- огда K=10, рекурсивная часть проверяет условие WHERE K < 10:
 -- 10 < 10 ? → FALSE Ничего не добавляется. Рекурсия заканчивается
-)
+                       )
 SELECT SUM(K) AS "Сумма"
 FROM S;
 -- основная часть
@@ -10111,33 +10704,37 @@ Head_account принимает значение NULL.
 */
 
 WITH RECURSIVE
-    Year_abon_pay (Payyear, Accountid, Total_sum) AS (SELECT Payyear, Accountid, SUM(Paysum) AS Total_sum
-                                                      FROM Paysumma
-                                                      GROUP BY Payyear, Accountid),
-    Abonent_Tree (Accountid, Head_account, Fio, Indent, Path) AS (SELECT Accountid,
-                                                                         Head_account,
-                                                                         Fio,
-                                                                         ''                AS Indent,
-                                                                         CAST(Fio AS TEXT) AS Path
-                                                                  FROM Abonent
-                                                                  WHERE Head_account IS NULL
-                                                                  UNION ALL
-                                                                  SELECT A.Accountid,
-                                                                         A.Head_account,
-                                                                         A.Fio,
-                                                                         ' + ' AS Indent,
-                                                                         Tr.Path || ', ' || A.Fio
-                                                                  FROM Abonent A
-                                                                           JOIN Abonent_Tree Tr ON A.Head_account = Tr.Accountid)
+    Year_abon_pay (Payyear, Accountid, Total_sum) AS (
+                                                     SELECT Payyear, Accountid, SUM(Paysum) AS Total_sum
+                                                     FROM Paysumma
+                                                     GROUP BY Payyear, Accountid
+                                                     ),
+    Abonent_Tree (Accountid, Head_account, Fio, Indent, Path) AS (
+                                                     SELECT Accountid,
+                                                            Head_account,
+                                                            Fio,
+                                                            ''                AS Indent,
+                                                            CAST(Fio AS TEXT) AS Path
+                                                     FROM Abonent
+                                                     WHERE Head_account IS NULL
+                                                     UNION ALL
+                                                     SELECT A.Accountid,
+                                                            A.Head_account,
+                                                            A.Fio,
+                                                            ' + ' AS Indent,
+                                                            Tr.Path || ', ' || A.Fio
+                                                     FROM Abonent               A
+                                                              JOIN Abonent_Tree Tr ON A.Head_account = Tr.Accountid
+                                                     )
 SELECT B.Accountid,
        B.Indent || B.Fio   AS Fio,
        Year_2024.Total_Sum AS "Total_2024",
        Year_2025.Total_Sum AS "Total_2025"
-FROM Abonent_Tree B
+FROM Abonent_Tree                B
          LEFT JOIN Year_abon_pay Year_2024
-                   ON B.Accountid = Year_2024.Accountid AND Year_2024.Payyear = 2024
+         ON B.Accountid = Year_2024.Accountid AND Year_2024.Payyear = 2024
          LEFT JOIN Year_abon_pay Year_2025
-                   ON B.Accountid = Year_2025.Accountid AND Year_2025.Payyear = 2025
+         ON B.Accountid = Year_2025.Accountid AND Year_2025.Payyear = 2025
 ORDER BY Path;
 
 /*
@@ -10216,23 +10813,25 @@ UNION ALL.
 */
 
 
-WITH RECURSIVE Abonent_tree (Accountid, Head_account, Fio, Indent, Tier, Path) AS (SELECT Accountid,
-                                                                                          Head_account,
-                                                                                          Fio,
-                                                                                          ''                AS Indent,
-                                                                                          0                 AS Tier,
-                                                                                          CAST(Fio AS TEXT) AS Path
-                                                                                   FROM Abonent
-                                                                                   WHERE Head_account IS NULL
-                                                                                   UNION ALL
-                                                                                   SELECT A.Accountid,
-                                                                                          A.Head_account,
-                                                                                          A.Fio,
-                                                                                          REPEAT('+', Tr.Tier + 1),
-                                                                                          Tr.Tier + 1,
-                                                                                          Tr.Path || ' ' || A.Fio
-                                                                                   FROM Abonent A
-                                                                                            JOIN Abonent_Tree Tr ON A.Head_account = Tr.Accountid)
+WITH RECURSIVE Abonent_tree (Accountid, Head_account, Fio, Indent, Tier, Path) AS (
+                                                                                  SELECT Accountid,
+                                                                                         Head_account,
+                                                                                         Fio,
+                                                                                         ''                AS Indent,
+                                                                                         0                 AS Tier,
+                                                                                         CAST(Fio AS TEXT) AS Path
+                                                                                  FROM Abonent
+                                                                                  WHERE Head_account IS NULL
+                                                                                  UNION ALL
+                                                                                  SELECT A.Accountid,
+                                                                                         A.Head_account,
+                                                                                         A.Fio,
+                                                                                         REPEAT('+', Tr.Tier + 1),
+                                                                                         Tr.Tier + 1,
+                                                                                         Tr.Path || ' ' || A.Fio
+                                                                                  FROM Abonent               A
+                                                                                           JOIN Abonent_Tree Tr ON A.Head_account = Tr.Accountid
+                                                                                  )
 SELECT B.Indent || B.Fio AS Fio, Tier, Path
 FROM Abonent_tree B
 ORDER BY Path;
@@ -10254,18 +10853,20 @@ ORDER BY Path;
 отличить абонентов по одному ФИО.
 */
 
-WITH RECURSIVE Abonent_tree (Accountid, Head_account, Fio, Indent) AS (SELECT Accountid, Head_account, Fio, '' AS Indent
-                                                                       FROM Abonent
-                                                                       WHERE Head_account IS NULL
+WITH RECURSIVE Abonent_tree (Accountid, Head_account, Fio, Indent) AS (
+                                                                      SELECT Accountid, Head_account, Fio, '' AS Indent
+                                                                      FROM Abonent
+                                                                      WHERE Head_account IS NULL
 
-                                                                       UNION ALL
+                                                                      UNION ALL
 
-                                                                       SELECT A.Accountid,
-                                                                              A.Head_account,
-                                                                              A.Fio,
-                                                                              REPEAT(' + ', ARRAY_LENGTH(Orderval, 1)) AS Indent
-                                                                       FROM Abonent A
-                                                                                JOIN Abonent_tree Tr ON A.Head_account = Tr.Accountid) SEARCH DEPTH FIRST BY Accountid SET Orderval
+                                                                      SELECT A.Accountid,
+                                                                             A.Head_account,
+                                                                             A.Fio,
+                                                                             REPEAT(' + ', ARRAY_LENGTH(Orderval, 1)) AS Indent
+                                                                      FROM Abonent               A
+                                                                               JOIN Abonent_tree Tr ON A.Head_account = Tr.Accountid
+                                                                      ) SEARCH DEPTH FIRST BY Accountid SET Orderval
 
 
 SELECT B.Indent || B.Fio         AS Fio,
@@ -10298,11 +10899,15 @@ ARRAY_LENGTH позволяет получить длину массива.
 */
 
 
-WITH "Улица" AS (SELECT *
-                 FROM street
-                 WHERE streetnm = :ul),
-     "Абоненты" AS (SELECT *
-                    FROM abonent)
+WITH "Улица" AS (
+                SELECT *
+                FROM street
+                WHERE streetnm = :ul
+                ),
+     "Абоненты" AS (
+                SELECT *
+                FROM abonent
+                )
 
 SELECT accountid, fio, streetnm, "Улица".streetid
 FROM "Улица",
@@ -10314,11 +10919,13 @@ WHERE "Улица".streetid = "Абоненты".streetid;
 платежей:
   */
 
-WITH total_payments AS (SELECT Accountid, SUM(Paysum) AS Total_sum
-                        FROM Paysumma
-                        GROUP BY Accountid)
+WITH total_payments AS (
+                       SELECT Accountid, SUM(Paysum) AS Total_sum
+                       FROM Paysumma
+                       GROUP BY Accountid
+                       )
 SELECT A.Accountid, A.Fio, T.Total_sum
-FROM Abonent A
+FROM Abonent                 A
          JOIN total_payments T USING (Accountid);
 
 /*
@@ -10327,15 +10934,19 @@ FROM Abonent A
 */
 
 WITH RECURSIVE
-    Subordinates AS (SELECT A.AccountId, A.Fio, COUNT(R.RequestId) AS RequestCount
-                     FROM Abonent A
-                              LEFT JOIN Request R USING (AccountId)
-                     GROUP BY A.AccountId),
-    Hierarchy AS (SELECT S1.AccountId AS Supervisoraccountid,
-                         S1.Fio       AS Supervisorfio,
-                         S2.Fio       AS Subordinatefio
-                  FROM Subordinates S1
-                           LEFT JOIN Subordinates S2 ON S2.RequestCount < S1.RequestCount)
+    Subordinates AS (
+                    SELECT A.AccountId, A.Fio, COUNT(R.RequestId) AS RequestCount
+                    FROM Abonent               A
+                             LEFT JOIN Request R USING (AccountId)
+                    GROUP BY A.AccountId
+                    ),
+    Hierarchy AS (
+                    SELECT S1.AccountId AS Supervisoraccountid,
+                           S1.Fio       AS Supervisorfio,
+                           S2.Fio       AS Subordinatefio
+                    FROM Subordinates               S1
+                             LEFT JOIN Subordinates S2 ON S2.RequestCount < S1.RequestCount
+                    )
 SELECT Supervisorfio,
        ARRAY_AGG(Subordinatefio ORDER BY Subordinatefio) AS Subordinates
 FROM Hierarchy
@@ -10580,8 +11191,10 @@ ORDER BY Serviceid;
 
 SELECT accountid,
        SUM(nachislsum),
-       ROUND((SUM(nachislsum) / (SELECT SUM(nachislsum)
-                                 FROM nachislsumma)), 3) AS "Percent_Summa"
+       ROUND((SUM(nachislsum) / (
+                                SELECT SUM(nachislsum)
+                                FROM nachislsumma
+                                )), 3) AS "Percent_Summa"
 FROM nachislsumma
 GROUP BY accountid
 ORDER BY accountid;
@@ -10697,7 +11310,7 @@ SELECT a.accountid,
        SUM(n.nachislsum),
        SUM(SUM(n.nachislsum)) OVER (PARTITION BY a.streetid)                               AS bbb,
        ROUND(SUM(n.nachislsum) / SUM(SUM(n.nachislsum)) OVER (PARTITION BY a.streetid), 3) AS "Percent_Summa"
-FROM abonent a
+FROM abonent                     a
          INNER JOIN nachislsumma n USING (accountid)
 GROUP BY a.accountid, a.streetid
 ORDER BY a.streetid, a.accountid;
@@ -10746,14 +11359,18 @@ SELECT t1."НЛС",
        "Заявок",
        "Всего заявок",
        ROUND("Заявок" * 100.0 / "Всего заявок", 2) AS " %"
-FROM (SELECT accountid        AS "НЛС",
-             failureid        AS "Неисправность",
-             COUNT(failureid) AS "Заявок"
-      FROM request
-      GROUP BY accountid, failureid) t1
-         JOIN (SELECT accountid, COUNT(requestid) AS "Всего заявок"
-               FROM request
-               GROUP BY accountid) t2 ON t1."НЛС" = t2.accountid
+FROM (
+     SELECT accountid        AS "НЛС",
+            failureid        AS "Неисправность",
+            COUNT(failureid) AS "Заявок"
+     FROM request
+     GROUP BY accountid, failureid
+     )          t1
+         JOIN (
+              SELECT accountid, COUNT(requestid) AS "Всего заявок"
+              FROM request
+              GROUP BY accountid
+              ) t2 ON t1."НЛС" = t2.accountid
 ORDER BY "НЛС", "Неисправность";
 
 /*
@@ -10772,9 +11389,11 @@ SELECT accountid                                                                
        "Заявок",
        SUM("Заявок") OVER (PARTITION BY accountid)                              AS "Всего заявок",
        ROUND("Заявок" * 100.0 / SUM("Заявок") OVER (PARTITION BY accountid), 2) AS " %"
-FROM (SELECT accountid, failureid, COUNT(requestid) AS "Заявок"
-      FROM request
-      GROUP BY accountid, failureid) t
+FROM (
+     SELECT accountid, failureid, COUNT(requestid) AS "Заявок"
+     FROM request
+     GROUP BY accountid, failureid
+     ) t
 ORDER BY "НЛС", "Неисправность";
 
 /*
@@ -10799,9 +11418,11 @@ SELECT DISTINCT serviceid                            AS "Услуга",
                 total                                AS "Сумма начислений",
                 ROUND(AVG(total) OVER (), 2)         AS "Среднее по всем",
                 total > ROUND(AVG(total) OVER (), 2) AS "Сравнение"
-FROM (SELECT serviceid,
-             SUM(nachislsum) OVER (PARTITION BY serviceid) AS total
-      FROM nachislsumma) t
+FROM (
+     SELECT serviceid,
+            SUM(nachislsum) OVER (PARTITION BY serviceid) AS total
+     FROM nachislsumma
+     ) t
 ORDER BY 1;
 
 /*
@@ -11013,13 +11634,15 @@ ORDER BY "Месяц", accountid;
 */
 
 SELECT serviceid, MIN(paydate)
-FROM (SELECT serviceid,
-             SUM(paysum) OVER (PARTITION BY serviceid
-                 ORDER BY paydate
-                 ROWS BETWEEN UNBOUNDED PRECEDING
-                     AND CURRENT ROW) AS itog,
-             paydate
-      FROM paysumma) t
+FROM (
+     SELECT serviceid,
+            SUM(paysum) OVER (PARTITION BY serviceid
+                ORDER BY paydate
+                ROWS BETWEEN UNBOUNDED PRECEDING
+                    AND CURRENT ROW) AS itog,
+            paydate
+     FROM paysumma
+     ) t
 WHERE itog >= :Par
 GROUP BY serviceid;
 
@@ -11068,23 +11691,23 @@ FROM paysumma;
 
 SELECT paydate,
        paysum,
-       LAG(paysum, 4) OVER (ORDER BY paydate)                                                              AS pay_4_before,
-       LAG(paysum, 3) OVER (ORDER BY paydate)                                                              AS pay_3_before,
-       LAG(paysum, 2) OVER (ORDER BY paydate)                                                              AS pay_2_before,
-       LAG(paysum, 1) OVER (ORDER BY paydate)                                                              AS pay_1_before,
-       paysum                                                                                              AS pay_current,
+       LAG(paysum, 4) OVER (ORDER BY paydate)                                                 AS pay_4_before,
+       LAG(paysum, 3) OVER (ORDER BY paydate)                                                 AS pay_3_before,
+       LAG(paysum, 2) OVER (ORDER BY paydate)                                                 AS pay_2_before,
+       LAG(paysum, 1) OVER (ORDER BY paydate)                                                 AS pay_1_before,
+       paysum                                                                                 AS pay_current,
        -- Количество строк в окне
        COUNT(paysum)
-       OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)                                    AS window_rows,
+       OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)                       AS window_rows,
        -- Сумма в окне (для проверки)
        SUM(paysum)
-       OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)                                    AS window_sum,
+       OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)                       AS window_sum,
        -- Ручной расчёт среднего
        ROUND(SUM(paysum) OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) * 1.0 /
              NULLIF(COUNT(paysum) OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW), 0),
-             2)                                                                                            AS avg_manual,
+             2)                                                                               AS avg_manual,
        -- Оконное среднее
-       ROUND(AVG(paysum) OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW), 2)              AS avg_paysm
+       ROUND(AVG(paysum) OVER (ORDER BY paydate ROWS BETWEEN 4 PRECEDING AND CURRENT ROW), 2) AS avg_paysm
 FROM paysumma
 ORDER BY paydate;
 
@@ -11201,12 +11824,14 @@ GROUP BY n.accountid;
 так:
 */
 SELECT *
-FROM (SELECT ROW_NUMBER() OVER (ORDER BY SUM(n.nachislsum))           AS num,
-             n.accountid,
-             SUM(n.nachislsum)                                        AS "Sum",
-             SUM(SUM(n.nachislsum)) OVER (ORDER BY SUM(n.nachislsum)) AS "Cumul_Sum"
-      FROM nachislsumma n
-      GROUP BY n.accountid) a
+FROM (
+     SELECT ROW_NUMBER() OVER (ORDER BY SUM(n.nachislsum))           AS num,
+            n.accountid,
+            SUM(n.nachislsum)                                        AS "Sum",
+            SUM(SUM(n.nachislsum)) OVER (ORDER BY SUM(n.nachislsum)) AS "Cumul_Sum"
+     FROM nachislsumma n
+     GROUP BY n.accountid
+     ) a
 WHERE a.num = 10
    OR (a.num > 5 AND a.num < 9);
 
@@ -11215,10 +11840,12 @@ WHERE a.num = 10
 и число таких повторений можно отобрать таким запросом:
 */
 
-WITH p AS (SELECT *,
-                  ROW_NUMBER()
-                  OVER (PARTITION BY paysum ORDER BY paysum) AS r
-           FROM paysumma)
+WITH p AS (
+          SELECT *,
+                 ROW_NUMBER()
+                 OVER (PARTITION BY paysum ORDER BY paysum) AS r
+          FROM paysumma
+          )
 SELECT *
 FROM p
 WHERE r > 1;
@@ -11249,12 +11876,16 @@ SELECT tem.accountid,
        tem.fio,
        "Заявок",
        RANK() OVER (ORDER BY "Заявок" DESC) AS "Ранг"
-FROM (SELECT a.accountid,
-             a.fio,
-             (SELECT COUNT(1)
-              FROM request r
-              WHERE r.accountid = a.accountid) AS "Заявок"
-      FROM abonent a) tem;
+FROM (
+     SELECT a.accountid,
+            a.fio,
+            (
+            SELECT COUNT(1)
+            FROM request r
+            WHERE r.accountid = a.accountid
+            ) AS "Заявок"
+     FROM abonent a
+     ) tem;
 
 /*
 Обе конструкции возвращают одинаковый результат
@@ -11299,7 +11930,7 @@ SELECT a.accountid,
        a.fio,
        COUNT(r.requestid)                             AS "Заявок",
        RANK() OVER (ORDER BY COUNT(r.requestid) DESC) AS "Ранг"
-FROM abonent a
+FROM abonent               a
          LEFT JOIN request r ON a.accountid = r.accountid
 GROUP BY a.accountid, a.fio
 ORDER BY "Ранг";
@@ -11309,12 +11940,12 @@ SELECT a.accountid,
        a.fio,
        rc.cnt                             AS "Заявок",
        RANK() OVER (ORDER BY rc.cnt DESC) AS "Ранг"
-FROM abonent a
+FROM abonent             a
          LEFT JOIN LATERAL (
-    SELECT COUNT(1) AS cnt
-    FROM request r
-    WHERE r.accountid = a.accountid
-    ) rc ON TRUE
+                       SELECT COUNT(1) AS cnt
+                       FROM request r
+                       WHERE r.accountid = a.accountid
+                       ) rc ON TRUE
 
 /*
  (SELECT COUNT(1)
@@ -11594,7 +12225,7 @@ CORR(числовое_выражение1, числовое_выражение2)
  */
 
 SELECT CORR(nachislsum, paysum) AS "Корреляция"
-FROM nachislsumma n
+FROM nachislsumma      n
          JOIN paysumma p USING (accountid, serviceid)
 WHERE nachislmonth = paymonth
   AND nachislyear = payyear;
@@ -11607,7 +12238,7 @@ WHERE nachislmonth = paymonth
 SELECT CORR(nachislsum, paysum) AS "Корреляция",
        sum(nachislsum),
        sum(paysum)
-FROM nachislsumma n
+FROM nachislsumma      n
          JOIN paysumma p USING (accountid, serviceid)
 WHERE nachislmonth = paymonth
   AND nachislyear = payyear;
@@ -11617,7 +12248,7 @@ WHERE nachislmonth = paymonth
 SELECT DISTINCT serviceid,
                 CORR(nachislsum, paysum)
                 OVER (PARTITION BY serviceid) AS "Корреляция"
-FROM nachislsumma n
+FROM nachislsumma      n
          JOIN paysumma p USING (accountid, serviceid)
 WHERE nachislmonth = paymonth
   AND nachislyear = payyear
@@ -11643,7 +12274,9 @@ CUME_DIST(выражение1, ..., выражениеN) WITHIN GROUP (ORDER BY
 */
 
 SELECT x, CUME_DIST() OVER w
-FROM (SELECT GENERATE_SERIES(1, 5) AS x) t
+FROM (
+     SELECT GENERATE_SERIES(1, 5) AS x
+     ) t
 WINDOW w AS (ORDER BY x);
 
 /*
@@ -11676,41 +12309,63 @@ CUME_DIST() OVER W: вычисляет функцию кумулятивного
 */
 
 
-WITH servicerevenue AS (SELECT s.serviceid,
-                               s.servicenm                                    AS "Название услуги",
-                               SUM(p.paysum)                                  AS "Выручка",
-                               CUME_DIST() OVER (ORDER BY SUM(p.paysum) DESC) AS "CumeDist",
-                               SUM(SUM(p.paysum)) OVER (ORDER BY SUM(p.paysum) DESC) /
-                               SUM(SUM(p.paysum)) OVER ()                     AS "CumulativeRevenueShare"
-                        FROM paysumma p
-                                 JOIN services s ON p.serviceid = s.serviceid
-                        GROUP BY s.serviceid, s.servicenm),
-     paretoanalysis AS (SELECT serviceid,
-                               "Название услуги",
-                               "Выручка",
-                               "CumeDist",
-                               "CumulativeRevenueShare",
-                               CASE WHEN "CumeDist" <= 0.25 THEN 1 ELSE 0 END AS "Top20Percent"
-                        FROM servicerevenue)
-SELECT (SELECT SUM("Выручка") FROM paretoanalysis WHERE "Top20Percent" = 1) AS "Выручка топ 25%",
-       (SELECT SUM("Выручка") FROM paretoanalysis)                          AS "Общая выручка",
-       ROUND((SELECT SUM("Выручка") FROM paretoanalysis WHERE "Top20Percent" = 1) /
-             (SELECT SUM("Выручка") FROM paretoanalysis) * 100, 2)          AS "Доля выручки топ 25% (%)",
-       (SELECT STRING_AGG("Название услуги", ', ' ORDER BY "Выручка" DESC)
-        FROM paretoanalysis
-        WHERE "Top20Percent" = 1)                                           AS "Топ услуги"
+WITH servicerevenue AS (
+                       SELECT s.serviceid,
+                              s.servicenm                                    AS "Название услуги",
+                              SUM(p.paysum)                                  AS "Выручка",
+                              CUME_DIST() OVER (ORDER BY SUM(p.paysum) DESC) AS "CumeDist",
+                              SUM(SUM(p.paysum)) OVER (ORDER BY SUM(p.paysum) DESC) /
+                              SUM(SUM(p.paysum)) OVER ()                     AS "CumulativeRevenueShare"
+                       FROM paysumma          p
+                                JOIN services s ON p.serviceid = s.serviceid
+                       GROUP BY s.serviceid, s.servicenm
+                       ),
+     paretoanalysis AS (
+                       SELECT serviceid,
+                              "Название услуги",
+                              "Выручка",
+                              "CumeDist",
+                              "CumulativeRevenueShare",
+                              CASE WHEN "CumeDist" <= 0.25 THEN 1 ELSE 0 END AS "Top20Percent"
+                       FROM servicerevenue
+                       )
+SELECT (
+       SELECT SUM("Выручка")
+       FROM paretoanalysis
+       WHERE "Top20Percent" = 1
+       )                 AS "Выручка топ 25%",
+       (
+       SELECT SUM("Выручка")
+       FROM paretoanalysis
+       )                 AS "Общая выручка",
+       ROUND((
+             SELECT SUM("Выручка")
+             FROM paretoanalysis
+             WHERE "Top20Percent" = 1
+             ) /
+             (
+             SELECT SUM("Выручка")
+             FROM paretoanalysis
+             ) * 100, 2) AS "Доля выручки топ 25% (%)",
+       (
+       SELECT STRING_AGG("Название услуги", ', ' ORDER BY "Выручка" DESC)
+       FROM paretoanalysis
+       WHERE "Top20Percent" = 1
+       )                 AS "Топ услуги"
 FROM paretoanalysis
 WHERE "Top20Percent" = 1
 GROUP BY "Top20Percent"
 LIMIT 1;
 
 
-WITH servicerevenue AS (SELECT s.servicenm                                            AS "Название услуги",
-                               SUM(p.paysum)                                          AS "Выручка",
-                               CUME_DIST() OVER (ORDER BY SUM(p.paysum) DESC) <= 0.25 AS is_top25
-                        FROM paysumma p
-                                 JOIN services s ON p.serviceid = s.serviceid
-                        GROUP BY s.servicenm)
+WITH servicerevenue AS (
+                       SELECT s.servicenm                                            AS "Название услуги",
+                              SUM(p.paysum)                                          AS "Выручка",
+                              CUME_DIST() OVER (ORDER BY SUM(p.paysum) DESC) <= 0.25 AS is_top25
+                       FROM paysumma          p
+                                JOIN services s ON p.serviceid = s.serviceid
+                       GROUP BY s.servicenm
+                       )
 
 SELECT SUM("Выручка") FILTER (WHERE is_top25)                                              AS "Выручка топ 25%",
        SUM("Выручка")                                                                      AS "Общая выручка",
@@ -11748,15 +12403,19 @@ FROM servicerevenue;
 и риск (если с этой услугой будут проблемы, потеряете >50% дохода).
 */
 
-WITH service_revenue AS (SELECT Serviceid, SUM(Paysum) AS total_revenue
-                         FROM Paysumma
-                         GROUP BY Serviceid),
-     ranked AS (SELECT Serviceid,
-                       total_revenue,
-                       SUM(total_revenue) OVER (ORDER BY total_revenue DESC) AS running_total,
-                       SUM(total_revenue) OVER ()                            AS grand_total,
-                       CUME_DIST() OVER (ORDER BY total_revenue DESC)        AS cume_dist
-                FROM service_revenue)
+WITH service_revenue AS (
+                        SELECT Serviceid, SUM(Paysum) AS total_revenue
+                        FROM Paysumma
+                        GROUP BY Serviceid
+                        ),
+     ranked AS (
+                        SELECT Serviceid,
+                               total_revenue,
+                               SUM(total_revenue) OVER (ORDER BY total_revenue DESC) AS running_total,
+                               SUM(total_revenue) OVER ()                            AS grand_total,
+                               CUME_DIST() OVER (ORDER BY total_revenue DESC)        AS cume_dist
+                        FROM service_revenue
+                        )
 SELECT Serviceid,
        total_revenue,
        ROUND(cume_dist::numeric * 100, 2)                     AS cume_percent,
@@ -11801,10 +12460,14 @@ VAR_SAMP(выражение) — выборочная дисперсия наб�
 Шаг 1. Определение первой и последней дат отчётного периода:
 */
 
-WITH first_date AS (SELECT DATE_TRUNC('MONTH', MIN(incomingdate)) AS first_day
-                    FROM request),
-     last_date AS (SELECT COALESCE(MAX(executiondate), CURRENT_DATE) AS last_day
-                   FROM request);
+WITH first_date AS (
+                   SELECT DATE_TRUNC('MONTH', MIN(incomingdate)) AS first_day
+                   FROM request
+                   ),
+     last_date AS (
+                   SELECT COALESCE(MAX(executiondate), CURRENT_DATE) AS last_day
+                   FROM request
+                   );
 /*
 Здесь создаются временные таблицы First_date и Last_date, в которых
 определяется первая и последняя даты учёта заявок соответственно.
@@ -11921,33 +12584,49 @@ ORDER BY M.Month;
 Полный текст запроса:
 */
 
-WITH First_date AS (SELECT DATE_TRUNC('MONTH', MIN(Incomingdate)) AS First_day
-                    FROM Request),
-     Last_date AS (SELECT COALESCE(MAX(Executiondate), CURRENT_DATE) AS Last_day
-                   FROM Request),
-     Generate_dates AS (SELECT GENERATE_SERIES(
-                                       (SELECT First_day FROM First_date),
-                                       (SELECT Last_day FROM Last_date),
-                                       '1 MONTH'::INTERVAL
-                               ) AS Month),
+WITH First_date AS (
+                   SELECT DATE_TRUNC('MONTH', MIN(Incomingdate)) AS First_day
+                   FROM Request
+                   ),
+     Last_date AS (
+                   SELECT COALESCE(MAX(Executiondate), CURRENT_DATE) AS Last_day
+                   FROM Request
+                   ),
+     Generate_dates AS (
+                   SELECT GENERATE_SERIES(
+                                  (
+                                  SELECT First_day
+                                  FROM First_date
+                                  ),
+                                  (
+                                  SELECT Last_day
+                                  FROM Last_date
+                                  ),
+                                  '1 MONTH'::INTERVAL
+                          ) AS Month
+                   ),
 
-     Open_requests AS (SELECT Requestid,
-                              Accountid,
-                              DATE_TRUNC('MONTH', Incomingdate)                          AS Start_month,
-                              DATE_TRUNC('MONTH', COALESCE(Executiondate, CURRENT_DATE)) AS End_month
-                       FROM Request
-                       WHERE COALESCE(Executiondate, CURRENT_DATE) > Incomingdate + INTERVAL '1 DAY'),
-     Month_requests AS (SELECT Month, Requestid, Accountid
-                        FROM Generate_dates
-                                 JOIN Open_requests ON Month BETWEEN Start_month AND End_month
-                        WHERE (Start_month != End_month OR End_month IS NULL))
+     Open_requests AS (
+                   SELECT Requestid,
+                          Accountid,
+                          DATE_TRUNC('MONTH', Incomingdate)                          AS Start_month,
+                          DATE_TRUNC('MONTH', COALESCE(Executiondate, CURRENT_DATE)) AS End_month
+                   FROM Request
+                   WHERE COALESCE(Executiondate, CURRENT_DATE) > Incomingdate + INTERVAL '1 DAY'
+                   ),
+     Month_requests AS (
+                   SELECT Month, Requestid, Accountid
+                   FROM Generate_dates
+                            JOIN Open_requests ON Month BETWEEN Start_month AND End_month
+                   WHERE (Start_month != End_month OR End_month IS NULL)
+                   )
 
 SELECT EXTRACT(YEAR FROM M.Month)      AS "Год",
        TO_CHAR(M.Month, 'TMMonth')     AS "Месяц",
        COUNT(DISTINCT O.Accountid)     AS "Абонентов",
        ARRAY_AGG(DISTINCT O.Accountid) AS "Абоненты",
        ARRAY_AGG(DISTINCT O.Requestid) AS "Заявки"
-FROM Generate_dates M
+FROM Generate_dates               M
          LEFT JOIN Month_requests O USING (Month)
 GROUP BY M.Month
 ORDER BY M.Month;
@@ -12319,9 +12998,11 @@ Execution Time: 0.076 ms
 
 EXPLAIN ANALYZE
 SELECT Fio,
-       (SELECT COUNT(*)
-        FROM Request
-        WHERE Incomingdate >= '2024-01-01')
+       (
+       SELECT COUNT(*)
+       FROM Request
+       WHERE Incomingdate >= '2024-01-01'
+       )
 FROM Abonent;
 
 /*
@@ -12352,9 +13033,12 @@ Aggregate выполняет COUNT(*) — возвращает 5. Это зна�
 EXPLAIN ANALYZE
 SELECT Fio
 FROM Abonent A
-WHERE EXISTS (SELECT 1
-              FROM Request R
-              WHERE Accountid = A.Accountid);
+WHERE EXISTS
+      (
+      SELECT 1
+      FROM Request R
+      WHERE Accountid = A.Accountid
+      );
 
 /*
 Этот запрос выбирает абонентов, у которых хотя бы одна заявка
@@ -12406,10 +13090,12 @@ Hash Cond: ((a.accountid)::text = (r.accountid)::text)
 
 
 EXPLAIN ANALYZE
-WITH active_abonnents AS (SELECT accountid
-                          FROM request
-                          WHERE incomingdate >= '2024-01-01'
-                          GROUP BY accountid)
+WITH active_abonnents AS (
+                         SELECT accountid
+                         FROM request
+                         WHERE incomingdate >= '2024-01-01'
+                         GROUP BY accountid
+                         )
 SELECT a.fio,
        COUNT(r.*) AS total_requests
 FROM active_abonnents
@@ -12497,12 +13183,12 @@ FROM abonent;
 
 -- рекомендуемая практика
 SELECT a.fio, r.incomingdate
-FROM abonent a
+FROM abonent                a
          INNER JOIN request r USING (accountid);
 
 -- не рекомендуется
 SELECT c.fio, d.incomingdate
-FROM abonent c
+FROM abonent                c
          INNER JOIN request d USING (accountid);
 
 
@@ -12620,13 +13306,13 @@ PARTITION BY логически группирует строки, и если �
 
 -- рекомендуемая практика
 SELECT n.accountid, p.paysum, n.nachislsum
-FROM nachislsumma n
+FROM nachislsumma            n
          INNER JOIN paysumma p USING (accountid);
 
 -- не рекомендуется (предполагается, что Accountid —
 -- это индексированный столбец)
 SELECT n.accountid, p.paysum, n.nachislsum
-FROM nachislsumma n
+FROM nachislsumma            n
          INNER JOIN paysumma p ON n.nachislmonth = p.paymonth
     AND n.nachislyear = p.payyear;
 
@@ -12658,7 +13344,7 @@ WHERE Serviceid = 2
 SELECT n.accountid,
        p.paysum,
        n.nachislsum
-FROM nachislsumma n
+FROM nachislsumma            n
          INNER JOIN paysumma p USING (accountid);
 
 /*
@@ -12714,11 +13400,13 @@ DENSE_RANK() + FETCH FIRST 1 ROW WITH TIES
 ROW_NUMBER() + WHERE rn = 1
 ❌ Возвращает только одного (первого попавшегося)
 */
-WITH ranked AS (SELECT accountid,
-                       serviceid,
-                       paysum,
-                       ROW_NUMBER() OVER (PARTITION BY serviceid ORDER BY paysum DESC) AS rn
-                FROM paysumma)
+WITH ranked AS (
+               SELECT accountid,
+                      serviceid,
+                      paysum,
+                      ROW_NUMBER() OVER (PARTITION BY serviceid ORDER BY paysum DESC) AS rn
+               FROM paysumma
+               )
 
 SELECT accountid, serviceid, paysum
 FROM ranked
@@ -13127,7 +13815,7 @@ ALTER DOMAIN Telephone SET DEFAULT '111111';
 SELECT typname
 FROM pg_catalog.pg_type
          JOIN pg_catalog.pg_namespace
-              ON pg_namespace.oid = pg_type.typnamespace
+         ON pg_namespace.oid = pg_type.typnamespace
 WHERE typtype = 'd'
   AND nspname = 'Abonent';
 
@@ -13611,7 +14299,9 @@ VALUES ('138159', 'Свирина З.А.'), ('136160', 'Шмаков С.В.');
 
 CREATE TABLE Nullphone AS
 SELECT *
-FROM (VALUES ('138159', 'Свирина З.А.'), ('136160', 'Шмаков С.В.'))
+FROM (
+     VALUES ('138159', 'Свирина З.А.'), ('136160', 'Шмаков С.В.')
+     )
          AS t (Accountid, Fio);
 
 /*
@@ -14701,12 +15391,11 @@ CREATE TABLE Nachislsumma_1
 
 
 INSERT INTO Nachislsumma_1 (Nachislfactid, Nachislsum, Nachislyear, Nachislmonth, Accountid, Serviceid)
-VALUES
-    (1,  1500.00, 2024, 1, '000001', 1),
-    (2,  2300.50, 2024, 2, '000002', 2),
-    (3,   890.25, 2024, 3, '000003', 1),
-    (4,  4560.00, 2024, 4, '000001', 3),
-    (5,  1200.00, 2024, 5, '000004', 2);
+VALUES (1, 1500.00, 2024, 1, '000001', 1),
+       (2, 2300.50, 2024, 2, '000002', 2),
+       (3, 890.25, 2024, 3, '000003', 1),
+       (4, 4560.00, 2024, 4, '000001', 3),
+       (5, 1200.00, 2024, 5, '000004', 2);
 
 
 /*
@@ -15144,18 +15833,26 @@ ALTER TABLE Paysumma
 ALTER TABLE Paysumma
     ADD Paydayweek TEXT GENERATED ALWAYS AS
         (CASE
-             WHEN Paydate IS NULL THEN 'Nodate'
+             WHEN Paydate IS NULL
+                 THEN 'Nodate'
              ELSE
                  CASE EXTRACT(DOW FROM Paydate)
-                     WHEN 0 THEN 'Воскресенье'
-                     WHEN 1 THEN 'Понедельник'
-                     WHEN 2 THEN 'Вторник'
-                     WHEN 3 THEN 'Среда'
-                     WHEN 4 THEN 'Четверг'
-                     WHEN 5 THEN 'Пятница'
-                     WHEN 6 THEN 'Суббота'
-                     END
-            END) STORED;
+                     WHEN 0
+                         THEN 'Воскресенье'
+                     WHEN 1
+                         THEN 'Понедельник'
+                     WHEN 2
+                         THEN 'Вторник'
+                     WHEN 3
+                         THEN 'Среда'
+                     WHEN 4
+                         THEN 'Четверг'
+                     WHEN 5
+                         THEN 'Пятница'
+                     WHEN 6
+                         THEN 'Суббота'
+                 END
+         END) STORED;
 
 /*
 В данном примере используются простая и с поиском операции CASE.
@@ -16948,7 +17645,7 @@ SELECT A.Accountid,
        A.Fio,
        A.Phone,
        A.Source_flag
-FROM Abonent_all A
+FROM Abonent_all              A
          LEFT JOIN Street_all S ON A.Streetid = S.Streetid;
 
 /*
@@ -17044,9 +17741,9 @@ FROM pg_foreign_server;
 
 --а список внешних таблиц — такой:
 SELECT FS.SRVNAME AS Foreign_server_name, C.RELNAME
-FROM PG_FOREIGN_TABLE FT
+FROM PG_FOREIGN_TABLE           FT
          JOIN PG_FOREIGN_SERVER FS ON FT.FTSERVER = FS.OID
-         JOIN PG_CLASS C ON FT.FTRELID = C.OID;
+         JOIN PG_CLASS          C ON FT.FTRELID = C.OID;
 
 ---Для инициализации исходной БД выполним следующие запросы:
 
@@ -17244,17 +17941,19 @@ FROM "Max_Pay";
 */
 
 CREATE VIEW request_info AS
-SELECT a.fio                       AS "Абонент",
-       d.failurenm                 AS "Неисправность",
-       e.fio                       AS "Исполнитель",
-       r.incomingdate              AS "Дата заявки",
+SELECT a.fio          AS "Абонент",
+       d.failurenm    AS "Неисправность",
+       e.fio          AS "Исполнитель",
+       r.incomingdate AS "Дата заявки",
        CASE
-           WHEN r.executed = '1' THEN 'Выполнено'
-           ELSE 'Не выполнено' END AS "Статус"
-FROM request r
-         JOIN abonent a USING (accountid)
+           WHEN r.executed = '1'
+               THEN 'Выполнено'
+           ELSE 'Не выполнено'
+       END            AS "Статус"
+FROM request            r
+         JOIN abonent   a USING (accountid)
          JOIN disrepair d USING (failureid)
-         JOIN executor e USING (executorid);
+         JOIN executor  e USING (executorid);
 
 select *
 from request_info;
@@ -17273,7 +17972,7 @@ from request_info;
 
 CREATE VIEW req_cnt AS
 SELECT COUNT(r.failureid) AS cnt, d.failureid
-FROM disrepair d
+FROM disrepair             d
          LEFT JOIN request r USING (failureid)
 GROUP BY d.failureid;
 
@@ -17284,13 +17983,19 @@ GROUP BY d.failureid;
 
 SELECT *
 FROM req_cnt
-WHERE cnt = (SELECT MAX(cnt) FROM req_cnt);
+WHERE cnt = (
+            SELECT MAX(cnt)
+            FROM req_cnt
+            );
 
 ---или реже всех:
 
 SELECT *
 FROM req_cnt
-WHERE cnt = (SELECT MIN(cnt) FROM req_cnt);
+WHERE cnt = (
+            SELECT MIN(cnt)
+            FROM req_cnt
+            );
 
 --или определённое число раз:
 
@@ -18022,7 +18727,7 @@ WHERE OBJOID = :Par::REGCCLASS;
 ---Для вывода комментариев к столбцам можно использовать такой запрос:
 
 SELECT PGD.DESCRIPTION
-FROM PG_STATIO_ALL_TABLES AS st
+FROM PG_STATIO_ALL_TABLES          AS st
          INNER JOIN PG_DESCRIPTION AS pgd ON (pgd.OBJOID = st.RELID);
 
 /*
@@ -18362,12 +19067,19 @@ DEALLOCATE Ins_days;
 
 INSERT INTO Abonent
 VALUES ('500000', 8, 1, 1, 'Плитов Е. Д.',
-        (SELECT Phone FROM Abonent WHERE Accountid = '005488'));
+        (
+        SELECT Phone
+        FROM Abonent
+        WHERE Accountid = '005488'
+        ));
 
 ---или следующим образом:
 
 INSERT INTO Request(Requestid, Accountid, Executorid, Failureid)
-VALUES ((SELECT MAX(Requestid) + 1 FROM Request), '005488', 6, 1);
+VALUES ((
+        SELECT MAX(Requestid) + 1
+        FROM Request
+        ), '005488', 6, 1);
 
 /*
 В первом запросе скалярный подзапрос используется для нахождения номера
@@ -18752,8 +19464,8 @@ CREATE TABLE Fio
 
 INSERT INTO Fio (Abonent_fio, Executor_fio)
 SELECT A.Fio, E.Fio
-FROM Request R
-         LEFT JOIN Abonent A USING (AccountId)
+FROM Request                R
+         LEFT JOIN Abonent  A USING (AccountId)
          LEFT JOIN Executor E USING (ExecutorId);
 
 select *
@@ -18772,8 +19484,8 @@ from fio;
 CREATE VIEW Abonent_executor (Abonent_name, Executor_name)
 AS
 SELECT A.Fio, E.Fio
-FROM Abonent A
-         INNER JOIN Request R USING (AccountId)
+FROM Abonent                 A
+         INNER JOIN Request  R USING (AccountId)
          INNER JOIN Executor E USING (ExecutorId);
 
 ---то предыдущий запрос можно переписать:
@@ -18798,9 +19510,12 @@ Street можно выполнить такой запрос:
 
 INSERT INTO Street (Streetid, Streetnm)
 SELECT NEXTVAL('Gen_street'), 'ЕСЕНИНА УЛИЦА'
-WHERE NOT EXISTS (SELECT 1
-                  FROM Street
-                  WHERE Streetnm = 'ЕСЕНИНА УЛИЦА');
+WHERE NOT EXISTS
+      (
+      SELECT 1
+      FROM Street
+      WHERE Streetnm = 'ЕСЕНИНА УЛИЦА'
+      );
 
 /*
 В подзапросах, используемых в запросе INSERT, можно использовать оператор
@@ -18885,11 +19600,13 @@ ALTER SEQUENCE Gen_Services RESTART WITH 5 INCREMENT BY 1;
 select *
 from Gen_Services;
 
-WITH RECURSIVE s AS (SELECT NEXTVAL('Gen_Services') AS k
-                     UNION ALL
-                     SELECT k + 1
-                     FROM s
-                     WHERE k < 10)
+WITH RECURSIVE s AS (
+                    SELECT NEXTVAL('Gen_Services') AS k
+                    UNION ALL
+                    SELECT k + 1
+                    FROM s
+                    WHERE k < 10
+                    )
 INSERT
 INTO Services (Serviceid, Servicenm)
 SELECT k, 'Наименование услуги уточнить'
@@ -18900,107 +19617,107 @@ select *
 from Services
 
 
-/*
-Обновление и удаление данных
+         /*
+         Обновление и удаление данных
 
-## Обновление данных
+         ## Обновление данных
 
-Обновление значений как отдельных строк, так и всей таблицы или
-представления БД, осуществляется запросом-действием **UPDATE**.
-                                                                              В общем виде запрос UPDATE указывает, где и что необходимо изменить,
-                                                                                                      а также критерии отбора обновляемых строк:
+         Обновление значений как отдельных строк, так и всей таблицы или
+         представления БД, осуществляется запросом-действием **UPDATE**.
+                                                                                       В общем виде запрос UPDATE указывает, где и что необходимо изменить,
+                                                                                                               а также критерии отбора обновляемых строк:
 
-UPDATE <таблица> SET <столбец> = <выражение>
-    [WHERE <список условий>];
+         UPDATE <таблица> SET <столбец> = <выражение>
+             [WHERE <список условий>];
 
-или
+         или
 
-UPDATE <таблица> SET <столбец> =
-    (SELECT <значение> FROM <откуда> WHERE <список условий>)
-    [WHERE <список условий_1>];
+         UPDATE <таблица> SET <столбец> =
+             (SELECT <значение> FROM <откуда> WHERE <список условий>)
+             [WHERE <список условий_1>];
 
-Обновление с помощью запроса UPDATE может быть позиционированным
-(выполняется только над одной строкой) и поисковым (выполняется над
-нулевым или большим количеством строк).
+         Обновление с помощью запроса UPDATE может быть позиционированным
+         (выполняется только над одной строкой) и поисковым (выполняется над
+         нулевым или большим количеством строк).
 
-Позиционированное изменение может появиться только в контексте текущей
-операции в процедурном модуле с курсором, в то время как поисковое изменение
-появляется во всех остальных случаях.
-Поисковое изменение может эмулировать (имитировать, воспроизводить)
-позиционированное изменение, если в секции WHERE задано условие,
-уникально определяющее строку (например, используемый первичный ключ таблицы).
-Запрос UPDATE может анализировать информацию из других таблиц БД, используя
-запрос SELECT (вложенный запрос).
+         Позиционированное изменение может появиться только в контексте текущей
+         операции в процедурном модуле с курсором, в то время как поисковое изменение
+         появляется во всех остальных случаях.
+         Поисковое изменение может эмулировать (имитировать, воспроизводить)
+         позиционированное изменение, если в секции WHERE задано условие,
+         уникально определяющее строку (например, используемый первичный ключ таблицы).
+         Запрос UPDATE может анализировать информацию из других таблиц БД, используя
+         запрос SELECT (вложенный запрос).
 
-В PostgreSQL обобщённый формат запроса UPDATE имеет вид:
+         В PostgreSQL обобщённый формат запроса UPDATE имеет вид:
 
-[ WITH [ RECURSIVE ] запрос_WITH [, ...] ]
-UPDATE [ ONLY ] таблица [ * ] [ [ AS ] псевдоним ]
-SET { столбец = { выражение | DEFAULT } |
-    ( столбец [, ...] ) = [ ROW ] ( { выражение | DEFAULT } [, ...] ) |
-    ( столбец [, ...] ) = ( вложенный_SELECT )
-    } [, ...]
-    [ FROM элемент_FROM [, ...] ]
-    [ WHERE условие | WHERE CURRENT OF имя_курсора ]
-    [ RETURNING { * | выражение_результата [ [ AS ] имя_результата ] } ]
+         [ WITH [ RECURSIVE ] запрос_WITH [, ...] ]
+         UPDATE [ ONLY ] таблица [ * ] [ [ AS ] псевдоним ]
+         SET { столбец = { выражение | DEFAULT } |
+             ( столбец [, ...] ) = [ ROW ] ( { выражение | DEFAULT } [, ...] ) |
+             ( столбец [, ...] ) = ( вложенный_SELECT )
+             } [, ...]
+             [ FROM элемент_FROM [, ...] ]
+             [ WHERE условие | WHERE CURRENT OF имя_курсора ]
+             [ RETURNING { * | выражение_результата [ [ AS ] имя_результата ] } ]
 
-    Запрос UPDATE содержит секцию SET, в ней указывается изменение, которое
-    нужно сделать для определённого столбца. Секция SET может включать
-    столбцы лишь из обновляемой таблицы, т.е. значение одного или нескольких
-    столбцов модифицируемой таблицы может быть заменено другим значением.
+             Запрос UPDATE содержит секцию SET, в ней указывается изменение, которое
+             нужно сделать для определённого столбца. Секция SET может включать
+             столбцы лишь из обновляемой таблицы, т.е. значение одного или нескольких
+             столбцов модифицируемой таблицы может быть заменено другим значением.
 
-    В качестве значений могут применяться контекстные переменные (например,
-    в контексте текущего соединения клиента может использоваться контекстная
-    переменная CURRENT_USER). Также можно установить для столбца NULL-маркер.
-    Допускается применение вложенного запроса SELECT в секции SET.
+             В качестве значений могут применяться контекстные переменные (например,
+             в контексте текущего соединения клиента может использоваться контекстная
+             переменная CURRENT_USER). Также можно установить для столбца NULL-маркер.
+             Допускается применение вложенного запроса SELECT в секции SET.
 
 
-Секция WHERE используется для отбора изменяемых строк. Условие поиска
-может использовать вложенный запрос SELECT. При отсутствии секции WHERE
-обновляются значения указанных столбцов во всех строках модифицируемой
-таблицы.
+         Секция WHERE используется для отбора изменяемых строк. Условие поиска
+         может использовать вложенный запрос SELECT. При отсутствии секции WHERE
+         обновляются значения указанных столбцов во всех строках модифицируемой
+         таблицы.
 
-Выражение WITH позволяет задать один или несколько подзапросов,
-на которые затем можно ссылаться по имени в запросе UPDATE.
+         Выражение WITH позволяет задать один или несколько подзапросов,
+         на которые затем можно ссылаться по имени в запросе UPDATE.
 
-Опция DEFAULT позволяет присвоить столбцу значение по умолчанию (это может
-быть NULL, если для столбца не определено некоторое выражение по умолчанию).
-Столбец идентификации при этом получает значение, выданное соответствующей
-последовательностью. Для генерируемого столбца это указание допускается,
-но не меняет обычное поведение, т.е. значение столбца вычисляется
-генерирующим выражением.
+         Опция DEFAULT позволяет присвоить столбцу значение по умолчанию (это может
+         быть NULL, если для столбца не определено некоторое выражение по умолчанию).
+         Столбец идентификации при этом получает значение, выданное соответствующей
+         последовательностью. Для генерируемого столбца это указание допускается,
+         но не меняет обычное поведение, т.е. значение столбца вычисляется
+         генерирующим выражением.
 
-Имя курсора используется в условии WHERE CURRENT OF, которое позволяет
-изменить строку, выбирая её из этого курсора последней. Курсор должен
-образовываться запросом, не применяющим группировку, к целевой таблице
-команды UPDATE. Следует заметить, что WHERE CURRENT OF нельзя задать
-вместе с логическим условием.
+         Имя курсора используется в условии WHERE CURRENT OF, которое позволяет
+         изменить строку, выбирая её из этого курсора последней. Курсор должен
+         образовываться запросом, не применяющим группировку, к целевой таблице
+         команды UPDATE. Следует заметить, что WHERE CURRENT OF нельзя задать
+         вместе с логическим условием.
 
-Когда присутствует секция FROM, целевая таблица соединяется с таблицами,
-перечисленными в элемент_FROM, и каждая выходная строка соединения
-представляет операцию изменения для целевой таблицы. Применяя секцию FROM,
-необходимо обеспечить, чтобы соединение выдавало максимум одну выходную
-строку для каждой строки, которую нужно изменить. Другими словами, целевая
-строка не должна соединяться более чем с одной строкой из других таблиц.
-Если это условие нарушается, только одна из строк соединения будет
-использоваться для изменения целевой строки, но какая именно, предсказать
-нельзя.
+         Когда присутствует секция FROM, целевая таблица соединяется с таблицами,
+         перечисленными в элемент_FROM, и каждая выходная строка соединения
+         представляет операцию изменения для целевой таблицы. Применяя секцию FROM,
+         необходимо обеспечить, чтобы соединение выдавало максимум одну выходную
+         строку для каждой строки, которую нужно изменить. Другими словами, целевая
+         строка не должна соединяться более чем с одной строкой из других таблиц.
+         Если это условие нарушается, только одна из строк соединения будет
+         использоваться для изменения целевой строки, но какая именно, предсказать
+         нельзя.
 
-С помощью необязательного оператора RETURNING запрос UPDATE вычислит
-и возвратит значения для каждой фактически обновлённой строки.
+         С помощью необязательного оператора RETURNING запрос UPDATE вычислит
+         и возвратит значения для каждой фактически обновлённой строки.
 
----
+         ---
 
-### Примечания
+         ### Примечания
 
-1. При выполнении обновления данных следует иметь в виду, что последующее
-   восстановление изменённых данных, т.е. возврат таблицы к состоянию
-   до выполнения запроса UPDATE, очень часто бывает затруднителен.
+         1. При выполнении обновления данных следует иметь в виду, что последующее
+            восстановление изменённых данных, т.е. возврат таблицы к состоянию
+            до выполнения запроса UPDATE, очень часто бывает затруднителен.
 
-2. Если при попытке обновить строку новое значение столбца противоречит
-   ограничению, выдается сообщение об ошибке.
+         2. Если при попытке обновить строку новое значение столбца противоречит
+            ограничению, выдается сообщение об ошибке.
 
-*/
+         */
 
 
 /*
@@ -19028,7 +19745,7 @@ UPDATE
 */
 ---1. Установить для всех абонентов номер телефона 982223 (без секции WHERE):
 
-UPDATE Abonent
+         UPDATE Abonent
 SET Phone = '982223';
 
 
@@ -19110,7 +19827,8 @@ WHERE Accountid = '015527';
 Например, с помощью запроса:
 */
 
-UPDATE Abonent SET Phone = DEFAULT;
+UPDATE Abonent
+SET Phone = DEFAULT;
 
 ---номера телефонов у всех абонентов становятся неопределёнными.
 
@@ -19127,7 +19845,7 @@ SET D_m_y = ROW (CURRENT_DATE, 7, 2023)
 WHERE Payfactid = 79;
 
 select *
-   from paysumma_1;
+from paysumma_1;
 
 
 /*
@@ -19186,16 +19904,18 @@ Phones для хранения массива номеров телефонов:
 */
 
 ALTER TABLE Abonent
-ADD COLUMN Phones TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+    ADD COLUMN Phones TEXT[] NOT NULL DEFAULT ARRAY []::TEXT[];
 
 UPDATE Abonent
-SET Phones = ARRAY[Phone]
-WHERE Phone IS NOT NULL;   -- копирование номеров телефонов
+SET Phones = ARRAY [Phone]
+WHERE Phone IS NOT NULL; -- копирование номеров телефонов
 
 select *
-    from Abonent;
+from Abonent;
 
-ALTER TABLE Abonent DROP COLUMN Phone; -- удаление Phone
+ALTER TABLE Abonent
+    DROP COLUMN Phone;
+-- удаление Phone
 
 /*
 Такой подход упрощает схему БД и позволяет избежать соединения таблиц,
@@ -19237,18 +19957,22 @@ SET столбец1 = (<подзапрос1>) [, столбец2 = (<подза�
 
 UPDATE Nachislsumma N
 SET Nachislsum = Nachislsum - 10
-WHERE 1 = (SELECT COUNT(*)
-           FROM Request R
-           WHERE R.Accountid = N.Accountid)
+WHERE 1 = (
+          SELECT COUNT(*)
+          FROM Request R
+          WHERE R.Accountid = N.Accountid
+          )
   AND Serviceid = 2;
 
 --- либо
 
 UPDATE Nachislsumma N
 SET Nachislsum = Nachislsum - 10
-WHERE (SELECT COUNT(*)
-       FROM Request R
-       WHERE R.Accountid = N.Accountid) = 1
+WHERE (
+      SELECT COUNT(*)
+      FROM Request R
+      WHERE R.Accountid = N.Accountid
+      ) = 1
   AND Serviceid = 2;
 
 
@@ -19347,10 +20071,10 @@ Nachislsumma обновляются 14 строк.
 
 UPDATE Request
 SET Executiondate = (
-    SELECT MAX(R.Incomingdate)
-    FROM Request R
-    WHERE R.Accountid = Request.Accountid
-);
+                    SELECT MAX(R.Incomingdate)
+                    FROM Request R
+                    WHERE R.Accountid = Request.Accountid
+                    );
 
 /*
 После выполнения обновления даты выполнения всех ремонтных заявок
@@ -19472,10 +20196,10 @@ FROM Abonent;
 */
 
 WITH a AS (
-    UPDATE Abonent SET Phone = DEFAULT
-    WHERE Accountid = '136159'
-    RETURNING Phone
-)
+          UPDATE Abonent SET Phone = DEFAULT
+              WHERE Accountid = '136159'
+              RETURNING Phone
+          )
 SELECT *
 FROM a;
 
@@ -19579,7 +20303,8 @@ DELETE FROM [ ONLY ] базовая_таблица | представление
 запрос:
 */
 
-DELETE FROM Abonent;
+DELETE
+FROM Abonent;
 
 /*
 Обычно требуется удалить только определённые строки из таблицы или
@@ -19620,12 +20345,13 @@ WHERE Nachislyear = 2022;
 Булгаков Т. И., необходимо выполнить запрос:
 */
 
-DELETE FROM Request
+DELETE
+FROM Request
 WHERE Executorid IN (
-    SELECT Executorid
-    FROM Executor
-    WHERE Fio = 'Булгаков Т. И.'
-);
+                    SELECT Executorid
+                    FROM Executor
+                    WHERE Fio = 'Булгаков Т. И.'
+                    );
 
 
 /*
@@ -19684,14 +20410,17 @@ DELETE.
 Татарской улице, можно использовать запрос:
 */
 
-DELETE FROM Paysumma P
-WHERE EXISTS (
-    SELECT *
-    FROM Abonent A, Street S
-    WHERE S.Streetnm = 'ТАТАРСКАЯ УЛИЦА'
-      AND A.Streetid = S.Streetid
-      AND P.Accountid = A.Accountid
-);
+DELETE
+FROM Paysumma P
+WHERE EXISTS
+      (
+      SELECT *
+      FROM Abonent A,
+           Street  S
+      WHERE S.Streetnm = 'ТАТАРСКАЯ УЛИЦА'
+        AND A.Streetid = S.Streetid
+        AND P.Accountid = A.Accountid
+      );
 
 /*
 В этом примере при проверке условия P.Accountid = A.Accountid внутренний
@@ -19733,10 +20462,13 @@ WHERE R.Accountid IN (
 Существует и более простое решение данной задачи:
 */
 
-DELETE FROM Request A
-WHERE (SELECT COUNT(*)
-       FROM Paysumma P
-       WHERE A.Accountid = P.Accountid) > 8;
+DELETE
+FROM Request A
+WHERE (
+      SELECT COUNT(*)
+      FROM Paysumma P
+      WHERE A.Accountid = P.Accountid
+      ) > 8;
 
 /*
 Как уже отмечалось, DML-запросы можно также использовать в секции WITH,
@@ -19832,14 +20564,18 @@ Balance_value — значение баланса
 Вот запрос:
 */
 
-DELETE FROM Balance
-USING (
-    SELECT Accountid, Serviceid, Balance_date, Balance_value,
-           MIN(CTID) AS Min_ctid
-    FROM Balance
-    GROUP BY Accountid, Serviceid, Balance_date, Balance_value
-    HAVING COUNT(*) > 1
-) Subquery
+DELETE
+FROM Balance
+    USING (
+          SELECT Accountid,
+                 Serviceid,
+                 Balance_date,
+                 Balance_value,
+                 MIN(CTID) AS Min_ctid
+          FROM Balance
+          GROUP BY Accountid, Serviceid, Balance_date, Balance_value
+          HAVING COUNT(*) > 1
+          ) Subquery
 WHERE Balance.Accountid = Subquery.Accountid
   AND Balance.Serviceid = Subquery.Serviceid
   AND Balance.Balance_date = Subquery.Balance_date
@@ -19915,19 +20651,18 @@ FROM pg_constraint
 WHERE confrelid = 'abonent'::regclass
   AND contype = 'f';
 
-SELECT
-    fk.conname AS имя_ограничения,
-    fk_table.relname AS таблица_откуда_идет_ссылка,
-    fk_attr.attname AS колонка_откуда_идет_ссылка,
-    pk_table.relname AS таблица_куда_идет_ссылка,
-    pk_attr.attname AS колонка_куда_идет_ссылка
-FROM pg_constraint fk
-         JOIN pg_class fk_table ON fk_table.oid = fk.conrelid
-         JOIN pg_class pk_table ON pk_table.oid = fk.confrelid
+SELECT fk.conname       AS имя_ограничения,
+       fk_table.relname AS таблица_откуда_идет_ссылка,
+       fk_attr.attname  AS колонка_откуда_идет_ссылка,
+       pk_table.relname AS таблица_куда_идет_ссылка,
+       pk_attr.attname  AS колонка_куда_идет_ссылка
+FROM pg_constraint         fk
+         JOIN pg_class     fk_table ON fk_table.oid = fk.conrelid
+         JOIN pg_class     pk_table ON pk_table.oid = fk.confrelid
          JOIN pg_attribute fk_attr ON fk_attr.attrelid = fk.conrelid
-    AND fk_attr.attnum = ANY(fk.conkey)
+    AND fk_attr.attnum = ANY (fk.conkey)
          JOIN pg_attribute pk_attr ON pk_attr.attrelid = fk.confrelid
-    AND pk_attr.attnum = ANY(fk.confkey)
+    AND pk_attr.attnum = ANY (fk.confkey)
 WHERE fk.confrelid = 'abonent'::regclass
   AND fk.contype = 'f';
 
@@ -20005,17 +20740,16 @@ ON CONFLICT (Executorid) DO UPDATE SET Executorid = EXCLUDED.Executorid,
 
 select *
 from executor
-/*
-Здесь ON CONFLICT означает, что целевое действие выполнено, когда строка
-уже существует (т.е. когда существует строка с тем же первичным ключом).
+         /*
+         Здесь ON CONFLICT означает, что целевое действие выполнено, когда строка
+         уже существует (т.е. когда существует строка с тем же первичным ключом).
 
 
-При использовании ON CONFLICT DO UPDATE между ключевыми словами
-CONFLICT и DO UPDATE необходимо указать, на основе какого ограничения
-или уникального индекса проверяется наличие конфликта.
-Вместо ограничения или индекса можно указать столбец.
-*/
-
+         При использовании ON CONFLICT DO UPDATE между ключевыми словами
+         CONFLICT и DO UPDATE необходимо указать, на основе какого ограничения
+         или уникального индекса проверяется наличие конфликта.
+         Вместо ограничения или индекса можно указать столбец.
+         */
 
 
 /*
@@ -20041,12 +20775,13 @@ RETURNING с системным столбцом XMAX для отличия но
 
 */
 
-START TRANSACTION;
-INSERT INTO Executor VALUES (1, 'Петров А. С.'),
-                            (10, 'Сидоров А. С.')
+         START TRANSACTION;
+INSERT INTO Executor
+VALUES (1, 'Петров А. С.'),
+       (10, 'Сидоров А. С.')
 ON CONFLICT (Executorid) DO UPDATE
     SET Executorid = EXCLUDED.Executorid,
-        Fio = EXCLUDED.Fio
+        Fio        = EXCLUDED.Fio
 RETURNING Executorid, Fio, (XMAX = 0) AS Inserted;
 
 
@@ -20055,7 +20790,6 @@ RETURNING Executorid, Fio, (XMAX = 0) AS Inserted;
 строки соответственно с FALSE (так как при обновлении XMAX не равен 0)
 и TRUE (так как при добавлении XMAX равен 0) в столбце Inserted.
 */
-
 
 
 /*
@@ -20173,37 +20907,36 @@ FALSE для всех строк целевой таблицы, то прове�
 --      - Если у абонента НЕТ заявок → создаём новую заявку
 -- =============================================================================
 
-MERGE INTO Request R                    -- Целевая таблица (куда вносим изменения)
-USING (                                 -- Источник данных (откуда берём информацию)
-      SELECT *                          -- Берём всех абонентов
+MERGE INTO Request R -- Целевая таблица (куда вносим изменения)
+USING ( -- Источник данных (откуда берём информацию)
+      SELECT * -- Берём всех абонентов
       FROM Abonent
-      WHERE Streetid = 7                -- Только проживающих на улице 7
+      WHERE Streetid = 7 -- Только проживающих на улице 7
       ) Ab
-ON R.Accountid = Ab.Accountid           -- Условие соединения: связываем заявку с абонентом
+ON R.Accountid = Ab.Accountid -- Условие соединения: связываем заявку с абонентом
 
 -- -----------------------------------------------------------------------------
 -- СЕКЦИЯ 1: Когда заявка СУЩЕСТВУЕТ (есть связь с абонентом)
 -- -----------------------------------------------------------------------------
-WHEN MATCHED AND R.Executed THEN        -- Если заявка найдена И она выполнена (TRUE)
-    DELETE                              -- Удаляем эту заявку
+WHEN MATCHED AND R.Executed THEN -- Если заявка найдена И она выполнена (TRUE)
+    DELETE -- Удаляем эту заявку
 
 -- -----------------------------------------------------------------------------
 -- СЕКЦИЯ 2: Когда заявка НЕ СУЩЕСТВУЕТ (нет связи с абонентом)
 -- -----------------------------------------------------------------------------
-WHEN NOT MATCHED THEN                   -- Если заявка не найдена для этого абонента
-    INSERT (                            -- Вставляем новую заявку
-        Requestid,                      -- Уникальный номер заявки
-        Accountid,                      -- Лицевой счёт абонента
-        Failureid,                      -- Код неисправности (4)
-        Incomingdate,                   -- Дата регистрации (сегодня)
-        Executed                        -- Статус выполнения (FALSE = не выполнена)
+WHEN NOT MATCHED THEN -- Если заявка не найдена для этого абонента
+    INSERT ( -- Вставляем новую заявку
+        Requestid, -- Уникальный номер заявки
+        Accountid, -- Лицевой счёт абонента
+        Failureid, -- Код неисправности (4)
+        Incomingdate, -- Дата регистрации (сегодня)
+        Executed -- Статус выполнения (FALSE = не выполнена)
     )
-    VALUES (
-               NEXTVAL('Gen_Request'),   -- Следующее значение из последовательности
-               Ab.Accountid,                      -- Лицевой счёт из источника (абонент с улицы 7)
-               4,                         -- Фиксированный код неисправности (4)
-               CURRENT_DATE,          -- Текущая дата
-               FALSE                     -- Заявка не выполнена
+    VALUES (NEXTVAL('Gen_Request'), -- Следующее значение из последовательности
+            Ab.Accountid, -- Лицевой счёт из источника (абонент с улицы 7)
+            4, -- Фиксированный код неисправности (4)
+            CURRENT_DATE, -- Текущая дата
+            FALSE -- Заявка не выполнена
            );
 
 /*
@@ -20233,7 +20966,8 @@ MERGE INTO Paysumma P
 USING (
       SELECT *
       FROM Nachislsumma
-      WHERE Nachislsum > 200 AND Serviceid = 4
+      WHERE Nachislsum > 200
+        AND Serviceid = 4
       ) AS N
 ON (
     P.Accountid = N.Accountid
@@ -20242,13 +20976,13 @@ ON (
         AND P.Payyear = N.Nachislyear
     )
 WHEN MATCHED THEN
-    UPDATE SET Paysum = Paysum * 1.1
+    UPDATE
+    SET Paysum = Paysum * 1.1
 WHEN NOT MATCHED THEN
-    INSERT VALUES (
-                      NEXTVAL('gen_paysumma'),  -- ← безопасно
-                      N.Accountid, N.Serviceid, N.Nachislsum,
-                      CURRENT_DATE, N.Nachislmonth, N.Nachislyear
-                  )
+    INSERT
+    VALUES (NEXTVAL('gen_paysumma'), -- ← безопасно
+            N.Accountid, N.Serviceid, N.Nachislsum,
+            CURRENT_DATE, N.Nachislmonth, N.Nachislyear)
     RETURNING *;
 
 
@@ -20346,11 +21080,15 @@ VALUES (:Nls, :Street, :Dom, :Kv, :Fio, :Tel);
 
 --при обновлении:
 
-UPDATE Abonent SET Fio = :Fio WHERE Accountid = :Nls;
+UPDATE Abonent
+SET Fio = :Fio
+WHERE Accountid = :Nls;
 
 --при удалении:
 
-DELETE FROM Nachislsumma WHERE Nachislyear = :Year;
+DELETE
+FROM Nachislsumma
+WHERE Nachislyear = :Year;
 
 
 /*
@@ -20447,11 +21185,12 @@ WITH paysum_agg AS (
                    FROM Nachislsumma
                    GROUP BY Accountid
                    )
-SELECT A.Fio, A.Accountid,
-       COALESCE(p.SumPaysum, 0) AS SumPaysum,
+SELECT A.Fio,
+       A.Accountid,
+       COALESCE(p.SumPaysum, 0)     AS SumPaysum,
        COALESCE(n.SumNachislsum, 0) AS SumNachislsum
-FROM Abonent A
-         LEFT JOIN paysum_agg p ON A.Accountid = p.Accountid
+FROM Abonent                   A
+         LEFT JOIN paysum_agg  p ON A.Accountid = p.Accountid
          LEFT JOIN nachisl_agg n ON A.Accountid = n.Accountid;
 
 /*
@@ -20490,9 +21229,11 @@ where Accountid = '005488';
 ---drop view  Abonent_view
 
 CREATE VIEW Abonent_view (Accountid, Fio)
-AS SELECT Accountid, Fio
+AS
+SELECT Accountid, Fio
 FROM Abonent
-WHERE Accountid >= '200000' WITH CHECK OPTION;
+WHERE Accountid >= '200000'
+WITH CHECK OPTION;
 
 
 SELECT *
@@ -20635,7 +21376,8 @@ FROM Abonent_information;
 и удаление данных. Допустим, были выполнены последовательно два запроса:
 */
 
-UPDATE Abonent_information SET Name = 'Симкина З. А.'
+UPDATE Abonent_information
+SET Name = 'Симкина З. А.'
 WHERE Code = '136159';
 
 DELETE
@@ -21032,13 +21774,14 @@ COPY Abonent TO 'C:/SQL/abonent1.csv'
 например, так:
 */
 
-COPY Abonent(Accountid, Fio, Phone) TO 'C:/SQL/abonent2.csv' CSV HEADER;
+COPY Abonent (Accountid, Fio, Phone) TO 'C:/SQL/abonent2.csv' CSV HEADER;
 
 /*
 Примером экспорта данных из запроса в файл может быть следующий:
 */
 
-COPY (SELECT * FROM Abonent) TO 'C:/SQL/abonent3.csv' CSV HEADER;
+COPY (SELECT *
+      FROM Abonent) TO 'C:/SQL/abonent3.csv' CSV HEADER;
 
 /*
 Здесь выполняется запрос SELECT для получения всех строк из таблицы
@@ -21158,7 +21901,7 @@ COPY Abonent (Accountid, Fio, Phone)
 */
 
 COPY Abonent FROM 'C:/SQL/abonent.tsv'
-WITH (FORMAT CSV, DELIMITER E'\t', HEADER);
+    WITH (FORMAT CSV, DELIMITER E'\t', HEADER);
 
 /*
 -----------------------------------------------------------------------------
@@ -21262,9 +22005,9 @@ TEMPLATE [=] TEMPLATE0;
 команду:
 */
 CREATE DATABASE "sqllab"
-WITH OWNER "postgres"
-ENCODING SQL_ASCII
-TEMPLATE TEMPLATE0;
+    WITH OWNER "postgres"
+    ENCODING SQL_ASCII
+    TEMPLATE TEMPLATE0;
 
 /*
 2. **Создание БД с кодовой таблицей русского языка.** В каждой СУБД
@@ -21274,9 +22017,9 @@ TEMPLATE TEMPLATE0;
 */
 
 CREATE DATABASE "test"
-WITH OWNER "postgres"
-ENCODING 'WIN1251'
-TEMPLATE TEMPLATE0;
+    WITH OWNER "postgres"
+    ENCODING 'WIN1251'
+    TEMPLATE TEMPLATE0;
 
 /*
 Во многих СУБД для уже созданной БД кодовую страницу можно поменять
@@ -21298,17 +22041,17 @@ FROM pg_database;
 
 --Получить список подключений к БД можно следующим запросом:
 
-SELECT
-    pid,                                    -- Process ID
-    usename,                                -- User name
-    datname,                                -- Database name
-    client_addr,                            -- Client address
-    client_port,                            -- Client port
-    backend_start,                          -- Time when backend started
-    state,                                  -- Current state of backend
-    query                                   -- Last executed query
+SELECT pid,           -- Process ID
+       usename,       -- User name
+       datname,       -- Database name
+       client_addr,   -- Client address
+       client_port,   -- Client port
+       backend_start, -- Time when backend started
+       state,         -- Current state of backend
+       query          -- Last executed query
 FROM pg_stat_activity
-WHERE state != 'idle';                      -- Filter out idle connections
+WHERE state != 'idle';
+-- Filter out idle connections
 
 /*
 Для физического удаления БД используется команда DROP DATABASE.
@@ -21571,8 +22314,7 @@ Executor_number := NEXTVAL('Executor_ID');
 --или
 
 SELECT LAST_VALUE
-FROM Executor_id
-INTO Executor_number;
+FROM Executor_id INTO Executor_number;
 
 SELECT LAST_VALUE
 INTO Executor_number
@@ -21703,7 +22445,9 @@ IF ... ELSIF ... всегда выполняются в порядке их сл
 а Line — как локальная переменная или выходной параметр:
 */
 
-IF (House_nom IS NOT NULL AND Flat_nom IS NOT NULL)
+IF
+(House_nom IS NOT NULL AND Flat_nom IS NOT NULL
+)
 THEN
     Line = 'Код улицы - ' || Street_cod || ', д.' || House_nom
            || ', кв.' || Flat_nom;
@@ -21840,8 +22584,6 @@ DO $$
 $$;
 
 
-
-
 /*
 При организации простого цикла следует внимательно следить за наличием
 выхода из цикла, чтобы не получить бесконечный цикл.
@@ -21867,7 +22609,8 @@ DO $$
     DECLARE
         Result TEXT := '123';
     BEGIN
-        WHILE LENGTH(Result) < 8 LOOP
+        WHILE LENGTH(Result) < 8
+            LOOP
                 Result := '0' || Result;
             END LOOP;
         RAISE NOTICE 'Result = %', Result;
@@ -21914,7 +22657,8 @@ END LOOP [метка];
 */
 DO $$
     BEGIN
-        FOR V_counter IN 2020..2026 LOOP
+        FOR V_counter IN 2020..2026
+            LOOP
                 RAISE NOTICE 'V_counter = %', V_counter;
             END LOOP;
     END;
@@ -21989,7 +22733,8 @@ $$
                 FROM Paysumma
                 WHERE Payyear = V_year;
 
-                IF COALESCE(V_nachisl, 0) > COALESCE(V_pay, 0) THEN
+                IF COALESCE(V_nachisl, 0) > COALESCE(V_pay, 0)
+                THEN
                     RAISE NOTICE '  % год: долг = % руб.', V_year, COALESCE(V_nachisl - V_pay, 0);
                 END IF;
             END LOOP;
@@ -22042,7 +22787,8 @@ $$
                         WHERE Payyear = V_year
                           AND Paymonth = V_month;
 
-                        IF COALESCE(V_total, 0) > 0 THEN
+                        IF COALESCE(V_total, 0) > 0
+                        THEN
                             RAISE NOTICE 'Год %, месяц %: сумма платежей = % руб.',
                                 V_year, V_month, V_total;
                         END IF;
@@ -22099,7 +22845,8 @@ $$
         LOOP
             Pausum := 2 * Pausum;
 
-            IF Pausum > 4000 THEN
+            IF Pausum > 4000
+            THEN
                 EXIT;
             END IF;
 
@@ -22157,7 +22904,9 @@ PERFORM [запрос];
 Paysumma:
 */
 
-SELECT * FROM Paysumma WHERE Paysum > 1800;
+SELECT *
+FROM Paysumma
+WHERE Paysum > 1800;
 
 --выполнить с помощью PERFORM на PL/pgSQL следующим образом:
 DO $$
@@ -22220,15 +22969,15 @@ RAISE [<уровень>] 'формат' [, выражение [, ...]]
 значение заменяется только следующей переменной при выполнении команды:
 */
 --вывести значение переменной a:
-  RAISE NOTICE 'Вызов Ps (%)', a;
+RAISE NOTICE 'Вызов Ps (%)', a;
 
 --Значение переменной «a» заменит % в формате;
 
 -- вывести исключение:
-  RAISE EXCEPTION 'Ошибка. Требуется исправить!';
+RAISE EXCEPTION 'Ошибка. Требуется исправить!';
 
 -- вывод SQLERRM для отображения сообщений об ошибках:
-  RAISE EXCEPTION '%', SQLERRM;
+RAISE EXCEPTION '%', SQLERRM;
 
 /*
 Количество заполнителей должно совпадать с количеством аргументов,
@@ -22239,13 +22988,19 @@ RAISE [<уровень>] 'формат' [, выражение [, ...]]
   применять, если в команде RAISE присутствует формат перед USING;
 */
 DO $$
-DECLARE
-    Acc TEXT := '999999';
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM Abonent WHERE Accountid = Acc) THEN
-        RAISE EXCEPTION USING MESSAGE = 'Абонент с номером ' || Acc || ' не найден';
-    END IF;
-END;
+    DECLARE
+        Acc TEXT := '999999';
+    BEGIN
+        IF NOT EXISTS
+        (
+        SELECT 1
+        FROM Abonent
+        WHERE Accountid = Acc
+        )
+        THEN
+            RAISE EXCEPTION USING MESSAGE = 'Абонент с номером ' || Acc || ' не найден';
+        END IF;
+    END;
 $$;
 
 
@@ -22256,7 +23011,13 @@ DO $$
     DECLARE
         Acc TEXT := '999999';
     BEGIN
-        IF NOT EXISTS (SELECT 1 FROM Abonent WHERE Accountid = Acc) THEN
+        IF NOT EXISTS
+        (
+        SELECT 1
+        FROM Abonent
+        WHERE Accountid = Acc
+        )
+        THEN
             RAISE EXCEPTION 'Абонент не найден'
                 USING DETAIL = 'Запрос: SELECT * FROM Abonent WHERE Accountid = ' || Acc,
                     HINT = 'Проверьте правильность номера лицевого счёта';
@@ -22270,7 +23031,8 @@ DO $$
     DECLARE
         V_paysum NUMERIC := -100;
     BEGIN
-        IF V_paysum < 0 THEN
+        IF V_paysum < 0
+        THEN
             RAISE EXCEPTION 'Сумма платежа не может быть отрицательной'
                 USING HINT = 'Платеж должен быть больше или равен 0';
         END IF;
@@ -22283,12 +23045,13 @@ $$;
 
 DO $$
     DECLARE
-        Acc TEXT := '0005488';
+        Acc     TEXT := '0005488';
         V_count INTEGER;
     BEGIN
         SELECT COUNT(*) INTO V_count FROM Paysumma WHERE Accountid = Acc;
 
-        IF V_count = 0 THEN
+        IF V_count = 0
+        THEN
             RAISE EXCEPTION 'У абонента % нет платежей', Acc
                 USING ERRCODE = 'no_data_found';
         END IF;
@@ -22361,13 +23124,13 @@ END первый_блок ';
 
 DO -- вывод построчно, а не в одну строку
 $$
-<<первый_блок>>
-DECLARE
-    i INT := 0;
-BEGIN
-    i := i + 1;
-    RAISE NOTICE 'Текущее значение счетчика: % ', i;
-END первый_блок$$;
+    <<первый_блок>>
+        DECLARE
+        i INT := 0;
+    BEGIN
+        i := i + 1;
+        RAISE NOTICE 'Текущее значение счетчика: % ', i;
+    END первый_блок $$;
 
 /*
 Результат выполнения:
@@ -22379,13 +23142,12 @@ END первый_блок$$;
 
 DO -- вывод построчно, а не в одну строку
 $первый_блок$
-DECLARE
-    i INT := 0;
-BEGIN
-    i := i + 1;
-    RAISE NOTICE ' Текущее значение счетчика: % ', i;
-END $первый_блок$;
-
+    DECLARE
+        i INT := 0;
+    BEGIN
+        i := i + 1;
+        RAISE NOTICE ' Текущее значение счетчика: % ', i;
+    END $первый_блок$;
 
 
 /*
@@ -22408,21 +23170,21 @@ END { $$ | $метка$ };
 -----------------------------------------------------------------------------
 */
 DO $$
-DECLARE
-    N INT = 45;
-    Counter INT = 1;
-    Two INT = 0;
-    One INT = 1;
-BEGIN
-    WHILE (Counter <= N)
-    LOOP
-        Two = One + Two;
-        One = Two - One;
-        Counter = Counter + 1;
-        --RAISE NOTICE 'Число %', One;
-    END LOOP;
-    RAISE NOTICE 'Число %', One;
-END $$;
+    DECLARE
+        N       INT = 45;
+        Counter INT = 1;
+        Two     INT = 0;
+        One     INT = 1;
+    BEGIN
+        WHILE (Counter <= N)
+            LOOP
+                Two = One + Two;
+                One = Two - One;
+                Counter = Counter + 1;
+                --RAISE NOTICE 'Число %', One;
+            END LOOP;
+        RAISE NOTICE 'Число %', One;
+    END $$;
 
 /*
 -----------------------------------------------------------------------------
@@ -22506,15 +23268,16 @@ $$;
 
 
 DO $$
-DECLARE
-    B_fio Abonent.Fio%TYPE;   -- неявное объявление типа
-BEGIN
-    SELECT Fio INTO B_fio
-    FROM Abonent
-    WHERE Phone = '769975'
-    ORDER BY Fio DESC;
-    RAISE NOTICE 'ФИО: %', B_fio;
-END $$;
+    DECLARE
+        B_fio Abonent.Fio%TYPE; -- неявное объявление типа
+    BEGIN
+        SELECT Fio
+        INTO B_fio
+        FROM Abonent
+        WHERE Phone = '769975'
+        ORDER BY Fio DESC;
+        RAISE NOTICE 'ФИО: %', B_fio;
+    END $$;
 
 
 /*
@@ -22530,9 +23293,11 @@ END $$;
 первым в выборке после сортировки по убыванию ФИО.
 */
 DO $$
-    DECLARE B_fio Abonent.Fio%TYPE;   -- переменная типа кортежа
+    DECLARE
+        B_fio Abonent.Fio%TYPE; -- переменная типа кортежа
     BEGIN
-        SELECT Fio INTO B_fio
+        SELECT Fio
+        INTO B_fio
         FROM Abonent
         WHERE Phone IS NOT NULL
         ORDER BY Fio DESC;
@@ -22560,20 +23325,24 @@ DO $$
 
 
 DO $Итерация$
-DECLARE
-    Number INTEGER := 1;
-BEGIN
-    WHILE (Number < 10)
-    LOOP
-        RAISE NOTICE 'Итерация: %', Number;
-        Number := Number + 1;
-        IF Number = 7 THEN EXIT;
-        END IF;
-        IF Number = 4 THEN CONTINUE;
-        END IF;
-        RAISE NOTICE 'Конец итерации';
-    END LOOP;
-END $Итерация$;
+    DECLARE
+        Number INTEGER := 1;
+    BEGIN
+        WHILE (Number < 10)
+            LOOP
+                RAISE NOTICE 'Итерация: %', Number;
+                Number := Number + 1;
+                IF Number = 7
+                THEN
+                    EXIT;
+                END IF;
+                IF Number = 4
+                THEN
+                    CONTINUE;
+                END IF;
+                RAISE NOTICE 'Конец итерации';
+            END LOOP;
+    END $Итерация$;
 
 /*
 Итерация: 1
@@ -22596,8 +23365,6 @@ RAISE NOTICE 'Конец итерации' не будет выполнятьс�
 продолжается. Когда переменная Number станет равна 7, оператор EXIT
 произведёт выход из цикла, и он завершится.
 */
-
-
 
 
 /*
@@ -22746,7 +23513,6 @@ $$;
 /*
 В выполняемых блоках можно вызывать именованные процедурные модули: ХП, ХФ.
 */
-
 
 
 /*
@@ -23044,30 +23810,30 @@ PostgreSQL, например:
 */
 
 DO $$
-BEGIN
-    PERFORM 1 / 0;
-EXCEPTION
-    WHEN SQLSTATE '22012' THEN   -- перехват ошибки по коду
+    BEGIN
+        PERFORM 1 / 0;
+    EXCEPTION
+        WHEN SQLSTATE '22012' THEN -- перехват ошибки по коду
         ---RAISE EXCEPTION '%', SQLERRM;
-        RAISE USING MESSAGE = 'деление на ноль';
-END $$;
+            RAISE USING MESSAGE = 'деление на ноль';
+    END $$;
 
 
 
 DO $inline$
-DECLARE
-    I INT;
-    J INT := 2;
-BEGIN
-    I := 6 / J;
-    RAISE NOTICE '6 / % = %', J, I;
-    J := 0;
-    I := 6 / J;
-    RAISE NOTICE '6 / % = %', J, I;
-EXCEPTION
-    WHEN DIVISION_BY_ZERO THEN   -- перехват ошибки по системному имени
-        RAISE NOTICE '6 / % Деление на ноль', J;
-END; $inline$
+    DECLARE
+        I INT;
+        J INT := 2;
+    BEGIN
+        I := 6 / J;
+        RAISE NOTICE '6 / % = %', J, I;
+        J := 0;
+        I := 6 / J;
+        RAISE NOTICE '6 / % = %', J, I;
+    EXCEPTION
+        WHEN DIVISION_BY_ZERO THEN -- перехват ошибки по системному имени
+            RAISE NOTICE '6 / % Деление на ноль', J;
+    END; $inline$
 
 /*
 Результат выполнения:
@@ -23105,12 +23871,14 @@ DO $$
 
         -- Попытка обновления несуществующей таблицы
         -- (SQLSTATE = 42P01)
-        UPDATE Nachislsumma SET Nachislsum = 100
+        UPDATE Nachislsumma
+        SET Nachislsum = 100
         WHERE Accountid = '136160';
 
         -- Попытка обновления несуществующего столбца
         -- (SQLSTATE = 42703)
-        UPDATE Nachislsumma SET Paysum = 100
+        UPDATE Nachislsumma
+        SET Paysum = 100
         WHERE Accountid = '136160';
 
     EXCEPTION
@@ -23182,9 +23950,6 @@ DO $$
 */
 
 
-
-
-
 /*
 В PostgreSQL имеются два способа при обработке исключений получить
 детальную информацию о произошедшей ошибке: использование специальных
@@ -23207,33 +23972,33 @@ GET STACKED DIAGNOSTICS переменная { = | := } элемент [, ...];
 ошибки (при N > 46) и выдачей подробной информации о ней:
 */
 DO $$
-DECLARE
-    N INT = 46;   -- 47 ---для int 2,147,483,647. 4 байта, 47 это 2,971,215,073
-    Counter INT = 1;
-    Two INT = 0;
-    One INT = 1;
-    Code TEXT;
-    Msg TEXT;
-    Context TEXT;
-BEGIN
-    WHILE (N >= Counter)
-    LOOP
-        Two = One + Two;
-        One = Two - One;
-        Counter = Counter + 1;
-    END LOOP;
-    RAISE NOTICE '%-ое число Фибоначчи равно %', N, One;
-EXCEPTION
-    WHEN SQLSTATE '22003' THEN
-        RAISE INFO 'Проблема с числом Фибоначчи';
-        GET STACKED DIAGNOSTICS
-            Code = RETURNED_SQLSTATE,
-            Msg = MESSAGE_TEXT,
-            Context = PG_CONTEXT;
-        RAISE NOTICE 'Код ошибки: %. Текст сообщения об ошибке: %.', Code, Msg;
-        RAISE NOTICE 'Контекст ошибки: %', Context;
-        RAISE NOTICE '46-е число Фибоначчи равно %', One;
-END $$;
+    DECLARE
+        N       INT = 46; -- 47 ---для int 2,147,483,647. 4 байта, 47 это 2,971,215,073
+        Counter INT = 1;
+        Two     INT = 0;
+        One     INT = 1;
+        Code    TEXT;
+        Msg     TEXT;
+        Context TEXT;
+    BEGIN
+        WHILE (N >= Counter)
+            LOOP
+                Two = One + Two;
+                One = Two - One;
+                Counter = Counter + 1;
+            END LOOP;
+        RAISE NOTICE '%-ое число Фибоначчи равно %', N, One;
+    EXCEPTION
+        WHEN SQLSTATE '22003' THEN
+            RAISE INFO 'Проблема с числом Фибоначчи';
+            GET STACKED DIAGNOSTICS
+                Code = RETURNED_SQLSTATE,
+                Msg = MESSAGE_TEXT,
+                Context = PG_CONTEXT;
+            RAISE NOTICE 'Код ошибки: %. Текст сообщения об ошибке: %.', Code, Msg;
+            RAISE NOTICE 'Контекст ошибки: %', Context;
+            RAISE NOTICE '46-е число Фибоначчи равно %', One;
+    END $$;
 
 
 /*Уникальные ли данные находятся в столбцах
@@ -23278,9 +24043,6 @@ WHERE tablename = 'paysumma'
 ORDER BY attname;
 
 
-
-
-
 /*
 В следующем примере анонимного блока на PL/pgSQL вычисляется
 отношение сумм значений начислений и оплат за определенные
@@ -23294,18 +24056,26 @@ DO
 $$
     DECLARE
         Ratio NUMERIC;
-        Mes Tmonth := 9;
-        Year Tyear := 2024;
-        Serv Pkfield := 1;
+        Mes   Tmonth  := 9;
+        Year  Tyear   := 2024;
+        Serv  Pkfield := 1;
     BEGIN
         Ratio := ROUND(
-                (SELECT SUM(Nachislsum) FROM Nachislsumma
-                 WHERE Nachislmonth = Mes AND Nachislyear = Year
-                   AND Serviceid = Serv)
+                (
+                SELECT SUM(Nachislsum)
+                FROM Nachislsumma
+                WHERE Nachislmonth = Mes
+                  AND Nachislyear = Year
+                  AND Serviceid = Serv
+                )
                     /
-                (SELECT SUM(Paysum) FROM Paysumma
-                 WHERE Paymonth = Mes AND Payyear = Year
-                   AND Serviceid = Serv),
+                (
+                SELECT SUM(Paysum)
+                FROM Paysumma
+                WHERE Paymonth = Mes
+                  AND Payyear = Year
+                  AND Serviceid = Serv
+                ),
                 4);
         RAISE NOTICE 'Соотношение начислено/оплачено за % месяц % года услуги % = %',
             Mes, Year, Serv, Ratio;
@@ -23359,7 +24129,8 @@ $$
                   AND Serviceid = Serv
                 ), 4);
 
-        IF Ratio IS NULL THEN
+        IF Ratio IS NULL
+        THEN
             RAISE EXCEPTION NO_DATA_FOUND;
         ELSE
             RAISE NOTICE 'Соотношение начислено/оплачено за % месяц %'
@@ -23416,16 +24187,20 @@ $$
         Context TEXT;
     BEGIN
         BEGIN
-            IF Mes NOT BETWEEN 1 AND 12 THEN
+            IF Mes NOT BETWEEN 1 AND 12
+            THEN
                 RAISE EXCEPTION 'Неверный номер месяца (%)', Mes
                     USING HINT = 'Номер месяца может быть от 1 до 12',
                         ERRCODE = 'P00001';
             END IF;
-            IF Mes BETWEEN 1 AND 3 THEN
+            IF Mes BETWEEN 1 AND 3
+            THEN
                 Kv = 1;
-            ELSIF Mes BETWEEN 4 AND 6 THEN
+            ELSIF Mes BETWEEN 4 AND 6
+            THEN
                 Kv = 2;
-            ELSIF Mes BETWEEN 7 AND 9 THEN
+            ELSIF Mes BETWEEN 7 AND 9
+            THEN
                 Kv = 3;
             ELSE
                 Kv = 4;
@@ -23455,23 +24230,27 @@ $$;
 
 DO $$
     DECLARE
-        Status_executed Request.Executed %TYPE;
-        R_requestid Request.Requestid %TYPE := 5;
+        Status_executed      Request.Executed %TYPE;
+        R_requestid          Request.Requestid %TYPE     := 5;
         Status_execution_new Request.Executiondate %TYPE := NULL;
 -- Status_execution_new
 -- Request.Executiondate %TYPE := CURRENT_DATE;
     BEGIN
-        SELECT Executed INTO Status_executed
+        SELECT Executed
+        INTO Status_executed
         FROM Request
         WHERE Requestid = R_requestid;
 
-        IF Status_executed THEN
+        IF Status_executed
+        THEN
             RAISE EXCEPTION USING ERRCODE = 60001;
         ELSE
-            UPDATE Request SET Executed = TRUE
+            UPDATE Request
+            SET Executed = TRUE
             WHERE Requestid = R_requestid;
         END IF;
-        IF Status_execution_new IS NOT NULL THEN
+        IF Status_execution_new IS NOT NULL
+        THEN
             RAISE EXCEPTION USING ERRCODE = 60002;
         ELSE
             INSERT INTO Request
@@ -23505,17 +24284,18 @@ DO $$
 
 
 DO $$
-DECLARE
-    R_Accountid Request.Accountid %TYPE;
- --   R_Requestid Request.Requestid %TYPE := 5;
- R_Requestid Request.Requestid %TYPE := 25;
-BEGIN
-    SELECT Accountid INTO STRICT R_Accountid
-    FROM Request
-    WHERE Requestid = R_Requestid;
-    RAISE NOTICE 'Абонент = % Номер заявки = %', R_Accountid,
-    R_Requestid;
-END $$;
+    DECLARE
+        R_Accountid Request.Accountid %TYPE;
+        --   R_Requestid Request.Requestid %TYPE := 5;
+        R_Requestid Request.Requestid %TYPE := 25;
+    BEGIN
+        SELECT Accountid
+        INTO STRICT R_Accountid
+        FROM Request
+        WHERE Requestid = R_Requestid;
+        RAISE NOTICE 'Абонент = % Номер заявки = %', R_Accountid,
+            R_Requestid;
+    END $$;
 
 /*
 Результат выполнения:
@@ -23540,7 +24320,7 @@ DO
 $$
     DECLARE
         R_sum       INT;
-      ---  R_AccountId Request.AccountId %TYPE := '126112';
+        ---  R_AccountId Request.AccountId %TYPE := '126112';
         R_AccountId Request.AccountId %TYPE := '111111';
     BEGIN
         SELECT SUM(Paysum)
@@ -23571,7 +24351,8 @@ $$
         INTO STRICT R_sum
         FROM Paysumma
         WHERE AccountId = R_AccountId;
-        IF R_sum IS NULL THEN
+        IF R_sum IS NULL
+        THEN
             RAISE EXCEPTION NO_DATA_FOUND;
         END IF;
         RAISE NOTICE 'Абонент = % Оплачено = %', R_AccountId, R_sum;
@@ -23586,7 +24367,6 @@ $$;
 Результат выполнения:
 Абонент = 111111 не существует
 */
-
 
 
 /*
@@ -23928,7 +24708,8 @@ $$
         LOOP
             FETCH Curs INTO Acc, Aname;
             GET DIAGNOSTICS Var = ROW_COUNT;
-            IF (Var = 0) THEN
+            IF (Var = 0)
+            THEN
                 EXIT;
             END IF;
             RAISE NOTICE '% %', Acc, Aname;
@@ -23942,7 +24723,6 @@ $$;
 080270 Тимошкина Н. Г.
 080613 Лукашина Р. М.
 */
-
 
 
 /*
@@ -24008,8 +24788,8 @@ $$;
 DO
 $$
     DECLARE
-        Var     RECORD;
-        Sum_pay Currency := 0;
+        Var          RECORD;
+        Sum_pay      Currency := 0;
         v_service_id INTEGER;
         Curs CURSOR (Serv Services.Serviceid%TYPE) FOR
             SELECT Accountid, Paysum, Serviceid
@@ -24024,14 +24804,14 @@ $$
                 RAISE NOTICE ' % %',
                     Var.Accountid,
                     LPAD(Var.Paysum::TEXT, 9);
-                IF Var.Paysum BETWEEN 150 AND 200 THEN
+                IF Var.Paysum BETWEEN 150 AND 200
+                THEN
                     Sum_pay := Sum_pay + Var.Paysum;
                 END IF;
             END LOOP;
         RAISE NOTICE ' Сумма % , Услуга % ', Sum_pay, v_service_id;
     END
 $$;
-
 
 
 /*
@@ -24088,20 +24868,20 @@ $$
 
 DO
 $$
-DECLARE
-    Curs REFCURSOR;
-    Rez RECORD;
-BEGIN
-    OPEN Curs FOR SELECT *
-                  FROM Abonent
-                  ORDER BY Accountid;
-    LOOP
-        FETCH Curs INTO Rez;
-        EXIT WHEN NOT FOUND;
-        RAISE NOTICE ' % ', Rez;
-    END LOOP;
-    CLOSE Curs;
-END;
+    DECLARE
+        Curs REFCURSOR;
+        Rez  RECORD;
+    BEGIN
+        OPEN Curs FOR SELECT *
+                      FROM Abonent
+                      ORDER BY Accountid;
+        LOOP
+            FETCH Curs INTO Rez;
+            EXIT WHEN NOT FOUND;
+            RAISE NOTICE ' % ', Rez;
+        END LOOP;
+        CLOSE Curs;
+    END;
 $$
 
 /*
@@ -24120,8 +24900,6 @@ $$
 (443069,4,51,55,"Стародубцев Е. В.",683014)
 (443690,7,5,1,"Тулпурова М. И.",214833)
 */
-
-
 
 
 /*
@@ -24269,22 +25047,25 @@ DELETE FROM базовая_таблица WHERE CURRENT OF имя_курсора
 */
 
 DO $$
-DECLARE
-    Serv_record RECORD;
-    Serv_cursor CURSOR FOR
-        SELECT * FROM Nachislsumma_1 WHERE Serviceid = 1;
-BEGIN
-    OPEN Serv_cursor;
-    LOOP
-        FETCH NEXT FROM Serv_cursor INTO Serv_record;
-        EXIT WHEN NOT FOUND; -- -- ← выходим, если FETCH ничего не вернул
-        -- Увеличение начисления на 10 % для текущей строки
-        UPDATE Nachislsumma_1
-        SET Nachislsum = Nachislsum * 1.10
-        WHERE CURRENT OF Serv_cursor;
-    END LOOP;
-    CLOSE Serv_cursor;
-END $$;
+    DECLARE
+        Serv_record RECORD;
+        Serv_cursor CURSOR FOR
+            SELECT *
+            FROM Nachislsumma_1
+            WHERE Serviceid = 1;
+    BEGIN
+        OPEN Serv_cursor;
+        LOOP
+            FETCH NEXT FROM Serv_cursor INTO Serv_record;
+            EXIT WHEN NOT FOUND;
+            -- -- ← выходим, если FETCH ничего не вернул
+            -- Увеличение начисления на 10 % для текущей строки
+            UPDATE Nachislsumma_1
+            SET Nachislsum = Nachislsum * 1.10
+            WHERE CURRENT OF Serv_cursor;
+        END LOOP;
+        CLOSE Serv_cursor;
+    END $$;
 
 /*
 Пример обработки ошибки при выполнении UPDATE из-за неверного
@@ -24292,64 +25073,68 @@ END $$;
 */
 
 DO $$
-DECLARE
-    Serv_record RECORD;
-    Serv_cursor CURSOR FOR
-        SELECT * FROM Nachislsumma_1 WHERE Serviceid = 1;
-BEGIN
-    OPEN Serv_cursor;
-    LOOP
-        FETCH NEXT FROM Serv_cursor INTO Serv_record;
-        EXIT WHEN NOT FOUND;
-        BEGIN
-            -- Предположим, что у нас ошибка в названии колонки
-            UPDATE Nachislsumma_1
-            SET NonExistentColumn = Nachislsum * 1.10
-            WHERE CURRENT OF Serv_cursor;
-        EXCEPTION
-            WHEN OTHERS THEN
-                RAISE NOTICE 'Error updating record: %, SQL Error: %',
-                             Serv_record, SQLERRM;
-        END;
-    END LOOP;
-    CLOSE Serv_cursor;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'Error with cursor or fetching data: %',
-                     SQLERRM;
-END $$;
+    DECLARE
+        Serv_record RECORD;
+        Serv_cursor CURSOR FOR
+            SELECT *
+            FROM Nachislsumma_1
+            WHERE Serviceid = 1;
+    BEGIN
+        OPEN Serv_cursor;
+        LOOP
+            FETCH NEXT FROM Serv_cursor INTO Serv_record;
+            EXIT WHEN NOT FOUND;
+            BEGIN
+                -- Предположим, что у нас ошибка в названии колонки
+                UPDATE Nachislsumma_1
+                SET NonExistentColumn = Nachislsum * 1.10
+                WHERE CURRENT OF Serv_cursor;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    RAISE NOTICE 'Error updating record: %, SQL Error: %',
+                        Serv_record, SQLERRM;
+            END;
+        END LOOP;
+        CLOSE Serv_cursor;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE NOTICE 'Error with cursor or fetching data: %',
+                SQLERRM;
+    END $$;
 
 
 /*
 Обработка ошибки при открытии курсора из-за отсутствия таблицы:
 */
 DO $$
-DECLARE
-    Serv_record RECORD;
-    Serv_cursor CURSOR FOR
-        -- Предположим, что таблица не существует
-        SELECT * FROM NonExistentTable WHERE Serviceid = 1;
-BEGIN
-    OPEN Serv_cursor; -- Это вызовет ошибку
-    LOOP
-        FETCH NEXT FROM Serv_cursor INTO Serv_record;
-        EXIT WHEN NOT FOUND;
-        BEGIN
-            UPDATE Nachislsumma_1
-            SET Nachislsum = Nachislsum * 1.10
-            WHERE CURRENT OF Serv_cursor;
-        EXCEPTION
-            WHEN OTHERS THEN
-                RAISE NOTICE 'Error updating record: %, SQL Error: %',
-                             Serv_record, SQLERRM;
-        END;
-    END LOOP;
-    CLOSE Serv_cursor;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'Error with cursor or fetching data: %',
-                     SQLERRM;
-END $$;
+    DECLARE
+        Serv_record RECORD;
+        Serv_cursor CURSOR FOR
+            -- Предположим, что таблица не существует
+            SELECT *
+            FROM NonExistentTable
+            WHERE Serviceid = 1;
+    BEGIN
+        OPEN Serv_cursor; -- Это вызовет ошибку
+        LOOP
+            FETCH NEXT FROM Serv_cursor INTO Serv_record;
+            EXIT WHEN NOT FOUND;
+            BEGIN
+                UPDATE Nachislsumma_1
+                SET Nachislsum = Nachislsum * 1.10
+                WHERE CURRENT OF Serv_cursor;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    RAISE NOTICE 'Error updating record: %, SQL Error: %',
+                        Serv_record, SQLERRM;
+            END;
+        END LOOP;
+        CLOSE Serv_cursor;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE NOTICE 'Error with cursor or fetching data: %',
+                SQLERRM;
+    END $$;
 
 /*
 1. Построчная обработка с ветвлением логики
@@ -24406,7 +25191,6 @@ UPDATE, INSERT, DELETE). Помимо того, что курсоры не по�
 выполнения операций обработки данных посредством курсора заметно
 ниже, чем у стандартных средств SQL.
 */
-
 
 
 /*
@@ -24483,9 +25267,9 @@ CALL Update_Paysum('115705', 1, 0.9, 2023::Tyear);
 
 select *
 from Paysumma
-where Accountid  = '115705'
-and Payyear = 2023
-and Serviceid = 1;
+where Accountid = '115705'
+  and Payyear = 2023
+  and Serviceid = 1;
 
 /*
 Это действие уменьшит на 10 % значения платежей за 2023 г.
@@ -24842,14 +25626,14 @@ END $$;
 ХП Edit_disrepair:
 */
 
-CALL Edit_disrepair (3, 'Течет вода из водогрейной колонки');
+CALL Edit_disrepair(3, 'Течет вода из водогрейной колонки');
 
 /*
 будет выполнено успешно, а попытка редактирования наименования
 неисправности с номером 9
 */
 
-CALL Edit_disrepair (9, 'Течет вода из водогрейной колонки');
+CALL Edit_disrepair(9, 'Течет вода из водогрейной колонки');
 
 /*
 приведет к немедленному прекращению выполнения процедуры и откату
@@ -24871,11 +25655,11 @@ SQL Error [Р0001]: Ошибка: Отсутствует строка для р�
 
 */
 
-CREATE PROCEDURE SummaryPay(
-    Laccountid VARCHAR(6),
-    Koeff INT,
-    OUT Resultsum Currency)
-LANGUAGE PLPGSQL
+CREATE PROCEDURE SummaryPay
+(
+Laccountid VARCHAR(6), Koeff INT, OUT Resultsum Currency
+)
+    LANGUAGE PLPGSQL
 AS
 $$
 BEGIN
@@ -24892,12 +25676,12 @@ END $$;
 
 DO
 $$
-DECLARE
-    Vresultsum CURRENCY;
-BEGIN
-    CALL SummaryPay('015527', 2, Vresultsum);
-    RAISE NOTICE ' %', Vresultsum;
-END $$;
+    DECLARE
+        Vresultsum CURRENCY;
+    BEGIN
+        CALL SummaryPay('015527', 2, Vresultsum);
+        RAISE NOTICE ' %', Vresultsum;
+    END $$;
 
 /*
 Результат выполнения:
@@ -24921,7 +25705,7 @@ Vresultsum, в которую будет сохраняться значение
 анонимного блока, для этого вместо выходных переменных необходимо
 указать NULL:
 */
-CALL SummaryPay ('015527', 2, NULL);
+CALL SummaryPay('015527', 2, NULL);
 
 /*
 Процедура SummaryPay в приведенном примере возвращала одно
@@ -25067,17 +25851,19 @@ DDL-скрипт процедуры Saldo для расчета и вывода 
 */
 
 
-
-DROP PROCEDURE IF EXISTS saldo(VARCHAR, pkfield, tmonth, tyear, currency, VARCHAR);
+DROP PROCEDURE IF EXISTS saldo(
+                              VARCHAR, pkfield, tmonth, tyear, currency, VARCHAR
+);
 
 -- Создаем процедуру заново
-CREATE OR REPLACE PROCEDURE Saldo (
-                                  IN p_account_id   VARCHAR,      -- номер абонента
-                                  IN p_service_id   INTEGER,      -- услуга
-                                  IN p_start_month  INTEGER,      -- месяц начала периода
-                                  IN p_start_year   INTEGER,      -- год начала периода
-                                  OUT p_balance     NUMERIC,      -- остаток (долг/переплата)
-                                  OUT p_period_info VARCHAR       -- текстовое описание периода
+CREATE OR REPLACE PROCEDURE Saldo
+(
+IN p_account_id   VARCHAR, -- номер абонента
+IN p_service_id   INTEGER, -- услуга
+IN p_start_month  INTEGER, -- месяц начала периода
+IN p_start_year   INTEGER, -- год начала периода
+OUT p_balance     NUMERIC, -- остаток (долг/переплата)
+OUT p_period_info VARCHAR -- текстовое описание периода
 )
     LANGUAGE PLPGSQL
 AS $$
@@ -25086,26 +25872,29 @@ BEGIN
     p_period_info := p_start_year || '-' || LPAD(p_start_month::TEXT, 2, '0');
 
     -- Расчет остатка на начало периода
-    SELECT
-        COALESCE(
-                (SELECT SUM(N.Nachislsum)
-                 FROM Nachislsumma N
-                 WHERE N.Accountid = p_account_id
-                   AND N.Serviceid = p_service_id
-                   AND (N.Nachislyear < p_start_year
-                     OR (N.Nachislyear = p_start_year
-                         AND N.Nachislmonth < p_start_month))), 0
-        )
-            -
-        COALESCE(
-                (SELECT SUM(P.Paysum)
-                 FROM Paysumma P
-                 WHERE P.Accountid = p_account_id
-                   AND P.Serviceid = p_service_id
-                   AND (P.Payyear < p_start_year
-                     OR (P.Payyear = p_start_year
-                         AND P.Paymonth < p_start_month))), 0
-        )
+    SELECT COALESCE(
+                   (
+                   SELECT SUM(N.Nachislsum)
+                   FROM Nachislsumma N
+                   WHERE N.Accountid = p_account_id
+                     AND N.Serviceid = p_service_id
+                     AND (N.Nachislyear < p_start_year
+                       OR (N.Nachislyear = p_start_year
+                           AND N.Nachislmonth < p_start_month))
+                   ), 0
+           )
+               -
+           COALESCE(
+                   (
+                   SELECT SUM(P.Paysum)
+                   FROM Paysumma P
+                   WHERE P.Accountid = p_account_id
+                     AND P.Serviceid = p_service_id
+                     AND (P.Payyear < p_start_year
+                       OR (P.Payyear = p_start_year
+                           AND P.Paymonth < p_start_month))
+                   ), 0
+           )
     INTO p_balance;
 END;
 $$;
@@ -25116,7 +25905,7 @@ $$;
 
 DO $$
     DECLARE
-        balance NUMERIC;
+        balance     NUMERIC;
         period_info VARCHAR;
     BEGIN
         CALL Saldo('015527', 1, 3, 2024, balance, period_info);
@@ -25124,9 +25913,8 @@ DO $$
     END $$;
 
 ---сигнатура процедуры
-SELECT
-    proname,
-    pg_get_function_identity_arguments(oid) AS arguments
+SELECT proname,
+       pg_get_function_identity_arguments(oid) AS arguments
 FROM pg_proc
 WHERE proname = 'saldo';
 
@@ -25139,20 +25927,28 @@ WHERE proname = 'saldo';
 Скрипт создания таблицы и процедур будет выглядеть так:
 */
 
-CREATE TABLE Ftable (Fnum INT, Fvalue INT);
+CREATE TABLE Ftable
+(
+    Fnum   INT,
+    Fvalue INT
+);
 
 CREATE OR REPLACE PROCEDURE Factorial
-(Num IN INT, N_factorial OUT INT)
+(
+Num IN INT, N_factorial OUT INT
+)
 AS $$
 DECLARE
     Num_less_one INT;
     Vn_factorial INT;
 BEGIN
-    IF (Num < 0) THEN
+    IF (Num < 0)
+    THEN
         RETURN;
     END IF;
 
-    IF (Num = 1 OR Num = 0) THEN
+    IF (Num = 1 OR Num = 0)
+    THEN
         N_factorial := 1;
     ELSE
         Num_less_one := Num - 1;
@@ -25160,16 +25956,21 @@ BEGIN
         N_factorial := Vn_factorial * Num;
     END IF;
 END;
-$$ LANGUAGE PLPGSQL;
+$$
+    LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE PROCEDURE Factorialset (Minf INT, Maxf INT)
+CREATE OR REPLACE PROCEDURE Factorialset
+(
+Minf INT, Maxf INT
+)
 AS $$
 DECLARE
     i INT;
     f INT;
 BEGIN
     DELETE FROM Ftable;
-    IF (Maxf < Minf) THEN
+    IF (Maxf < Minf)
+    THEN
         RETURN;
     END IF;
     i := Minf;
@@ -25180,7 +25981,8 @@ BEGIN
             i := i + 1;
         END LOOP;
 END;
-$$ LANGUAGE PLPGSQL;
+$$
+    LANGUAGE PLPGSQL;
 
 /*
 Таблица Ftable предназначена для хранения значений факториала.
@@ -25285,14 +26087,15 @@ max_stack_depth в конфигурационном файле PostgreSQL
 Скрипт:
 */
 
-CREATE TABLE Saldo (
-                       Account VARCHAR(6) NOT NULL REFERENCES Abonent ON UPDATE CASCADE,
-                       Service Pkfield NOT NULL REFERENCES Services ON UPDATE CASCADE,
-                       Year Tyear,
-                       Begin_ostatok Currency,
-                       Nachisl Currency,
-                       Pay Currency,
-                       Result_ostatok Currency
+CREATE TABLE Saldo
+(
+    Account        VARCHAR(6) NOT NULL REFERENCES Abonent ON UPDATE CASCADE,
+    Service        Pkfield    NOT NULL REFERENCES Services ON UPDATE CASCADE,
+    Year           Tyear,
+    Begin_ostatok  Currency,
+    Nachisl        Currency,
+    Pay            Currency,
+    Result_ostatok Currency
 );
 
 /*
@@ -25438,7 +26241,7 @@ Begin_ostatok, Nach, Pay и Ostat), то происходит обновлени
 выполнить запрос:
 */
 
-CALL ResultSaldo (
+CALL ResultSaldo(
         '015527'::VARCHAR(6),
         1::Pkfield,
         2024::TYear,
@@ -25474,7 +26277,9 @@ ORDER BY Year;
 решена с помощью ХП. Скрипт создания процедуры будет таким:
 */
 
-CREATE PROCEDURE Del()
+CREATE PROCEDURE Del
+(
+)
     LANGUAGE PLPGSQL
 AS $$
 DECLARE
@@ -25487,7 +26292,8 @@ DECLARE
 BEGIN
     FOR A IN Cursacc
         LOOP
-            DELETE FROM Paysumma
+            DELETE
+            FROM Paysumma
             WHERE Accountid = A.Accountid;
         END LOOP;
 END $$;
@@ -25546,16 +26352,17 @@ RETURNING <список_столбцов> INTO <список_переменны�
 с секцией RETURNING, может выглядеть так:
 */
 
-CREATE PROCEDURE Save_Del (
-                          Req_id INT,
-                          OUT Raccountid VARCHAR(6),
-                          OUT Rdate DATE
+CREATE PROCEDURE Save_Del
+(
+Req_id INT, OUT Raccountid VARCHAR(6), OUT Rdate DATE
 )
     LANGUAGE PLPGSQL
 AS
 $$
 BEGIN
-    DELETE FROM Request WHERE Requestid = Req_id
+    DELETE
+    FROM Request
+    WHERE Requestid = Req_id
     RETURNING Accountid, Incomingdate
         INTO Raccountid, Rdate;
 END $$;
@@ -25564,10 +26371,9 @@ END $$;
 ИЛИ ТАК:
 */
 
-CREATE OR REPLACE PROCEDURE Save_Del (
-                                     Req_id INT,
-                                     OUT Raccountid VARCHAR(6),
-                                     OUT Rdate DATE
+CREATE OR REPLACE PROCEDURE Save_Del
+(
+Req_id INT, OUT Raccountid VARCHAR(6), OUT Rdate DATE
 )
     LANGUAGE PLPGSQL
 AS
@@ -25599,7 +26405,10 @@ CALL Save_Del(1::INT, NULL, NULL);
 SQLSTATE:
 */
 
-CREATE OR REPLACE PROCEDURE Add_P (LAccounttid VARCHAR(6), LStreetid Pkfield)
+CREATE OR REPLACE PROCEDURE Add_P
+(
+LAccounttid VARCHAR(6), LStreetid Pkfield
+)
     LANGUAGE PLPGSQL
 AS
 $$
@@ -25647,10 +26456,10 @@ CALL Add_P('111111', 3);
 CREATE TABLE Errors
 (
     Excepid   INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    Username  VARCHAR(20) DEFAULT USER NOT NULL,
-    Date_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    Proc      VARCHAR(10),   -- имя источника ошибки
-    Message   VARCHAR(80)    -- описание ошибки
+    Username  VARCHAR(20) DEFAULT USER              NOT NULL,
+    Date_time TIMESTAMP   DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    Proc      VARCHAR(10), -- имя источника ошибки
+    Message   VARCHAR(80)  -- описание ошибки
 );
 
 CREATE PROCEDURE Excep_inser
@@ -25733,7 +26542,6 @@ from Errors;
 действий пользователя или сбоев и дефектов, позволит разработчику
 БД достаточно быстро локализовать и устранить конкретную ошибку!!!
 */
-
 
 
 /*
@@ -25819,7 +26627,7 @@ FROM имя_функции(аргументы);
 или
 */
 
-SELECT имя_функции (аргументы);
+SELECT имя_функции(аргументы);
 
 /*
 Например, для вычисления длины окружности заданного радиуса:
@@ -25853,21 +26661,29 @@ FROM Pir2(2) AS "Длина окружности";
 по номерам:
 */
 
-CREATE FUNCTION S2c2(INTEGER, INTEGER)
+CREATE FUNCTION S2c2
+(
+INTEGER, INTEGER
+)
     RETURNS FLOAT
 AS $$
-SELECT POWER(COS(PI()/$1), 2) + POWER(SIN(PI()/$2), 2);
-$$ LANGUAGE SQL;
+SELECT POWER(COS(PI() / $1), 2) + POWER(SIN(PI() / $2), 2);
+$$
+    LANGUAGE SQL;
 
 /*
 или в смешанной форме так:
 */
 
-CREATE OR REPLACE FUNCTION S2c2(INT, P INT)
+CREATE OR REPLACE FUNCTION S2c2
+(
+INT, P INT
+)
     RETURNS FLOAT
 AS $$
-SELECT POWER(COS(PI()/$1), 2) + POWER(SIN(PI()/P), 2);
-$$ LANGUAGE SQL;
+SELECT POWER(COS(PI() / $1), 2) + POWER(SIN(PI() / P), 2);
+$$
+    LANGUAGE SQL;
 
 /*
 и даже так:
@@ -25884,7 +26700,7 @@ $$
     LANGUAGE SQL;
 
 select *
-    from S2c2(2,2);
+from S2c2(2, 2);
 
 /*
 Пример функции с выходным параметром:
@@ -25909,7 +26725,6 @@ SELECT S2c2(4, 4) AS "SIN(x)↑2 + COS(x)↑2";
 
 SELECT *
 FROM S2c2(4, 4) AS "SIN(x)↑2 + COS(x)↑2";
-
 
 
 /*
@@ -25965,11 +26780,15 @@ $$
 
 
 -- Функция возвращает ВСЕ платежи абонента
-CREATE OR REPLACE FUNCTION GetPayments(Acc VARCHAR(6))
-    RETURNS SETOF Paysumma  -- возвращает таблицу (много строк)
+CREATE OR REPLACE FUNCTION GetPayments
+(
+    Acc VARCHAR(6)
+)
+    RETURNS SETOF Paysumma -- возвращает таблицу (много строк)
     LANGUAGE SQL
 AS $$
-SELECT * FROM Paysumma
+SELECT *
+FROM Paysumma
 WHERE Accountid = Acc
 ORDER BY Paydate DESC;
 $$;
@@ -26047,22 +26866,35 @@ ALTER TABLE Paysumma
 ИЛИ НА РУССКОМ:
 */
 
-CREATE OR REPLACE FUNCTION Paydayweek_f(I_date DATE)
+CREATE OR REPLACE FUNCTION Paydayweek_f
+(
+    I_date DATE
+)
     RETURNS TEXT
 AS $$
-SELECT (CASE WHEN I_date IS NULL THEN 'Nodate'
-             ELSE
-                 CASE EXTRACT(DOW FROM I_date)
-                     WHEN 0 THEN 'Воскресенье'
-                     WHEN 1 THEN 'Понедельник'
-                     WHEN 2 THEN 'Вторник'
-                     WHEN 3 THEN 'Среда'
-                     WHEN 4 THEN 'Четверг'
-                     WHEN 5 THEN 'Пятница'
-                     WHEN 6 THEN 'Суббота'
-                 END
+SELECT (CASE
+            WHEN I_date IS NULL
+                THEN 'Nodate'
+            ELSE
+                CASE EXTRACT(DOW FROM I_date)
+                    WHEN 0
+                        THEN 'Воскресенье'
+                    WHEN 1
+                        THEN 'Понедельник'
+                    WHEN 2
+                        THEN 'Вторник'
+                    WHEN 3
+                        THEN 'Среда'
+                    WHEN 4
+                        THEN 'Четверг'
+                    WHEN 5
+                        THEN 'Пятница'
+                    WHEN 6
+                        THEN 'Суббота'
+                END
         END);
-$$ LANGUAGE SQL IMMUTABLE;
+$$
+    LANGUAGE SQL IMMUTABLE;
 
 ALTER TABLE Paysumma
     ADD Paydayweek VARCHAR(15)
@@ -26103,7 +26935,8 @@ $$
 */
 
 
-SELECT * FROM Op('136169', 50.00);
+SELECT *
+FROM Op('136169', 50.00);
 
 /*
 В случае наличия параметров OUT или INOUT, секцию RETURNS можно
@@ -26156,7 +26989,8 @@ $$
 Вызов:
 */
 
-SELECT * FROM Acc_sum('005488');
+SELECT *
+FROM Acc_sum('005488');
 
 
 /*
@@ -26255,22 +27089,28 @@ $$
 Примеры вызова:
 */
 
-SELECT * FROM Acc_df();
-SELECT * FROM Acc_df('126112');
+SELECT *
+FROM Acc_df();
+SELECT *
+FROM Acc_df('126112');
 
 /*
 Например:
 */
 
-CREATE OR REPLACE FUNCTION Listabonent(IN Pay Currency)
-    RETURNS TABLE (
-                      Laccountid VARCHAR(6),
-                      Lfio       VARCHAR(30),
-                      Ldate      DATE,
-                      Lsum       Currency,
-                      Lmonth     Tmonth,
-                      Lpay       Tyear
-                  )
+CREATE OR REPLACE FUNCTION Listabonent
+(
+    IN Pay Currency
+)
+    RETURNS TABLE
+            (
+                Laccountid VARCHAR(6),
+                Lfio       VARCHAR(30),
+                Ldate      DATE,
+                Lsum       Currency,
+                Lmonth     Tmonth,
+                Lpay       Tyear
+            )
 AS $$
 SELECT A.Accountid,
        A.Fio,
@@ -26278,7 +27118,7 @@ SELECT A.Accountid,
        P.Paysum,
        P.Paymonth,
        P.Payyear
-FROM Abonent A
+FROM Abonent                 A
          INNER JOIN Paysumma P USING (Accountid)
 WHERE P.Paysum > Pay;
 $$
@@ -26341,9 +27181,9 @@ FROM Ins_Sel(
              2::SMALLINT,
              3::SMALLINT,
              '720336'::VARCHAR(15)
-     ) I
-JOIN Street S ON I.Streetid = S.Streetid;
-     -- явное условие
+     )               I
+         JOIN Street S ON I.Streetid = S.Streetid;
+-- явное условие
 
 /*
 или с вводимыми значениями параметров:
@@ -26469,13 +27309,10 @@ $$
 метрики:
 */
 
-SELECT
-    GetAverage_abonent_by('YYYY-MM-DD') AS Daa,
-    GetAverage_abonent_by('YYYY-WW') AS Waa,
-    GetAverage_Abonent_by('YYYY-MM') AS Maa,
-    GetAverage_abonent_by('YYYY') AS Yaa;
-
-
+SELECT GetAverage_abonent_by('YYYY-MM-DD') AS Daa,
+       GetAverage_abonent_by('YYYY-WW')    AS Waa,
+       GetAverage_Abonent_by('YYYY-MM')    AS Maa,
+       GetAverage_abonent_by('YYYY')       AS Yaa;
 
 
 
@@ -26734,27 +27571,33 @@ RETURNS TABLE, поскольку это не относится к языку, 
 таблицу:
 */
 
-CREATE OR REPLACE FUNCTION List_abonent()
+CREATE OR REPLACE FUNCTION List_abonent
+(
+)
     RETURNS TABLE
             (
                 Laccountid VARCHAR(6),
-                Lfio VARCHAR(30),
-                Ldate DATE,
-                Lsum Currency,
-                Lmonth TMonth,
-                Lpay TYear
+                Lfio       VARCHAR(30),
+                Ldate      DATE,
+                Lsum       Currency,
+                Lmonth     TMonth,
+                Lpay       TYear
             )
 AS $$
 BEGIN
     RETURN QUERY
-        SELECT A.Accountid, A.Fio,
-               P.Paydate, P.Paysum,
-               P.Paymonth, P.Payyear
-        FROM Abonent A
-                 INNER JOIN Paysumma P USING(Accountid)
+        SELECT A.Accountid,
+               A.Fio,
+               P.Paydate,
+               P.Paysum,
+               P.Paymonth,
+               P.Payyear
+        FROM Abonent                 A
+                 INNER JOIN Paysumma P USING (Accountid)
         WHERE P.Paysum > 1500;
 END
-$$ LANGUAGE PLPGSQL;
+$$
+    LANGUAGE PLPGSQL;
 
 /*
 Пример вызова :
@@ -26777,7 +27620,8 @@ FROM List_abonent();
 Результат выполнения запроса
 */
 
-SELECT * FROM P_listab;
+SELECT *
+FROM P_listab;
 
 /*
 Вторым способом возвращения табличных данных на PL/pgSQL является
@@ -26790,25 +27634,34 @@ SELECT * FROM P_listab;
 т. е. что-то перебирается и что-то куда-то складывается:
 */
 
-CREATE OR REPLACE FUNCTION List_abonent(Pay Currency)
+CREATE OR REPLACE FUNCTION List_abonent
+(
+    Pay Currency
+)
     RETURNS TABLE
             (
                 Laccountid VARCHAR(6),
-                Lfio VARCHAR(30),
-                Ldate DATE,
-                Lsum Currency,
-                Lmonth TMonth,
-                Lpay TYear
+                Lfio       VARCHAR(30),
+                Ldate      DATE,
+                Lsum       Currency,
+                Lmonth     TMonth,
+                Lpay       TYear
             )
 AS $$
 DECLARE
     Var_r RECORD;
 BEGIN
-    FOR Var_r IN (SELECT A.Accountid, A.Fio, P.Paydate,
-                         P.Paysum, P.Paymonth, P.Payyear
-                  FROM Abonent A
-                           INNER JOIN Paysumma P USING(Accountid)
-                  WHERE P.Paysum > Pay)
+    FOR Var_r IN (
+                 SELECT A.Accountid,
+                        A.Fio,
+                        P.Paydate,
+                        P.Paysum,
+                        P.Paymonth,
+                        P.Payyear
+                 FROM Abonent                 A
+                          INNER JOIN Paysumma P USING (Accountid)
+                 WHERE P.Paysum > Pay
+                 )
         LOOP
             Laccountid := Var_r.Accountid;
             Lfio := Var_r.Fio;
@@ -26819,7 +27672,8 @@ BEGIN
             RETURN NEXT;
         END LOOP;
 END
-$$ LANGUAGE PLPGSQL;
+$$
+    LANGUAGE PLPGSQL;
 
 /*
 Оператор RETURN NEXT добавляет строку в возвращаемую таблицу,
@@ -26884,7 +27738,6 @@ SELECT *
 FROM List_abonent('МОСКОВСКОЕ ШОССЕ');
 
 
-
 /*
 В качестве следующего примера преобразуем ХП Factorial,
 вычисляющую факториал числа, в функцию F_factorial.
@@ -26893,21 +27746,26 @@ FROM List_abonent('МОСКОВСКОЕ ШОССЕ');
 */
 
 drop function F_factorial;
-CREATE OR REPLACE FUNCTION F_factorial (Num INT)
+CREATE OR REPLACE FUNCTION F_factorial
+(
+    Num INT
+)
     RETURNS NUMERIC
     LANGUAGE PLPGSQL
 AS $$
 DECLARE
     result NUMERIC;
 BEGIN
-    IF (Num < 0) THEN
+    IF (Num < 0)
+    THEN
         RETURN NULL;
     END IF;
-    IF (Num = 0 OR Num = 1) THEN
+    IF (Num = 0 OR Num = 1)
+    THEN
         RETURN 1;
     ELSE
-        CALL Factorial(Num, result);  -- ← вызов процедуры через CALL
-        RETURN result;                -- ← возвращаем полученное значение
+        CALL Factorial(Num, result); -- ← вызов процедуры через CALL
+        RETURN result; -- ← возвращаем полученное значение
     END IF;
 END;
 $$;
@@ -26941,12 +27799,15 @@ LIMIT F_factorial(3);
 следующий скрипт:
 */
 
-CREATE OR REPLACE FUNCTION Err_exception (OUT Rez INTEGER)
+CREATE OR REPLACE FUNCTION Err_exception
+(
+    OUT Rez INTEGER
+)
     LANGUAGE PLPGSQL
 AS $$
 DECLARE
-    Code TEXT;
-    Msg TEXT;
+    Code    TEXT;
+    Msg     TEXT;
     Context TEXT;
 BEGIN
     Rez = COUNT(*) FROM Abonent;
@@ -26962,12 +27823,15 @@ FROM Err_exception();
 SELECT Err_exception();
 
 
-CREATE OR REPLACE FUNCTION Err_exception (OUT Rez INT)
-LANGUAGE PLPGSQL
+CREATE OR REPLACE FUNCTION Err_exception
+(
+    OUT Rez INT
+)
+    LANGUAGE PLPGSQL
 AS $$
 DECLARE
-    Code TEXT;
-    Msg TEXT;
+    Code    TEXT;
+    Msg     TEXT;
     Context TEXT;
 BEGIN
     SELECT COUNT(*) FROM Abonent INTO Rez;
@@ -27067,9 +27931,12 @@ END $$;
 Проверочные запросы могут быть следующими:
 */
 
-SELECT * FROM List_abonent(NULL::Tmonth, NULL::Tyear);
-SELECT * FROM List_abonent(12::Tmonth, NULL::Tyear);
-SELECT * FROM List_abonent(13::Tmonth, 2022::Tyear);
+SELECT *
+FROM List_abonent(NULL::Tmonth, NULL::Tyear);
+SELECT *
+FROM List_abonent(12::Tmonth, NULL::Tyear);
+SELECT *
+FROM List_abonent(13::Tmonth, 2022::Tyear);
 
 /*
 Если функция определена с указанием входных параметров, то их
@@ -27120,7 +27987,8 @@ ALTER TABLE Executor
     ADD Info VARCHAR(40);
 
 
-DROP FUNCTION IF EXISTS Exec_Req();
+DROP FUNCTION IF EXISTS Exec_Req(
+);
 
 CREATE OR REPLACE FUNCTION Exec_Req
 (
@@ -27167,7 +28035,7 @@ BEGIN
         FROM Executor
         ORDER BY Executorid;
 END;
-    $$;
+$$;
 
 /*
 В начале скрипта с помощью запроса ALTER TABLE в таблицу Executor
@@ -27369,8 +28237,6 @@ FROM oborot_saldo_vedomost(
      );
 
 
-
-
 /*
 Использование параметризированного запроса позволит обеспечить
 более высокую гибкость при задании кода услуги:
@@ -27401,40 +28267,42 @@ DDL-скрипт функции Saldo_n для расчета и вывода з
 по заданной услуге:
 */
 
-CREATE OR REPLACE FUNCTION Saldo_n (
-                                   Argaccount VARCHAR(6),
-                                   Argserviceid Pkfield,
-                                   Argmonth Tmonth,
-                                   Argnyear Tyear
+CREATE OR REPLACE FUNCTION Saldo_n
+(
+Argaccount VARCHAR(6), Argserviceid Pkfield, Argmonth Tmonth, Argnyear Tyear
 )
-    RETURNS TABLE (
-                      Nachislmonth Tmonth,
-                      Nachislyear Tyear,
-                      Begin_ostatok Currency
-                  )
+    RETURNS TABLE
+            (
+                Nachislmonth  Tmonth,
+                Nachislyear   Tyear,
+                Begin_ostatok Currency
+            )
     LANGUAGE PLPGSQL
 AS
 $$
 BEGIN
     -- вычисление остатка на начало 1-го месяца периода
     -- сумма начислений на начало 1-го месяца периода
-    SELECT
-        (COALESCE((SELECT SUM(N.Nachislsum) SumNach
-                   FROM Nachislsumma N
-                   WHERE N.Accountid = Argaccount
-                     AND N.Serviceid = Argserviceid
-                     AND (N.Nachislyear < Argnyear
-                       OR (N.Nachislyear = Argnyear
-                           AND N.Nachislmonth < Argmonth))), 0)
-            -
-            -- сумма оплат на начало 1-го месяца периода
-         COALESCE((SELECT SUM(P.Paysum) SumPay
-                   FROM Paysumma P
-                   WHERE P.Accountid = Argaccount
-                     AND P.Serviceid = Argserviceid
-                     AND (P.Payyear < Argnyear
-                       OR (P.Payyear = Argnyear
-                           AND P.Paymonth < Argmonth))), 0))
+    SELECT (COALESCE((
+                     SELECT SUM(N.Nachislsum) SumNach
+                     FROM Nachislsumma N
+                     WHERE N.Accountid = Argaccount
+                       AND N.Serviceid = Argserviceid
+                       AND (N.Nachislyear < Argnyear
+                         OR (N.Nachislyear = Argnyear
+                             AND N.Nachislmonth < Argmonth))
+                     ), 0)
+        -
+        -- сумма оплат на начало 1-го месяца периода
+            COALESCE((
+                     SELECT SUM(P.Paysum) SumPay
+                     FROM Paysumma P
+                     WHERE P.Accountid = Argaccount
+                       AND P.Serviceid = Argserviceid
+                       AND (P.Payyear < Argnyear
+                         OR (P.Payyear = Argnyear
+                             AND P.Paymonth < Argmonth))
+                     ), 0))
     INTO Begin_ostatok;
 
     Nachislmonth = Argmonth;
@@ -27482,32 +28350,38 @@ DDL-скрипт функции Oborot_vedomost для расчета и выв�
 имеет следующий вид:
 */
 
-CREATE OR REPLACE FUNCTION Oborot_vedomost (
-                                           Argaccount VARCHAR(6),
-                                           Argserviceid Pkfield,
-                                           Argmonth Tmonth,
-                                           Argnyear Tyear
+CREATE OR REPLACE FUNCTION Oborot_vedomost
+(
+Argaccount VARCHAR(6), Argserviceid Pkfield, Argmonth Tmonth, Argnyear Tyear
 )
-    RETURNS TABLE (Nachisl Currency, Pay Currency)
+    RETURNS TABLE
+            (
+                Nachisl Currency,
+                Pay     Currency
+            )
     LANGUAGE PLPGSQL
 AS
 $$
 BEGIN
     SELECT
         -- сумма начислений за месяц
-        COALESCE((SELECT SUM(Na.Nachislsum)
-                  FROM Nachislsumma Na
-                  WHERE Na.Accountid = Argaccount
-                    AND Na.Serviceid = Argserviceid
-                    AND Na.Nachislyear = Argnyear
-                    AND Na.Nachislmonth = Argmonth), 0),
+        COALESCE((
+                 SELECT SUM(Na.Nachislsum)
+                 FROM Nachislsumma Na
+                 WHERE Na.Accountid = Argaccount
+                   AND Na.Serviceid = Argserviceid
+                   AND Na.Nachislyear = Argnyear
+                   AND Na.Nachislmonth = Argmonth
+                 ), 0),
         -- сумма плат за месяц
-        COALESCE((SELECT SUM(Pa.Paysum)
-                  FROM Paysumma Pa
-                  WHERE Pa.Accountid = Argaccount
-                    AND Pa.Serviceid = Argserviceid
-                    AND Pa.Payyear = Argnyear
-                    AND Pa.Paymonth = Argmonth), 0)
+        COALESCE((
+                 SELECT SUM(Pa.Paysum)
+                 FROM Paysumma Pa
+                 WHERE Pa.Accountid = Argaccount
+                   AND Pa.Serviceid = Argserviceid
+                   AND Pa.Payyear = Argnyear
+                   AND Pa.Paymonth = Argmonth
+                 ), 0)
     INTO Nachisl, Pay;
 
     RETURN NEXT;
@@ -27610,16 +28484,20 @@ FROM Oborot_saldo_vedomost(
      );
 
 
-
 /*
 Приведем текст DDL-скрипт функции, осуществляющей проверку того,
 является ли входная строка вещественным числом:
 */
 
 
-
-CREATE OR REPLACE FUNCTION Istr (Str VARCHAR(255))
-    RETURNS TABLE (Ir FLOAT)
+CREATE OR REPLACE FUNCTION Istr
+(
+    Str VARCHAR(255)
+)
+    RETURNS TABLE
+            (
+                Ir FLOAT
+            )
     LANGUAGE PLPGSQL
 AS
 $$
@@ -27648,13 +28526,20 @@ $$;
 Примеры вызова функции Istr:
 */
 
-SELECT * FROM Istr('25');
-SELECT * FROM Istr('25.54');
-SELECT * FROM Istr('-25.5');
-SELECT * FROM Istr((+123.45)::TEXT);
-SELECT * FROM Istr('SQL');
-SELECT * FROM Istr('');
-SELECT * FROM Istr(:Par);
+SELECT *
+FROM Istr('25');
+SELECT *
+FROM Istr('25.54');
+SELECT *
+FROM Istr('-25.5');
+SELECT *
+FROM Istr((+123.45)::TEXT);
+SELECT *
+FROM Istr('SQL');
+SELECT *
+FROM Istr('');
+SELECT *
+FROM Istr(:Par);
 
 /*
 Если входному параметру Str присвоить значение по умолчанию:
@@ -27662,8 +28547,14 @@ SELECT * FROM Istr(:Par);
 
 drop function Istr
 
-CREATE OR REPLACE FUNCTION Istr(Str VARCHAR(255) = 'Здравствуйте')
-    RETURNS TABLE (Ir FLOAT)
+CREATE OR REPLACE FUNCTION Istr
+(
+    Str VARCHAR(255) = 'Здравствуйте'
+)
+    RETURNS TABLE
+            (
+                Ir FLOAT
+            )
     LANGUAGE PLPGSQL
 AS
 $$
@@ -27686,7 +28577,8 @@ $$;
 то выполнять эту функцию можно без аргументов:
 */
 
-SELECT * FROM Istr();
+SELECT *
+FROM Istr();
 
 /*
 В этом варианте проверяется на соответствие регулярному выражению
@@ -27726,17 +28618,21 @@ PostgreSQL также поддерживает смешанную нотацию
 используя следующее определение функции:
 */
 
-CREATE FUNCTION Executed_or_not_executed (
-                                         A VARCHAR(6),
-                                         B VARCHAR(6),
-                                         U BOOLEAN DEFAULT FALSE
+CREATE FUNCTION Executed_or_not_executed
+(
+A VARCHAR(6), B VARCHAR(6), U BOOLEAN DEFAULT FALSE
 )
-    RETURNS TABLE (Acc VARCHAR(6), Incom DATE)
+    RETURNS TABLE
+            (
+                Acc   VARCHAR(6),
+                Incom DATE
+            )
     LANGUAGE plpgsql
 AS
 $$
 BEGIN
-    IF ($3) THEN
+    IF ($3)
+    THEN
         RETURN QUERY
             SELECT AccountId, Incomingdate
             FROM Request
@@ -27870,7 +28766,6 @@ DROP FUNCTION [IF EXISTS] имя_функции
 */
 
 
-
 /*
 Динамический SQL
 
@@ -27976,10 +28871,9 @@ INTO <имя_переменной1> [, <имя_переменной2> ...] [STRI
 синтаксиса оператора EXECUTE:
 */
 
-CREATE PROCEDURE Two_sample (
-                            Colname VARCHAR(50),
-                            TableName VARCHAR(50),
-                            OUT Maxim NUMERIC(15,2)
+CREATE PROCEDURE Two_sample
+(
+Colname VARCHAR(50), TableName VARCHAR(50), OUT Maxim NUMERIC(15, 2)
 )
     LANGUAGE PLPGSQL
 AS
@@ -28176,10 +29070,11 @@ CREATE DATABASE Images WITH OWNER 'postgres' ENCODING 'UTF8';
 
 
 drop table Abonentimages
-CREATE TABLE Abonentimages (
-                               ID_image INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                               Lshet VARCHAR(6),
-                               Image BYTEA
+CREATE TABLE Abonentimages
+(
+    ID_image INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    Lshet    VARCHAR(6),
+    Image    BYTEA
 );
 
 /*
@@ -28229,7 +29124,8 @@ FROM dblink('dbname=demo_one user=postgres password=************',
               created_at DATE
         );
 
-SELECT * FROM Photo();
+SELECT *
+FROM Photo();
 
 /*
 Далее представлены простые примеры выполнения динамического запроса
@@ -28264,15 +29160,16 @@ $$;
 DO
 $$
     DECLARE
-        Oneline VARCHAR(50);
-        Textfeld VARCHAR(10) = 'Fio';
+        Oneline   VARCHAR(50);
+        Textfeld  VARCHAR(10) = 'Fio';
         Tablename VARCHAR(10) = 'Abonent';
-        Ascdesc VARCHAR(4) = 'DESC';
-        Line VARCHAR(20);
-        Rec RECORD;
+        Ascdesc   VARCHAR(4)  = 'DESC';
+        Line      VARCHAR(20);
+        Rec       RECORD;
     BEGIN
         Oneline = 'SELECT ' || Textfeld || ' FROM ' || Tablename || ' ORDER BY 1 ';
-        IF (Ascdesc = 'DESC') THEN
+        IF (Ascdesc = 'DESC')
+        THEN
             Oneline = Oneline || 'DESC';
         END IF;
 
@@ -28303,15 +29200,16 @@ $$
 DO
 $$
     DECLARE
-        Oneline VARCHAR(50);
-        Textfeld VARCHAR(10) = 'Fio';
+        Oneline   VARCHAR(50);
+        Textfeld  VARCHAR(10) = 'Fio';
         Tablename VARCHAR(10) = 'Abonent';
-        Ascdesc VARCHAR(4) = 'DESC';
-        Cur REFCURSOR;
-        Rec RECORD;
+        Ascdesc   VARCHAR(4)  = 'DESC';
+        Cur       REFCURSOR;
+        Rec       RECORD;
     BEGIN
         Oneline = 'SELECT ' || Textfeld || ' FROM ' || Tablename || ' ORDER BY 1 ';
-        IF (Ascdesc = 'DESC') THEN
+        IF (Ascdesc = 'DESC')
+        THEN
             Oneline = Oneline || 'DESC';
         END IF;
         OPEN Cur FOR EXECUTE Oneline;
@@ -28351,14 +29249,17 @@ SELECT Fi_acc('005488');
 Результат выполнения:
 */
 
-CREATE OR REPLACE FUNCTION Err_exception (Tabl TEXT, OUT Rez INTEGER)
+CREATE OR REPLACE FUNCTION Err_exception
+(
+Tabl TEXT, OUT Rez INTEGER
+)
     LANGUAGE PLPGSQL
 AS $$
 DECLARE
     -- Переменные для хранения информации об ошибке
-    Code    TEXT;      -- Код SQLSTATE ошибки (например, '42P01')
-    Msg     TEXT;      -- Текст сообщения об ошибке
-    Context TEXT;      -- Контекст ошибки (строка, функция)
+    Code    TEXT; -- Код SQLSTATE ошибки (например, '42P01')
+    Msg     TEXT; -- Текст сообщения об ошибке
+    Context TEXT; -- Контекст ошибки (строка, функция)
 BEGIN
     -- ВНУТРЕННИЙ БЛОК (для перехвата ошибок)
     BEGIN
@@ -28385,9 +29286,10 @@ BEGIN
             -- GET STACKED DIAGNOSTICS - получает детальную информацию об ошибке
             -- Аналог: "Расскажи мне подробности о том, что пошло не так"
             GET STACKED DIAGNOSTICS
-                Code = RETURNED_SQLSTATE,    -- Код ошибки (например, '42P01')
-                Msg = MESSAGE_TEXT,           -- Текст ошибки
-                Context = PG_CONTEXT;         -- Где произошла ошибка
+                Code = RETURNED_SQLSTATE, -- Код ошибки (например, '42P01')
+                Msg = MESSAGE_TEXT, -- Текст ошибки
+                Context = PG_CONTEXT;
+            -- Где произошла ошибка
 
             -- Выводим информацию об ошибке в консоль
             -- Три % заменяются на Code, Msg, Context
@@ -28407,7 +29309,8 @@ DO $$
     DECLARE
         Rez INTEGER;
     BEGIN
-        SELECT E.Rez INTO Rez
+        SELECT E.Rez
+        INTO Rez
         FROM Err_exception('Abonent'::TEXT) AS E;
         RAISE NOTICE 'Result: %', Rez;
     END;
@@ -28426,7 +29329,8 @@ DO $$
     DECLARE
         Rez INTEGER;
     BEGIN
-        SELECT E.Rez INTO Rez
+        SELECT E.Rez
+        INTO Rez
         FROM Err_exception('Abonen'::TEXT) AS E;
         RAISE NOTICE 'Result: %', Rez;
     END;
@@ -28464,7 +29368,7 @@ $$;
 Выполнить ее можно, например с помощью следующего запроса:
 */
 
-SELECT One_Sample ('SELECT Fio FROM Abonent WHERE Accountid='::TEXT, $$'005488'$$::TEXT);
+SELECT One_Sample('SELECT Fio FROM Abonent WHERE Accountid='::TEXT, $$'005488'$$::TEXT);
 
 /*
 Результат выполнения:
@@ -28619,11 +29523,11 @@ $$
 */
 
 SELECT Insert_into_dynamic(
-               'executor',           -- имя таблицы
-               'gen_executor',       -- имя последовательности
-               'executorid',         -- имя столбца для id
-               'fio',                -- имя столбца для name
-               ARRAY['Иванов И. И.', 'Сидоров А. В.', 'Козлов К. С.']
+               'executor', -- имя таблицы
+               'gen_executor', -- имя последовательности
+               'executorid', -- имя столбца для id
+               'fio', -- имя столбца для name
+               ARRAY ['Иванов И. И.', 'Сидоров А. В.', 'Козлов К. С.']
        );
 
 SELECT proname, pg_get_function_identity_arguments(oid)
@@ -28662,7 +29566,6 @@ from Executor
   встроенный оператор должен подготавливаться на сервере каждый раз перед
   выполнением.
 */
-
 
 
 /*
@@ -28907,7 +29810,7 @@ UPDATE или DELETE (вне зависимости от количества с
    SQL-запросы и (или) процедурные операторы, реализующие бизнес-логику
    (например, проверка условий, запись в журнал, обновление связанных
    таблиц).
----привет
+
 Предусмотренное действие производится за счет выполнения определенной
 операции или последовательности операций, с помощью которых
 реализуется логика, требуемая для удовлетворения ограничений.
@@ -28986,7 +29889,7 @@ COMMIT; -- Проверка всех ограничений здесь
 в последнем случае они называются отложенными. Срабатывание ожидающего
 отложенного триггера можно вызвать немедленно, воспользовавшись
 командой SET CONSTRAINTS. Предполагается, что триггеры ограничений будут
-генерировать исключения при нарушении ограничений [12].
+генерировать исключения при нарушении ограничений.
 
 Логическое условие WHEN определяет, вызывать триггер или нет.
 В триггерах на уровне строк условия WHEN могут проверять старые
@@ -29033,10 +29936,6 @@ $$
 LANGUAGE PLPGSQL;
 
 Внутри триггерной функции доступны контекстные переменные TG_имя
-(табл. 10.1).
-
-Таблица 10.1
-
 Контекстные переменные в триггерных функциях
 
 | Имя                | Тип данных | Описание |
@@ -29093,17 +29992,23 @@ NULL.
 строки в таблице Abonent_1:
 */
 
-SELECT * INTO Abonent_1 FROM Abonent;
+SELECT *
+INTO Abonent_1
+FROM Abonent;
 
 -- Сначала необходимо добавить столбцы, хранящие временную метку
 -- и имя пользователя:
 
-ALTER TABLE Abonent_1 ADD D_update Timestamp;
-ALTER TABLE Abonent_1 ADD U_update TEXT;
+ALTER TABLE Abonent_1
+    ADD D_update Timestamp;
+ALTER TABLE Abonent_1
+    ADD U_update TEXT;
 
 -- Затем необходимо определить триггерную функцию:
 
-CREATE OR REPLACE FUNCTION Changes_abonent()
+CREATE OR REPLACE FUNCTION Changes_abonent
+(
+)
     RETURNS TRIGGER
 AS
 $$
@@ -29112,13 +30017,16 @@ BEGIN
     NEW.U_update = SESSION_USER;
     RETURN NEW;
 END
-$$ LANGUAGE PLPGSQL;
+$$
+    LANGUAGE PLPGSQL;
 
 -- И, наконец, создать сам триггер:
 
 CREATE OR REPLACE TRIGGER Changes_on_abonent
-    BEFORE INSERT OR UPDATE ON Abonent_1
-    FOR EACH ROW EXECUTE FUNCTION Changes_abonent();
+    BEFORE INSERT OR UPDATE
+    ON Abonent_1
+    FOR EACH ROW
+EXECUTE FUNCTION Changes_abonent();
 
 /*
 Во время своего выполнения функция Changes_abonent получает копию
@@ -29129,7 +30037,8 @@ CREATE OR REPLACE TRIGGER Changes_on_abonent
 Проверим работу триггера при обновлении данных следующим запросом:
 */
 
-UPDATE Abonent_1 SET Phone = '326127'
+UPDATE Abonent_1
+SET Phone = '326127'
 WHERE Accountid = '136159';
 
 /*
@@ -29137,7 +30046,7 @@ WHERE Accountid = '136159';
 */
 
 INSERT INTO Abonent_1 (Accountid, Fio, Streetid, Houseno, Flatno, Phone)
-VALUES('111111', 'Ушаков М. И.', 7, 4, 2, '267218');
+VALUES ('111111', 'Ушаков М. И.', 7, 4, 2, '267218');
 
 /*
 Результат просмотра некоторых столбцов обновленной таблицы Abonent_1
@@ -29147,10 +30056,2517 @@ VALUES('111111', 'Ушаков М. И.', 7, 4, 2, '267218');
 SELECT Accountid, Fio, Phone, D_update, U_update
 FROM Abonent_1;
 
+/*
+Синтаксис запроса на создание триггера DML на уровне оператора:
+
+CREATE [ OR REPLACE ] TRIGGER имя
+{ BEFORE | AFTER } { событие }
+ON имя_таблицы
+[ REFERENCING { { OLD | NEW } TABLE [ AS ] имя_переходной_таблицы } [ ... ] ]
+FOR EACH STATEMENT
+[ WHEN (условие) ]
+EXECUTE FUNCTION имя_функции ();
+
+где событие:
+- INSERT;
+- UPDATE [ OF имя_столбца [, ...] ];
+- DELETE;
+- TRUNCATE.
+
+Ключевое слово REFERENCING непосредственно предшествует объявлению
+одного или двух имен, по которым можно будет обращаться к переходным
+отношениям с образом-до-изменения или с образом-после-изменения,
+образуемым при выполнении целевого оператора.
+
+Секция FOR EACH STATEMENT определяет, что триггерная функция будет
+выполняться для SQL-оператора.
+
+В этом случае должна быть создана переходная таблица, на которую можно
+ссылаться.
+
+Для триггеров AFTER STATEMENT доступны контекстные переменные
+к переходным таблицам OLD TABLE (для UPDATE, DELETE) и NEW TABLE
+(для INSERT, UPDATE). Эти переменные предоставляют доступ ко всем
+строкам таблицы, обрабатываемым операцией. В OLD будет их старое
+состояние, а в NEW — новое.
+
+Триггеры на уровне оператора также могут содержать условие WHEN,
+хотя для них это не столь полезно, так как в этом условии нельзя
+ссылаться на какие-либо значения в таблице.
+
+BEFORE-триггер срабатывает до операции. При этом возвращаемое
+значение игнорируется.
+
+Триггерная функция для триггера на уровне оператора выполняется
+единожды.
+
+Рассмотрим еще один пример триггера для логирования изменений данных
+таблицы Abonent_1:
+*/
+
+DROP TABLE IF EXISTS Abonent_1 CASCADE;
+SELECT *
+INTO Abonent_1
+FROM Abonent;
+
+/*
+но теперь будем сохранять информацию не в самой таблице Abonent_1,
+а в новой таблице, специально созданной для логирования, Abonent_audit.
+Запрос на создание этой таблицы следующий:
+*/
+
+CREATE TABLE Abonent_audit
+(
+    IZ           CHAR(1) NOT NULL,
+    User_changed TEXT    NOT NULL,
+    Time_stamp   TIMESTAMP,
+    Accountid    VARCHAR(6),
+    Streetid     Pkfield,
+    Houseno      SMALLINT,
+    Flatno       SMALLINT,
+    Fio          VARCHAR(20),
+    Phone        VARCHAR(15)
+);
+
+
+/*
+Запрос на создание триггерной функции:
+*/
+DROP TRIGGER IF EXISTS Audit_abonent_insert ON Abonent_1;
+DROP TRIGGER IF EXISTS Audit_abonent_update ON Abonent_1;
+DROP TRIGGER IF EXISTS Audit_abonent_delete ON Abonent_1;
+
+DROP FUNCTION IF EXISTS Audit_abonent(
+);
+
+CREATE OR REPLACE FUNCTION Audit_abonent
+(
+)
+    RETURNS TRIGGER
+    LANGUAGE PLPGSQL
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT'
+    THEN
+        INSERT INTO Abonent_audit (IZ, User_changed, Time_stamp, Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+        SELECT 'I',
+               SESSION_USER,
+               NOW(),
+               Nt.accountid,
+               Nt.streetid,
+               Nt.houseno,
+               Nt.flatno,
+               Nt.fio,
+               Nt.phone
+        FROM New_table AS Nt;
+    ELSIF TG_OP = 'UPDATE'
+    THEN
+        INSERT INTO Abonent_audit (IZ, User_changed, Time_stamp, Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+        SELECT 'U',
+               SESSION_USER,
+               NOW(),
+               Nt.accountid,
+               Nt.streetid,
+               Nt.houseno,
+               Nt.flatno,
+               Nt.fio,
+               Nt.phone
+        FROM New_table AS Nt;
+    ELSIF TG_OP = 'DELETE'
+    THEN
+        INSERT INTO Abonent_audit (IZ, User_changed, Time_stamp, Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+        SELECT 'D',
+               SESSION_USER,
+               NOW(),
+               Ot.accountid,
+               Ot.streetid,
+               Ot.houseno,
+               Ot.flatno,
+               Ot.fio,
+               Ot.phone
+        FROM Old_table AS Ot;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+
+/*Проверка количества колонок*/
+SELECT column_name, ordinal_position
+FROM information_schema.columns
+WHERE table_name = 'abonent_audit'
+ORDER BY ordinal_position;
+
+SELECT column_name, ordinal_position
+FROM information_schema.columns
+WHERE table_name = 'abonent_1'
+ORDER BY ordinal_position;
+
+/*
+Поскольку в триггерной функции используются переходные таблицы,
+вместо одного триггера на все три события обновления данных
+необходимо создать три отдельных триггера для запросов INSERT,
+UPDATE и DELETE:
+*/
+
+CREATE OR REPLACE TRIGGER Audit_abonent_insert
+    AFTER INSERT
+    ON Abonent_1
+    REFERENCING NEW TABLE AS New_table
+    FOR EACH STATEMENT
+EXECUTE FUNCTION Audit_abonent();
+
+CREATE OR REPLACE TRIGGER Audit_abonent_update
+    AFTER UPDATE
+    ON Abonent_1
+    REFERENCING NEW TABLE AS New_table
+    FOR EACH STATEMENT
+EXECUTE FUNCTION Audit_abonent();
+
+CREATE OR REPLACE TRIGGER Audit_abonent_delete
+    AFTER DELETE
+    ON Abonent_1
+    REFERENCING OLD TABLE AS Old_table
+    FOR EACH STATEMENT
+EXECUTE FUNCTION Audit_abonent();
+
+/*
+Проверим работу триггеров, выполнив следующие запросы (рис. 10.2 и 10.3),
+предварительно удалив результаты предыдущего примера:
+*/
+
+INSERT INTO Abonent_1 (Accountid, Fio, Streetid, Houseno, Flatno, Phone)
+VALUES ('111111', 'Ушаков М. И.', 7, 4, 2, '267218');
+
+UPDATE Abonent_1
+SET Phone = '326127'
+WHERE Accountid = '136159';
+
+DELETE
+FROM Abonent_1
+WHERE Accountid = '111111';
+
+/*
+Просмотр результатов:
+*/
+
+SELECT Iz,
+       User_changed AS User,
+       Time_stamp,
+       Accountid    AS Acc,
+       Streetid     AS St,
+       Houseno      AS Hn,
+       Flatno       AS Fn,
+       Fio,
+       Phone
+FROM Abonent_audit;
+
+/*
+Рассмотрим пример триггера для одного события. Пусть бизнес-правило
+требует перед удалением строк в таблице Executor_1:
+*/
+
+SELECT *
+INTO Executor_1
+FROM Executor;
+
+/*
+Сохранять в таблице History информацию о ФИО всех исполнителей
+ремонтных заявок и дате, до которой данная информация была актуальна.
+Скрипт триггера Executor_Delete, реализующего это бизнес-правило,
+будет выглядеть следующим образом:
+*/
+
+-- Создание таблицы
+-- =============================================================================
+-- 1. СОЗДАНИЕ ТАБЛИЦЫ History (для хранения истории)
+-- =============================================================================
+
+-- Команда CREATE TABLE создаёт новую таблицу в базе данных
+CREATE TABLE History
+(
+    -- Объявление колонки Id: целое число, будет автоматически генерироваться
+    -- GENERATED BY DEFAULT AS IDENTITY означает, что значение можно указать
+    -- вручную, но если не указать, PostgreSQL сгенерирует его автоматически
+    -- PRIMARY KEY означает, что эта колонка - уникальный идентификатор строки
+    Id            INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+
+    -- Колонка Executor_list: тип TEXT (текст неограниченной длины)
+    -- Будет хранить список ФИО всех исполнителей, разделённых запятыми
+    Executor_list TEXT,
+
+    -- Колонка Fixdate: тип TIMESTAMP (дата и время с точностью до миллисекунд)
+    -- Будет хранить момент времени, когда была создана эта запись истории
+    Fixdate       TIMESTAMP
+);
+
+-- =============================================================================
+-- 2. СОЗДАНИЕ ТРИГГЕРНОЙ ФУНКЦИИ F_history
+-- =============================================================================
+
+-- CREATE OR REPLACE FUNCTION - создаёт новую функцию или заменяет существующую
+-- F_history - имя функции
+-- () - функция не принимает входных параметров
+-- RETURNS TRIGGER - функция возвращает тип TRIGGER (обязательно для триггера)
+CREATE OR REPLACE FUNCTION F_history
+(
+)
+    RETURNS TRIGGER
+AS
+$$
+-- Начало тела функции (обозначается символами "$_$")
+DECLARE
+    -- Блок объявления локальных переменных (видим только внутри функции)
+    -- Line - строковая переменная для накопления списка ФИО исполнителей
+    -- TEXT - тип переменной (текст неограниченной длины)
+    Line TEXT;
+
+-- Fiocursor - объявление курсора (итератора по строкам результата запроса)
+-- CURSOR FOR - ключевые слова, означающие "курсор для запроса"
+-- SELECT Fio FROM Executor_1 - запрос, который выбирает все ФИО из таблицы
+-- Важно: на момент работы курсора удаление ещё НЕ ПРОИЗОШЛО (BEFORE DELETE)
+    Fiocursor CURSOR FOR SELECT Fio
+                         FROM Executor_1;
+
+BEGIN
+    -- Начало исполняемой части функции
+
+-- Присваивание переменной Line пустой строки
+-- Инициализация перед циклом, чтобы не было "мусора" от предыдущих вызовов
+    Line := '';
+
+    -- FOR i IN Fiocursor LOOP ... END LOOP - цикл по всем строкам курсора
+    -- На каждой итерации переменная i получает следующую строку результата
+    -- i.Fio - обращение к колонке Fio в текущей строке курсора
+    FOR i IN Fiocursor
+        LOOP
+        -- Конкатенация (склеивание) строк:
+        -- Line := Line || i.Fio || ', '
+        -- Берём текущее значение Line, добавляем ФИО, затем запятую и пробел
+        -- Результат сохраняем обратно в Line
+        -- Пример: после первой итерации: "Иванов И.И., "
+        --          после второй: "Иванов И.И., Петров П.П., "
+            Line := Line || i.Fio || ', ';
+        END LOOP;
+    -- Конец цикла
+
+-- INSERT INTO History - команда вставки новой строки в таблицу History
+-- (Executor_list, Fixdate) - перечисление колонок, в которые вставляем
+-- VALUES (Line, CURRENT_TIMESTAMP) - значения для вставки:
+--   Line - накопленный список ФИО (например, "Иван, Пётр, ")
+--   CURRENT_TIMESTAMP - встроенная функция, возвращает текущие дату и время
+    INSERT INTO History (Executor_list, Fixdate)
+    VALUES (Line, CURRENT_TIMESTAMP);
+
+    -- RETURN NULL - возврат значения из триггерной функции
+-- NULL означает "никакого изменения строки"
+-- Для BEFORE DELETE STATEMENT возвращаемое значение ИГНОРИРУЕТСЯ
+-- Удаление ВСЁ РАВНО ПРОИЗОЙДЁТ после работы триггера
+    RETURN NULL;
+END;
+-- Конец тела функции
+$$
+-- LANGUAGE PLPGSQL - указывает, что функция написана на языке PL/pgSQL
+    LANGUAGE PLPGSQL;
+
+-- =============================================================================
+-- 3. СОЗДАНИЕ ТРИГГЕРА Executor_delete
+-- =============================================================================
+
+-- CREATE OR REPLACE TRIGGER - создаёт новый триггер или заменяет существующий
+-- Executor_delete - имя триггера
+-- BEFORE DELETE - момент срабатывания: ПЕРЕД выполнением операции DELETE
+-- ON Executor_1 - триггер привязан к таблице Executor_1
+-- EXECUTE FUNCTION F_history() - при срабатывании вызвать функцию F_history()
+CREATE OR REPLACE TRIGGER Executor_delete
+    BEFORE DELETE
+    ON Executor_1
+EXECUTE FUNCTION F_history();
+
+-- =============================================================================
+-- 4. КАК ЭТО ВСЁ РАБОТАЕТ ВМЕСТЕ (ПОШАГОВО)
+-- =============================================================================
+
+/*
+ШАГ 1. Пользователь выполняет команду:
+       DELETE FROM Executor_1 WHERE Executorid = 6;
+
+ШАГ 2. PostgreSQL видит, что к таблице Executor_1 привязан триггер Executor_delete,
+       который должен сработать BEFORE DELETE.
+
+ШАГ 3. Срабатывает триггер, вызывается функция F_history().
+
+ШАГ 4. Внутри функции F_history():
+       4.1. Объявляется курсор Fiocursor, который читает ВСЕ ФИО из Executor_1
+            (удаление ещё НЕ выполнено, поэтому видны все строки)
+       4.2. Переменной Line присваивается пустая строка
+       4.3. Цикл проходит по каждой строке из Executor_1
+            Каждое ФИО добавляется в Line с запятой и пробелом
+            Пример: "Иванов И.И., Петров П.П., Сидоров С.С., "
+       4.4. В таблицу History вставляется одна строка:
+            - Executor_list = полученный список ФИО
+            - Fixdate = текущая дата и время
+       4.5. Функция возвращает NULL
+
+ШАГ 5. PostgreSQL завершает работу триггера и ВЫПОЛНЯЕТ исходную операцию DELETE
+       (удаляет строку(и) из Executor_1).
+
+ШАГ 6. Транзакция завершается (COMMIT или ROLLBACK зависит от внешней транзакции).
+       Если будет ROLLBACK, то:
+       - Данные в Executor_1 восстановятся
+       - Строка в History НЕ ОТКАТИТСЯ? НЕТ, ОТКАТИТСЯ! Триггер - часть транзакции.
+
+ВАЖНЫЕ ОСОБЕННОСТИ:
+- Триггер срабатывает 1 раз независимо от количества удаляемых строк
+- В History сохраняется ВСЯ таблица Executor_1, а не только удаляемые строки
+- Триггер не может отменить удаление (RETURN NULL не работает как отмена)
+- Вся операция (логирование + удаление) выполняется в ОДНОЙ транзакции
+*/
+
+-- Проверка триггера
+DELETE
+FROM Executor_1
+WHERE Executorid = 6;
+
+-- Просмотр результатов:
+SELECT *
+FROM Executor_1;
+SELECT *
+FROM History;
+
+/*
+
+В СУБД основным средством реализации возможностей строчных триггеров
+по отслеживанию целостности данных являются контекстные переменные
+OLD и NEW. Переменные имеют составной тип и в основном используются
+в таком виде:
+
+{ OLD | NEW }.столбец
+
+Контекстная переменная OLD ссылается в строке на текущие или предыдущие
+значения, обновляемые или удаляемые соответственно запросами UPDATE
+или DELETE в таблице, для которой создан триггер. Таким образом,
+переменная OLD не используется при вставке, так как старого значения
+не существует.
+
+Контекстная переменная NEW ссылается в строке на новые значения,
+которые будут вставлены или обновлены соответственно запросами INSERT
+или UPDATE для таблицы, для которой создан триггер. Переменная NEW
+не используется при удалении, так как новое значение не создается.
+
+Эти переменные могут быть использованы, в частности, для:
+
+- реализации получения автоинкрементных значений;
+- получения значений по умолчанию;
+- проверки входных данных и, при необходимости, их изменения;
+- получения значений столбцов для модификации других столбцов.
+
+Контекстные переменные OLD и NEW могут использоваться в триггерах
+для нескольких событий. Но при этом могут возникнуть ситуации, когда
+для одного события, на которое реагирует триггер, контекстная переменная
+может использоваться, а для другого — нет. В этом случае ссылка
+на столбец NEW в контексте удаления или на столбец OLD в контексте
+добавления ошибкой не является — просто будет возвращен NULL.
+
+Простейший триггер для автоматического формирования значения первичного
+ключа перед вставкой новой строки, например в таблицу Executor,
+можно определить так:
+*/
+
+CREATE OR REPLACE FUNCTION Executor_Insert
+(
+)
+    RETURNS TRIGGER
+AS $$
+BEGIN
+    IF (NEW.Executorid IS NULL)
+    THEN
+        NEW.Executorid = NEXTVAL('Gen_Executor');
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+-- Создание триггера
+CREATE OR REPLACE TRIGGER Insert_Executor
+    BEFORE INSERT
+    ON Executor
+    FOR EACH ROW
+EXECUTE FUNCTION Executor_Insert();
+
+-- Проверка триггера
+INSERT INTO Executor
+VALUES (NULL, 'Иванов И. И.');
+
+select *
+from Executor
+
+         /*
+         Здесь контекстная переменная NEW используется в качестве имени таблицы
+         (Executor), в которую вставляется строка. Если вставка очередной строки
+         в таблицу Executor производится запросом INSERT без указания значения
+         первичного ключа, то оно будет генерироваться автоматически.
+         */
+
+
+/*
+Приведем пример триггерной функции для получения информации о контексте
+выполнения операций с таблицей Abonent_1:
+*/
+
+         DROP TABLE IF EXISTS Abonent_1;
+SELECT *
+INTO Abonent_1
+FROM Abonent;
+
+-- триггерная функция
+CREATE OR REPLACE FUNCTION Context
+(
+)
+    RETURNS TRIGGER
+AS $$
+DECLARE
+    Rec RECORD;
+    Str TEXT := '';
+BEGIN
+    IF TG_LEVEL = 'ROW'
+    THEN
+        CASE TG_OP
+            WHEN 'DELETE'
+                THEN Rec := OLD; Str := OLD::TEXT;
+            WHEN 'UPDATE'
+                THEN Rec := NEW; Str := OLD || ' => ' || NEW;
+            WHEN 'INSERT'
+                THEN Rec := NEW; Str := NEW::TEXT;
+        END CASE;
+    END IF;
+    RAISE NOTICE '% % % % %', TG_TABLE_NAME, TG_WHEN, TG_OP, TG_LEVEL, Str;
+    RETURN Rec;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+В данном примере используется простая форма оператора множественного
+выбора CASE.
+
+Функция Context может быть использована как в триггере на уровне строки,
+так и в триггере на уровне оператора. Рассмотрим оба случая.
+
+Первый случай, триггер на уровне строки. Проверка TG_LEVEL = 'ROW'
+гарантирует, что оператор CASE будет выполнен только для FOR EACH ROW
+триггера. Оператор CASE определяет в зависимости от выполняемого запроса,
+какие данные будут записаны в переменные Rec и Str. Переменная Rec
+необходима для того, чтобы триггер не повлиял на результат выполнения
+запроса.
+
+1. Для INSERT возвращается переменная NEW. Запрос не отменяется,
+   а добавляемые данные не изменяются.
+2. Для UPDATE возвращается переменная NEW. Запрос не отменяется,
+   а данные будут сохранены те, какие указаны в запросе UPDATE.
+3. Для DELETE возвращается переменная OLD. Запрос DELETE отменяется,
+   если вернуть из триггера NULL. Чтобы этого избежать, вместо
+   переменной NEW возвращается переменная OLD, поскольку в DELETE-
+   триггерах переменная NEW имеет значение NULL.
+
+Переменная Str используется для вывода данных, связанных с соответствующим
+запросом.
+
+1. Для INSERT выводится добавляемая строка.
+2. Для UPDATE выводятся предыдущая и новая строка.
+3. Для DELETE выводится удаленная строка.
+
+В конце функции с помощью оператора RAISE NOTICE выводятся значения
+контекстных переменных, а также переменной Str.
+
+Второй случай, триггер на уровне оператора. Поскольку проверка
+TG_LEVEL = 'ROW' никогда не верна, оператор CASE не выполняется,
+а переменные Rec и Str остаются со своими значениями по умолчанию,
+NULL и пустой строкой соответственно.
+
+В конце функции с помощью оператора RAISE NOTICE выводятся значения
+контекстных переменных, а также переменной Str. Как было сказано,
+в этот момент переменная Str содержит пустую строку, поэтому она
+будет не выводиться.
+
+Создадим с помощью этой функции четыре триггера:
+
+1) BEFORE ... FOR EACH STATEMENT;
+2) AFTER ... FOR EACH STATEMENT;
+3) BEFORE ... FOR EACH ROW;
+4) AFTER ... FOR EACH ROW.
+
+Каждый триггер обрабатывает три запроса: INSERT, UPDATE и DELETE.
+
+Запросы на создание триггеров:
+*/
+
+CREATE OR REPLACE TRIGGER Before_statement
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON Abonent_1
+    FOR EACH STATEMENT
+EXECUTE FUNCTION Context();
+
+CREATE OR REPLACE TRIGGER After_statement
+    AFTER INSERT OR UPDATE OR DELETE
+    ON Abonent_1
+    FOR EACH STATEMENT
+EXECUTE FUNCTION Context();
+
+CREATE OR REPLACE TRIGGER Before_row
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON Abonent_1
+    FOR EACH ROW
+EXECUTE FUNCTION Context();
+
+CREATE OR REPLACE TRIGGER After_row
+    AFTER INSERT OR UPDATE OR DELETE
+    ON Abonent_1
+    FOR EACH ROW
+EXECUTE FUNCTION Context();
+
+/*
+Добавим нового абонента:
+*/
+
+INSERT INTO Abonent_1
+VALUES ('111111', 3, 4, 1, 'Иванов И. И.', NULL);
+
+/*
+Вывод триггеров:
+
+abonent_1 BEFORE INSERT STATEMENT:
+abonent_1 BEFORE INSERT ROW: (111111,3,4,1,"Иванов И. И.",)
+abonent_1 AFTER INSERT ROW: (111111,3,4,1,"Иванов И.И.",)
+abonent_1 AFTER INSERT STATEMENT:
+
+Изменим номер телефона:
+*/
+
+UPDATE Abonent_1
+SET Phone = '326127'
+WHERE Accountid = '111111';
+
+/*
+Вывод триггеров:
+
+abonent_1 BEFORE UPDATE STATEMENT:
+abonent_1 BEFORE UPDATE ROW: (111111,3,,,,) =>
+                         (111111,3,,,,,326127)
+abonent_1 BEFORE UPDATE ROW: (111111,3,4,1,"Иванов И. И.",) =>
+                         (111111,3,4,1,"Иванов И. И.",326127)
+abonent_1 AFTER UPDATE ROW: (111111,3,,,,) =>
+                        (111111,3,,,,,326127)
+abonent_1 AFTER UPDATE ROW: (111111,3,4,1,"Иванов И. И.",) =>
+                        (111111,3,4,1,"Иванов И. И.",326127)
+abonent_1 AFTER UPDATE STATEMENT:
+
+Удалим добавленного абонента:
+*/
+
+DELETE
+FROM Abonent_1
+WHERE Accountid = '111111';
+
+/*
+Вывод триггеров:
+
+abonent_1 BEFORE DELETE STATEMENT:
+abonent_1 BEFORE DELETE ROW: (111111,3,,,,,326127)
+abonent_1 BEFORE DELETE ROW: (111111,3,4,1,"Иванов И. И.",326127)
+abonent_1 AFTER DELETE ROW: (111111,3,,,,,326127)
+abonent_1 AFTER DELETE ROW: (111111,3,4,1,"Иванов И. И.",326127)
+abonent_1 AFTER DELETE STATEMENT:
+
+В отличие от триггеров на уровне строки, триггеры на уровне оператора
+срабатывают, даже если запрос затронул ноль строк. Убедимся в этом:
+*/
+
+UPDATE Abonent_1
+SET Phone = '326127'
+WHERE Accountid = '111112';
+
+/*
+Вывод триггеров:
+
+Abonent_1 BEFORE UPDATE STATEMENT:
+Abonent_1 AFTER UPDATE STATEMENT:
+
+Как следует из вывода триггеров, сработали только триггеры на уровне
+оператора.
+
+При нарушении ограничения триггер должен формировать информативное
+сообщение об исключительной ситуации.
+
+Рассмотрим пример создания триггера, контролирующего вставку строк
+в таблицу Request_1:
+*/
+
+DROP TABLE IF EXISTS Request_1;
+SELECT *
+INTO Request_1
+FROM Request;
+
+/*
+Допустим, существует такое бизнес-ограничение, по которому каждый
+исполнитель может быть назначен на выполнение не более трех ремонтных
+заявок в день. При попытке зарегистрировать для исполнителя "лишнюю"
+ремонтную заявку должно выдаваться сообщение. Скрипт создания триггера
+для решения данной задачи:
+*/
+
+-- Создадим функцию, которая проверяет количество заявок на исполнителя
+-- в день
+CREATE OR REPLACE FUNCTION Check_handler_requests_limit
+(
+)
+    RETURNS TRIGGER AS $$
+DECLARE
+    Request_count INT;
+BEGIN
+    -- Считаем количество заявок, назначенных исполнителю на текущий день
+    SELECT COUNT(*)
+    INTO Request_count
+    FROM Request_1
+    WHERE Executorid = NEW.Executorid
+      AND Incomingdate = CURRENT_DATE;
+
+    RAISE NOTICE 'Текущее количество заявок для исполнителя %: %',
+        NEW.Executorid, Request_count;
+
+    -- Если количество заявок больше или равно 3, выбрасываем исключение
+    IF Request_count >= 3
+    THEN
+        RAISE EXCEPTION 'У исполнителя % уже есть 3 заявки, назначенных
+                         на сегодня', NEW.Executorid;
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE plpgsql;
+
+-- Создаем триггер, который вызывает функцию перед вставкой или
+-- обновлением
+CREATE OR REPLACE TRIGGER Check_handler_requests_limit_trigger
+    BEFORE INSERT OR UPDATE
+    ON Request_1
+    FOR EACH ROW
+EXECUTE FUNCTION Check_handler_requests_limit();
+
+/*
+Созданный триггер Check_handler_requests_limit_trigger при попытке
+назначить исполнителю на выполнение более трех заявок в день вызывает
+исключение и предотвращает вставку строки в таблицу Request_1.
+*/
+
+
+/*
+Для проверки триггера выполним следующие запросы на добавление
+четырех ремонтных заявок, назначенных исполнителю с кодом 1,
+например зарегистрированных на текущую дату:
+*/
+
+ALTER SEQUENCE Gen_request RESTART WITH 24;
+SELECT *
+FROM Request_1;
+
+INSERT INTO Request_1
+VALUES (NEXTVAL('Gen_request'), '005488', 1, 1, CURRENT_DATE, NULL, FALSE);
+
+INSERT INTO Request_1
+VALUES (NEXTVAL('Gen_request'), '443690', 1, 2, CURRENT_DATE, NULL, FALSE);
+
+INSERT INTO Request_1
+VALUES (NEXTVAL('GEN_REQUEST'), '136160', 1, 3, CURRENT_DATE, NULL, FALSE);
+
+INSERT INTO Request_1
+VALUES (NEXTVAL('Gen_REQUEST'), '080613', 1, 4, CURRENT_DATE, NULL, FALSE);
+
+/*
+Результат выполнения:
+
+Текущее количество заявок для исполнителя 1: 3
+SQL Error [P00001]: ОШИБКА: У исполнителя 1 уже есть 3 заявки,
+назначенных на сегодня
+Где: функция PL/pgSQL check_handler_requests_limit(), строка 14,
+оператор RAISE
+
+Просмотр таблицы:
+*/
+
+SELECT *
+FROM Request_1;
+
+/*
+Рассмотрим пример триггера для нескольких событий, реализующего
+бизнес-правило вида активатора операций.
+Пусть требуется в некоторой таблице Journal фиксировать имена
+пользователей, которые добавляют, обновляют или удаляют данные
+в таблице Nachissumma_1:
+*/
+
+CREATE TABLE Journal
+(
+    Usr_name  TEXT,
+    Nach_id   INT,
+    DML_event TEXT,
+    Date_time TIMESTAMP
+);
+
+DROP TABLE IF EXISTS Nachislsumma_1;
+SELECT *
+INTO Nachislsumma_1
+FROM Nachislsumma;
+
+
+select *
+from Nachislsumma_1;
+/*
+идентификатор факта начисления (Nachisflatcid), признак типа события
+('INS' для вставки, 'EDIT' для обновления и 'DEL' для удаления),
+а также дату и время совершения операции. Скрипт для создания такого
+триггера с именем Usr_Action:
+*/
+
+-- триггерная функция
+CREATE OR REPLACE FUNCTION Action_usr
+(
+)
+    RETURNS TRIGGER
+AS $$
+DECLARE
+    Nach  Pkfield;
+    Event TEXT := '';
+BEGIN
+    CASE TG_OP
+        WHEN 'DELETE'
+            THEN Nach := OLD.Nachislfactid;
+                 Event := 'DEL';
+        WHEN 'UPDATE'
+            THEN Nach := NEW.Nachislfactid;
+                 Event := 'UPD';
+        WHEN 'INSERT'
+            THEN Nach := NEW.Nachislfactid;
+                 Event := 'INS';
+    END CASE;
+
+    RAISE NOTICE '% % % % % % % %',
+        TG_TABLE_NAME, TG_WHEN, TG_OP, TG_LEVEL, Event, Nach,
+        OLD.Nachislfactid, NEW.Nachislfactid;
+
+    INSERT INTO Journal VALUES (SESSION_USER, Nach, Event, CURRENT_TIMESTAMP);
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+-- триггер
+CREATE OR REPLACE TRIGGER Usr_action
+    AFTER INSERT OR UPDATE OR DELETE
+    ON Nachislsumma_1
+    FOR EACH ROW
+EXECUTE FUNCTION Action_usr();
+
+/*
+Чтобы проверить действие созданного триггера Usr_Action,
+от имени пользователя postgres выполним последовательно три запроса:
+*/
+
+INSERT INTO Nachislsumma_1
+VALUES (80, '005488', 1, 63, 1, 2025)
+UPDATE Nachislsumma_1
+SET Serviceid = 2
+WHERE Nachislfactid = 80;
+DELETE
+FROM Nachislsumma_1
+WHERE Nachislfactid = 80;
+
+-- Данные, полученные в результате выполнения запроса:
+SELECT *
+FROM Journal;
+
+/*
+Синтаксис запроса CREATE TRIGGER не позволяет указывать событие
+MERGE. Однако в запросе MERGE могут быть выполнены запросы INSERT,
+UPDATE, DELETE, следовательно, триггер, реагирующий на эти события,
+будет активирован и при выполнении запроса MERGE.
+
+Рассмотрим следующую задачу. Необходимо реализовать триггер
+на таблицу Paysumma с такой функциональностью:
+
+- сумма значений платежей за месяц не может превышать установленный
+  лимит, например 60 000;
+- платежи за месяц можно вносить частями (например, 2–3 платежа
+  за месяц), но их общая сумма должна оставаться в пределах лимита;
+- запрещено изменять и удалять платежи за прошлые годы;
+- все операции логируются в таблице аудита;
+- данные удаляемых платежей за текущий год перемещаются в архив.
+
+Реализуем проверку, которая запрещает суммарный объем платежей
+за один месяц превышать заданный фиксированный лимит.
+
+Как это будет работать? Функция будет проверять сумму значений
+платежей за конкретный месяц и год для указанного абонента и услуги.
+Если сумма уже внесенных платежей за месяц плюс сумма нового платежа
+превышает лимит, вставка или обновление будет запрещено.
+Данные об операциях заносятся в таблицу аудита.
+Удаляемые платежи переносятся в таблицу архива.
+*/
+
+-- Таблица аудита:
+CREATE TABLE Paysumma_audit
+(
+    Audit_id       SERIAL PRIMARY KEY,
+    Operation_type TEXT       NOT NULL,
+    Accountid      VARCHAR(6) NOT NULL,
+    Serviceid      INTEGER    NOT NULL,
+    Paysum         NUMERIC,
+    Paydate        DATE,
+    Paymenttype    INTEGER,
+    Payyear        INTEGER,
+    Operation_time TIMESTAMP DEFAULT NOW()
+);
+
+-- Таблица архива:
+CREATE TABLE Paysumma_archive
+(
+    Payfactid   BIGINT PRIMARY KEY,
+    Accountid   VARCHAR(6) NOT NULL,
+    Serviceid   INTEGER    NOT NULL,
+    Paysum      NUMERIC,
+    Paydate     DATE,
+    Paymenttype INTEGER,
+    Payyear     INTEGER,
+    Deleted_at  TIMESTAMP DEFAULT NOW()
+);
+
+/*
+Триггерная функция:
+*/
+
+DROP TRIGGER IF EXISTS Paysumma_merge_trigger ON Paysumma;
+
+-- 2. Удалить функцию
+DROP FUNCTION IF EXISTS Paysumma_merge_trigger_function(
+);
+
+CREATE OR REPLACE FUNCTION Paysumma_merge_trigger_function
+(
+)
+    RETURNS TRIGGER AS $$
+DECLARE
+    Max_limit CONSTANT Currency := 60000;
+    Current_month_sum  Currency;
+BEGIN
+    -- Проверка для операций INSERT и UPDATE
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE'
+    THEN
+        -- Запрет изменений для записей за прошлые годы
+        IF TG_OP = 'UPDATE' AND OLD.Payyear < EXTRACT(YEAR FROM CURRENT_DATE)
+        THEN
+            RAISE EXCEPTION 'Изменение платежей за прошлые годы '
+                '(год %, месяц %) запрещено!', OLD.Payyear, OLD.Paymonth;
+        END IF;
+
+        -- Расчет текущей суммы платежей за месяц и услугу
+        SELECT COALESCE(SUM(paysum), 0)
+        INTO Current_month_sum
+        FROM Paysumma
+        WHERE AccountId = NEW.AccountId
+          AND ServiceId = NEW.ServiceId
+          AND Paymonth = NEW.Paymonth
+          AND Payyear = NEW.Payyear;
+
+        -- Если текущая сумма платежей + новый платеж превышает лимит
+        IF Current_month_sum + NEW.Paysum > Max_limit
+        THEN
+            RAISE EXCEPTION 'Сумма платежей за месяц (текущая % + новый %) '
+                'превышает максимально допустимую (%) для абонента % и услуги %',
+                Current_month_sum, NEW.Paysum, Max_limit, NEW.AccountId, NEW.ServiceId;
+        END IF;
+
+        -- Логирование INSERT
+        IF TG_OP = 'INSERT'
+        THEN
+            INSERT INTO Paysumma_audit (Operation_type, AccountId, ServiceId,
+                                        Paysum, Paydate, Paymenttype, Payyear)
+            VALUES ('INSERT', NEW.AccountId, NEW.ServiceId, NEW.Paysum,
+                    NEW.Paydate, NEW.Paymonth, NEW.Payyear);
+            RETURN NEW;
+            -- Логирование UPDATE
+        ELSIF TG_OP = 'UPDATE'
+        THEN
+            INSERT INTO Paysumma_audit (Operation_type, AccountId, ServiceId,
+                                        Paysum, Paydate, Paymenttype, Payyear)
+            VALUES ('UPDATE', NEW.AccountId, NEW.ServiceId, NEW.Paysum,
+                    NEW.Paydate, NEW.Paymonth, NEW.Payyear);
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    -- Логика для DELETE
+    IF TG_OP = 'DELETE'
+    THEN
+        -- Запрет удаления записей за прошлые годы
+        IF OLD.Payyear < EXTRACT(YEAR FROM CURRENT_DATE)
+        THEN
+            RAISE EXCEPTION 'Удаление платежей за прошлые годы '
+                '(год %, месяц %) запрещено', OLD.Payyear, OLD.Paymonth;
+        END IF;
+
+        -- Логирование удаления
+        INSERT INTO Paysumma_audit (Operation_type, Accountid, Serviceid,
+                                    Paysum, Paydate, Paymenttype, Payyear)
+        VALUES ('DELETE', OLD.Accountid, OLD.Serviceid, OLD.Paysum,
+                OLD.Paydate, OLD.Paymonth, OLD.Payyear);
+
+        -- Перемещение строки в архив
+        INSERT INTO Paysumma_archive (Payfactid, Accountid, Serviceid,
+                                      Paysum, Paydate, Paymenttype, Payyear)
+        VALUES (OLD.Payfactid, OLD.Accountid, OLD.Serviceid,
+                OLD.Paysum, OLD.Paydate, OLD.Paymonth, OLD.Payyear);
+
+        RETURN OLD;
+    END IF;
+
+    RETURN NULL;
+END;
+$$
+    LANGUAGE PLPGSQL;
+/*
+Проверка суммарной оплаты за месяц. Перед вставкой или обновлением
+платежей проверяется, не превышает ли сумма всех платежей за месяц
+(включая новую сумму) фиксированный лимит (Max_limit).
+Если сумма превышает лимит, триггер выдает ошибку.
+
+Остальная логика. Запрет изменения и удаления платежей за прошлые годы.
+
+Логирование операций INSERT, UPDATE, DELETE в таблице аудита.
+Перемещение удаляемых платежей (только за текущий год) в архивную таблицу.
+
+Триггер для таблицы Paysumma:
+*/
+
+
+CREATE OR REPLACE TRIGGER Paysumma_merge_trigger
+    AFTER INSERT OR UPDATE OR DELETE
+    ON Paysumma
+    FOR EACH ROW
+EXECUTE FUNCTION Paysumma_merge_trigger_function();
+
+/*
+Тестирование. Предположим, лимит за месяц равен 60 000 условных единиц.
+
+1. Вставка платежа, который укладывается в месячный лимит:
+*/
+
+INSERT INTO paysumma (Payfactid, Accountid, Serviceid, Paysum,
+                      Paydate, Paymonth, Payyear)
+VALUES (101, '005488', 1, 30000, '2025-10-05', 9, 2025);
+
+/*
+Результат: платеж успешно добавлен, так как сумма (0 + 30 000) < 60000.
+
+2. Вставка платежа, который превысит лимит:
+*/
+
+INSERT INTO paysumma (Payfactid, Accountid, Serviceid, Paysum,
+                      Paydate, Paymonth, Payyear)
+VALUES (102, '005488', 1, 35000, '2025-10-05', 9, 2025);
+
+/*
+Ожидаемая ошибка:
+
+Сумма платежей за месяц (30000 + 35000) превышает максимально
+допустимую (60000.00) для абонента 005488 и услуги 1
+
+3. Обновление платежа, значение которого превышает месячный лимит:
+*/
+
+UPDATE Paysumma
+SET Paysum = 65000
+WHERE Payfactid = 101;
+
+/*
+Ожидаемая ошибка:
+
+Сумма платежей за месяц (65000.00) превышает максимально допустимую
+(60000.00) для абонента 005488 и услуги 1
+
+4. Попытка удаления платежей за прошлые годы:
+*/
+
+DELETE
+FROM Paysumma
+WHERE Payyear < 2022;
+
+/*
+Ожидаемая ошибка:
+
+Удаление платежей за прошлые годы (2021), месяц (4) запрещено
+
+5. Попытка удаления платежей за текущий год:
+*/
+
+DELETE
+FROM Paysumma
+WHERE Payfactid = 101;
+
+/*
+Платеж успешно удален.
+Просмотр содержимого таблиц:
+*/
+-- 1. Вставить в архив все старые платежи
+INSERT INTO Paysumma_archive (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymenttype, Payyear)
+SELECT Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear
+FROM Paysumma
+WHERE Payyear < EXTRACT(YEAR FROM CURRENT_DATE);
+
+-- 2. Удалить их из основной таблицы (сработает триггер и добавит записи в аудит)
+DELETE
+FROM Paysumma
+WHERE Payyear < EXTRACT(YEAR FROM CURRENT_DATE);
+
+SELECT tgname, tgrelid::regclass, tgenabled
+FROM pg_trigger
+WHERE tgname = 'paysumma_merge_trigger';
+
+ALTER TABLE Paysumma
+    ENABLE TRIGGER paysumma_merge_trigger;
+
+
+-- 1. Вставить новую строку
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate, Paymonth, Payyear)
+VALUES (200, '005488', 1, 1000, '2026-04-26', 4, 2026);
+
+-- 2. Проверить аудит (должна быть запись с Operation_type = 'INSERT')
+SELECT *
+FROM Paysumma_audit
+ORDER BY Audit_id DESC
+LIMIT 5;
+
+-- 3. Удалить эту строку
+DELETE
+FROM Paysumma
+WHERE Payfactid = 200;
+
+-- 4. Проверить архив (должна быть запись)
+SELECT *
+FROM Paysumma_archive;
+
+-- 5. Проверить аудит удаления
+SELECT *
+FROM Paysumma_audit;
+
+/*
+Итог:
+- общая сумма платежей абонента за месяц не может превышать
+  установленный лимит;
+- платежи за месяц можно вносить частями (например, 2–3 платежа
+  за месяц), но их общая сумма должна оставаться в пределах лимита;
+- запрещено изменять и удалять платежи за прошлые годы;
+- все операции логируются в таблице аудита (в таблице Paysumma_audit
+  две строки);
+- удаляемые платежи перемещаются в архив (в таблице Paysumma_archive
+  одна строка).
+
+Для дальнейшего тестирования триггера Paysumma_merge_trigger
+используем запрос MERGE в работе с таблицей Paysumma.
+Цель — проверить, как триггер:
+- добавляет строки (если они не существуют);
+- обновляет строки (если они уже существуют);
+- учитывает ограничения, такие как лимит платежей за месяц.
+*/
+
+MERGE INTO Paysumma AS Target
+USING (
+      SELECT MIN(Payfactid) AS Payfactid,
+             Accountid,
+             Serviceid,
+             SUM(Paysum)    AS Paysum,
+             MAX(Paydate)   AS Paydate,
+             PayMonth,
+             Payyear
+      FROM (
+           VALUES (103, '005488', 1, -20000, '2023-10-10', 10, 2023),
+                  (104, '005488', 1, -15000, '2023-10-15', 10, 2023),
+                  (105, '126112', 1, -30000, '2023-10-20', 10, 2023)
+           ) AS Source (Payfactid, Accountid, Serviceid, Paysum, Paydate, PayMonth, Payyear)
+      GROUP BY Accountid, Serviceid, PayMonth, Payyear
+      ) AS Source
+ON (
+    Target.Accountid = Source.Accountid
+        AND Target.Serviceid = Source.Serviceid
+        AND Target.PayMonth = Source.PayMonth
+        AND Target.Payyear = Source.Payyear
+    )
+
+WHEN MATCHED THEN
+    UPDATE
+    SET Paysum  = Target.Paysum + Source.Paysum,
+        Paydate = Source.Paydate::DATE
+
+WHEN NOT MATCHED THEN
+    INSERT (Payfactid, Accountid, Serviceid, Paysum, Paydate, PayMonth, Payyear)
+    VALUES (Source.Payfactid, Source.Accountid, Source.Serviceid,
+            Source.Paysum, Source.Paydate::DATE, Source.PayMonth, Source.Payyear);
+
+
+-- 5. Проверить аудит удаления
+SELECT *
+FROM Paysumma_audit;
+
+select *
+from Paysumma
+where Accountid = '005488';
+/*
+Объяснение.
+
+1. MERGE INTO Paysumma AS Target: объявляем, что будем работать
+   с таблицей Paysumma как целевой таблицей (Target).
+
+2. USING (VALUES (...)): указываем источник данных для MERGE.
+   В данном примере это значения, которые мы передаем с помощью
+   секции VALUES. Эти данные представляют новые или существующие
+   строки, которые мы пытаемся добавить в таблицу Paysumma.
+
+3. ON:
+   - условие для поиска совпадений между целевой таблицей (Target)
+     и источником данных (Source);
+   - строки считаются совпадающими, если Accountid, Serviceid,
+     PaymentMonth и Payyear совпадают.
+
+4. WHEN MATCHED THEN UPDATE: если строка уже существует в таблице
+   Paysumma (по условию ON), то:
+   - увеличиваем сумму платежей: Paysum = Target.Paysum + Source.Paysum;
+   - обновляем дату последнего платежа: Paydate = Source.Paydate.
+
+5. WHEN NOT MATCHED THEN INSERT: если строка не найдена в таблице
+   Paysumma, то выполняем вставку новых данных из источника Source.
+*/
+
+
+/*
+Примеры табличных триггеров.
+Управление триггерами
+
+Примеры табличных триггеров
+
+1. Рассмотрим пример автоматического погашения выполненной
+заявки.
+Триггер для таблицы Request при отметке выполнения заявки
+с неисправностью, связанной с плитой, автоматически погашает ее.
+Триггерная функция:
+*/
+
+CREATE OR REPLACE FUNCTION Trg_update_executed
+(
+)
+    RETURNS TRIGGER AS $$
+BEGIN
+    -- проверяется, что заявка не выполнена
+    IF OLD.Executiondate IS NULL
+        -- проверяется, что заявка назначена на выполнение
+        AND OLD.Executorid IS NOT NULL
+        AND NEW.Executiondate IS NOT NULL
+    THEN
+        -- проверяется, связана ли неисправность с плитой
+        IF EXISTS
+        (
+        SELECT 1
+        FROM Disrepair
+        WHERE Disrepair.Failureid = OLD.Failureid
+          AND Disrepair.Failurenm LIKE '%плиты%'
+        )
+        THEN
+            -- устанавливается Executed = TRUE
+            NEW.Executed = TRUE;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Строчный триггер на событие UPDATE:
+*/
+
+CREATE TRIGGER Trg_auto_update_executed
+    BEFORE UPDATE
+    ON Request
+    FOR EACH ROW
+EXECUTE FUNCTION Trg_update_executed();
+
+/*
+При обновлении строки в таблице Request:
+1) триггер срабатывает перед выполнением операции UPDATE;
+2) если значение столбца Executiondate заполнено (не NULL)
+   и Failurenm содержит ключевые слова, связанные с неисправностями
+   газовой плиты, триггер автоматически устанавливает Executed = TRUE.
+
+2. Автоматическое распределение заявок между исполнителями.
+Бизнес-задача: при добавлении новой заявки в таблицу Request
+необходимо автоматически назначать исполнителя (Executorid) на основе
+минимальной текущей загрузки (количества заявок).
+*/
+
+CREATE OR REPLACE FUNCTION Assign_executor
+(
+)
+    RETURNS TRIGGER AS $$
+DECLARE
+    Selected_executor INTEGER; -- ID исполнителя, который будет выбран
+BEGIN
+    -- Ищем исполнителя с минимальной загрузкой
+    SELECT E.Executorid
+    INTO Selected_executor
+    FROM Executor        E
+             LEFT JOIN (
+                       SELECT Executorid, COUNT(*) AS Task_count
+                       FROM Request
+                       WHERE Executiondate IS NULL -- Только незавершенные заявки
+                       GROUP BY Executorid
+                       ) R ON E.Executorid = R.Executorid
+    -- При отсутствии или одинаковом числе открытых заявок
+    -- назначается исполнитель с большим идентификатором
+    ORDER BY COALESCE(R.Task_count, 0) ASC, E.Executorid DESC
+    LIMIT 1;
+
+    -- Вывод информации для отладки
+    RAISE NOTICE 'Selected executor: %', Selected_executor;
+
+    -- Проверяем, был ли найден исполнитель
+    IF Selected_executor IS NULL
+    THEN
+        RAISE EXCEPTION 'No available executor found!';
+    END IF;
+
+    -- Назначаем найденного исполнителя новой заявке
+    NEW.Executorid = Selected_executor;
+
+    -- Возвращаем измененную строку
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Создадим триггер:
+*/
+
+CREATE TRIGGER Trg_assign_executor
+    BEFORE INSERT
+    ON Request
+    FOR EACH ROW
+EXECUTE FUNCTION Assign_executor();
+
+/*
+Перед добавлением новой записи в таблицу Request, триггер автоматически
+назначает исполнителя с минимальной текущей загрузкой.
+Проверочный запрос:
+*/
+
+INSERT INTO Request
+VALUES (NEXTVAL('Gen_request'), '005488', NULL,
+        7, CURRENT_DATE, NULL, FALSE);
+
+/*
+Результат выполнения:
+
+Selected executor: 6
+
+3. Автоматическое создание заявок на обслуживание при превышении
+задолженности.
+
+Бизнес-задача: если задолженность абонента превышает определенный порог
+(например, 100), автоматически создается заявка на обслуживание
+в таблице Request.
+
+Создадим триггерную функцию:
+*/
+
+CREATE OR REPLACE FUNCTION Check_debt_and_create_request
+(
+)
+    RETURNS TRIGGER AS $$
+DECLARE
+    Total_debt     CURRENCY;
+    Debt_threshold CURRENCY := 100; -- Порог задолженности
+BEGIN
+    -- Вычисление общей задолженности абонента
+    SELECT COALESCE(SUM(N.Nachislsum), 0) - COALESCE(SUM(P.Paysum), 0)
+    INTO Total_debt
+    FROM Nachislsumma           N
+             LEFT JOIN Paysumma P ON N.Accountid = P.Accountid
+        AND N.Serviceid = P.Serviceid
+    WHERE N.Accountid = NEW.Accountid;
+
+    -- Если задолженность превышает порог, создаем заявку на обслуживание
+    IF Total_debt > Debt_threshold
+    THEN
+        INSERT INTO Request (Requestid, Accountid, Executorid, Failureid,
+                             Incomingdate, Executiondate, Executed)
+        VALUES (NEXTVAL('Gen_request'), NEW.Accountid,
+                (
+                SELECT Executorid
+                FROM Executor
+                LIMIT 1
+                ),
+                (
+                SELECT Failureid
+                FROM Disrepair
+                LIMIT 1
+                ),
+                CURRENT_DATE, NULL, FALSE);
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Определяем триггер:
+*/
+
+CREATE TRIGGER After_Nachislsumma_insert_or_update
+    AFTER INSERT OR UPDATE
+    ON Nachislsumma
+    FOR EACH ROW
+EXECUTE FUNCTION Check_debt_and_create_request();
+
+/*
+Выполняем проверочный запрос:
+*/
+
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid,
+                          Nachislsum, Nachislmonth, Nachislyear)
+VALUES (NEXTVAL('Gen_Nachislsumma'), '443690', 1, 5000, 12, 2024);
+
+/*
+4. Пусть необходимо создать условие ссылочной целостности с помощью
+триггера, реализующего добавление строки в справочник улиц Street
+перед добавлением в таблицу Abonent новой строки с определенным
+значением внешнего ключа Streetid, отсутствующим в родительской
+таблице. Скрипт создания триггера:
+*/
+
+CREATE OR REPLACE FUNCTION Insert_str
+(
+)
+    RETURNS TRIGGER
+AS $$
+BEGIN
+    IF NOT EXISTS
+    (
+    SELECT 1
+    FROM Street S
+    WHERE S.Streetid = NEW.Streetid
+    )
+    THEN
+        INSERT INTO Street (Streetid, Streetnm)
+        VALUES (NEW.Streetid, 'Уточнить');
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Триггер:
+*/
+
+CREATE TRIGGER Str_insert
+    BEFORE INSERT
+    ON Abonent
+    FOR EACH ROW
+EXECUTE FUNCTION Insert_str();
+
+/*
+Проверочные запросы:
+*/
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('111332', 251, 4, 2, 'Иванов И. И.', '326127');
+
+select *
+from street;
+
+/*
+streetid|streetnm
+1|ЦИОЛКОВСКОГО УЛИЦА
+2|НОВАЯ УЛИЦА
+3|ВОЙКОВ ПЕРЕУЛОК
+4|ТАТАРСКАЯ УЛИЦА
+5|ГАГАРИНА УЛИЦА
+6|МОСКОВСКАЯ УЛИЦА
+7|КУТУЗОВА УЛИЦА
+8|МОСКОВСКОЕ ШОССЕ
+25|Уточнить
+251|Уточнить
+*/
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('222222', 1, 4, 2, 'Петухов П. Р.', '267218');
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('999999', 25, 4, 2, 'Иванов И. И.', '326127');
+
+/*
+Триггер Str_insert выполняется перед добавлением строки в таблицу
+Abonent. В первую очередь проверяется наличие строки в родительской
+таблице Street с первичным ключом Streetid, равным внешнему ключу
+новой добавленной в таблицу Abonent строки. Если соответствующая
+улица отсутствует в справочнике, выполняется вставка строки в таблицу
+Street с единственным заполненным полем — полем первичного ключа.
+
+В теме 6 был рассмотрен пример ХП Add_p, реализующей добавление
+нового абонента с обработкой ошибок некорректного ввода пользователем.
+В качестве одного из примеров обработки ошибок был приведен вызов
+этой ХП при добавлении абонента, проживающего на улице, отсутствующей
+в справочнике улиц. В этом случае возникала исключительная ситуация
+и в журнал ошибок записывалась соответствующая информация. Теперь же
+после добавления в учебную БД триггера Str_insert ошибка возникать
+не будет. Триггером будет добавлена новая улица в таблицу Street,
+а процедурой Add_p — новый абонент в таблицу Abonent, например:
+*/
+
+CALL Add_p('555555', 25);
+
+/*
+5. Допустим, необходимо после добавления строк в таблицу начислений или
+оплат указывать для соответствующего абонента в таблице Abonent,
+должник он или нет. Следующий скрипт добавляет в таблицу Abonent
+столбец Status и создает два триггера:
+*/
+
+
+
+ALTER TABLE Abonent
+    ADD COLUMN Status VARCHAR(10);
+
+
+
+
+CREATE OR REPLACE FUNCTION P_debet
+(
+)
+    RETURNS TRIGGER
+AS $$
+DECLARE
+    Ostatok Currency;
+BEGIN
+    SELECT COALESCE(
+                   (
+                   SELECT SUM(N.Nachislsum)
+                   FROM Nachislsumma N
+                   WHERE N.Accountid = NEW.Accountid
+                   ), 0)
+               - COALESCE(
+                   (
+                   SELECT SUM(P.Paysum)
+                   FROM Paysumma P
+                   WHERE P.Accountid = NEW.Accountid
+                   ), 0)
+    INTO Ostatok;
+
+    IF Ostatok > 0
+    THEN
+        UPDATE Abonent
+        SET Status = 'Должник'
+        WHERE Accountid = NEW.Accountid;
+    ELSE
+        UPDATE Abonent
+        SET Status = 'Не должник'
+        WHERE Accountid = NEW.Accountid;
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+CREATE TRIGGER Debet_n
+    AFTER INSERT
+    ON Nachislsumma
+    FOR EACH ROW
+EXECUTE FUNCTION P_debet();
+
+CREATE TRIGGER Debet_p
+    AFTER INSERT
+    ON Paysumma
+    FOR EACH ROW
+EXECUTE FUNCTION P_debet();
+
+/*
+При добавлении новой строки в таблицу оплат Paysumma или в таблицу
+начислений Nachislsumma срабатывает триггер Debet_p или триггер
+Debet_n, которые заполняют столбец Status значением «Должник», если
+сумма всех начислений у соответствующего абонента превышает сумму
+всех его оплат, или значением «Не должник», если сумма всех начислений
+не превышает сумму всех оплат.
+
+С помощью следующего запроса можно убедиться, что абонент '115705'
+не является должником:
+*/
+
+SELECT SUM(Paysum)
+FROM Paysumma
+WHERE Accountid = '115705'
+UNION ALL
+SELECT SUM(Nachislsum)
+FROM Nachislsumma
+WHERE Accountid = '115705';
+
+/*
+Но до срабатывания триггера он имеет статус NULL. Добавим оплату
+за «Электроснабжение» на сумму 0, чтобы запустить триггер и убедиться,
+что абонент не является должником:
+*/
+
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate,
+                      Paymonth, Payyear)
+VALUES ((
+        SELECT MAX(Payfactid)
+        FROM Paysumma
+        ) + 1, '115705',
+        (
+        SELECT Serviceid
+        FROM Services
+        WHERE Servicenm = 'Электроснабжение'
+        ),
+        0, CURRENT_DATE + 1,
+        EXTRACT(MONTH FROM CURRENT_DATE),
+        EXTRACT(YEAR FROM CURRENT_DATE));
+
+SELECT *
+FROM Abonent
+WHERE Accountid = '115705';
+
+/*
+Теперь добавим начисление на сумму 100 условных единиц:
+*/
+
+INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid, Nachislsum,
+                          Nachislmonth, Nachislyear)
+VALUES ((
+        SELECT MAX(Nachislfactid)
+        FROM Nachislsumma
+        ) + 1, '115705',
+        (
+        SELECT Serviceid
+        FROM Services
+        WHERE Servicenm = 'Электроснабжение'
+        ),
+        100, EXTRACT(MONTH FROM CURRENT_DATE),
+        EXTRACT(YEAR FROM CURRENT_DATE));
+
+SELECT *
+FROM Abonent
+WHERE Accountid = '115705';
+
+/*
+И наконец, добавим оплату на сумму 200 условных единиц:
+*/
+
+INSERT INTO Paysumma (Payfactid, Accountid, Serviceid, Paysum, Paydate,
+                      Paymonth, Payyear)
+VALUES ((
+        SELECT MAX(Payfactid)
+        FROM Paysumma
+        ) + 1, '115705',
+        (
+        SELECT Serviceid
+        FROM Services
+        WHERE Servicenm = 'Электроснабжение'
+        ),
+        200, CURRENT_DATE + 1,
+        EXTRACT(MONTH FROM CURRENT_DATE),
+        EXTRACT(YEAR FROM CURRENT_DATE));
+
+/*
+Теперь абонент больше не является должником, так как столбец Status
+содержит значение «Не должник»:
+*/
+
+SELECT *
+FROM Abonent
+WHERE Accountid = '115705';
+
+/*
+6. Пример триггера, обновляющего представление. Приведем триггер,
+замещающий ФИО абонента в представлении Abonent_phone
+
+Триггерная функция:
+*/
+
+drop VIEW abonent_phone;
+
+
+CREATE OR REPLACE VIEW abonent_phone AS
+SELECT Accountid, Streetid, Houseno, Flatno, Fio AS Abon_Fio, Phone, Email, Status
+FROM Abonent;
+
+
+CREATE OR REPLACE FUNCTION Fio_abonent
+(
+)
+    RETURNS TRIGGER
+AS $$
+BEGIN
+    UPDATE Abonent A
+    SET Fio = TRIM(NEW.Abon_Fio)
+    WHERE Fio = OLD.Abon_Fio
+      AND NOT EXISTS
+    (
+    SELECT 1
+    FROM Abonent A1
+    WHERE A1.Fio = A.Fio
+      AND A1.Accountid <> A.Accountid
+    );
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Триггер:
+*/
+
+CREATE TRIGGER Abonent_Fio
+    INSTEAD OF UPDATE
+    ON Abonent_phone
+    FOR EACH ROW
+EXECUTE FUNCTION Fio_abonent();
+
+/*
+Для обеспечения уникальности в случае наличия абонентов с совпадающими
+ФИО в триггер добавлен соответствующий фильтр. Кроме того, обработка
+функции TRIM нового значения ФИО позволяет исправить одну из достаточно
+часто встречающихся ошибок при вводе текстовой информации, а именно
+наличие пробелов в начале текста. Пример замещающего запроса:
+*/
+
+UPDATE Abonent_phone
+SET Abon_Fio = 'Серова Т. П.'
+WHERE Abon_Fio = 'Шубина Т. П.';
+
+select *
+from Abonent_phone;
+
+/*
+7. В исследуемой предметной области существует очевидное
+бизнес-ограничение: по одному и тому же адресу не может быть
+зарегистрировано более одного абонента
+При попытке зарегистрировать другого абонента должно выдаваться предупреждение.
+
+Пусть необходимо перед добавлением нового лицевого счета в таблицу
+Abonent проверять, не зарегистрирован ли уже по указанному адресу
+другой абонент, и если зарегистрирован, — отменять вставку с выдачей
+соответствующего сообщения.
+Если абонент по указанному адресу не зарегистрирован,
+то должен быть добавлен новый абонент.
+
+С помощью триггера возможно реализовать логирование ошибок.
+Рассмотрим пример решения этой задачи. Также создадим триггер,
+с помощью которого каждый раз, когда сообщение записывается
+в таблицу логирования, автоматически сохраняется метка времени
+и имя пользователя. Реализуем бизнес-ограничение с записью сообщений
+об ошибке в таблицу.
+
+Определим таблицу:
+*/
+
+CREATE TABLE Log
+(
+    Ts      TIMESTAMP,
+    Message CHAR(100),
+    Usr     TEXT
+);
+
+/*
+Затем создадим триггер для автоматического сохранения метки времени
+и пользователя, каждый раз, когда сообщение записывается в таблицу:
+*/
+
+CREATE OR REPLACE FUNCTION Ext_log
+(
+)
+    RETURNS TRIGGER
+    LANGUAGE PLPGSQL
+AS $$
+BEGIN
+    IF (NEW.Ts IS NULL)
+    THEN
+        NEW.Ts = CURRENT_TIMESTAMP;
+    END IF;
+    IF (NEW.Usr IS NULL)
+    THEN
+        NEW.Usr = CURRENT_USER;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER Ext_log
+    BEFORE INSERT
+    ON Log
+    FOR EACH ROW
+EXECUTE FUNCTION Ext_log();
+
+/*
+Определим сам триггер, запрещающий добавление абонента
+на «занятый» адрес:
+*/
+
+CREATE OR REPLACE FUNCTION Abonent_two
+(
+)
+    RETURNS TRIGGER
+AS $$
+DECLARE
+    Streetsid Pkfield;
+    Housesno  SMALLINT;
+    Numflat   SMALLINT;
+    Var_r     RECORD;
+BEGIN
+    FOR Var_r IN (
+                 SELECT Streetid, Houseno, Flatno
+                 FROM Abonent
+                 )
+        LOOP
+            Streetsid := Var_r.Streetid;
+            HousesNo := Var_r.Houseno;
+            NumFlat := Var_r.Flatno;
+            IF (Streetsid = NEW.Streetid
+                AND Housesno = NEW.Houseno
+                AND Numflat = NEW.Flatno)
+            THEN
+                INSERT INTO Log(Message)
+                VALUES ('По этому адресу зарегистрирован другой абонент!');
+                RAISE INFO 'Ошибка добавления нового абонента!';
+                RETURN OLD;
+            END IF;
+        END LOOP;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+CREATE TRIGGER Two_abonent
+    BEFORE INSERT
+    ON Abonent
+    FOR EACH ROW
+EXECUTE FUNCTION Abonent_two();
+
+/*
+Для проверки выполним два запроса на добавление нового абонента
+на занятый адрес (зарегистрирован абонент с номером лицевого счета
+'005488'):
+*/
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('111111', 3, 4, 1, 'Иванов И. И.', NULL);
+
+/*
+и на свободный адрес:
+*/
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('111111', 3, 4, 2, 'Иванов И. И.', '326127');
+
+/*
+При выполнении первого запроса:
+- будет выдано сообщение об ошибке 'Ошибка добавления нового абонента!';
+- в таблицу логирования добавится новая строка с меткой времени,
+  именем пользователя и сообщением 'По этому адресу зарегистрирован
+  другой абонент!';
+- абонент не будет добавлен.
+
+В результате выполнения второго запроса в таблицу Abonent успешно
+будет добавлен новый абонент.
+*/
+
+select *
+from Log;
+
+
+/*
+8. Одним из важных применений триггеров является обеспечение ввода
+значений по умолчанию в столбцы с ограничением NOT NULL. Значение
+по умолчанию в такой столбец может быть помещено только запросом
+INSERT. Если же при модификации данных в такой столбец попытаться
+ввести NULL, то возникнет ошибка.
+Для предотвращения ошибки можно использовать следующий триггер:
+*/
+
+CREATE OR REPLACE FUNCTION Not_null
+(
+)
+    RETURNS TRIGGER
+AS $$
+BEGIN
+    IF (NEW.Incomingdate IS NULL)
+    THEN
+        NEW.Incomingdate = CURRENT_DATE;
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+CREATE TRIGGER Null_not
+    BEFORE UPDATE
+    ON Request
+    FOR EACH ROW
+EXECUTE FUNCTION Not_null();
+
+/*
+Проверить триггер можно следующим запросом:
+*/
+
+UPDATE Request
+SET Incomingdate = NULL
+WHERE Requestid = 3;
+
+select *
+from request;
+
+/*
+9. Следующий триггер является простым примером исправления ошибок
+в данных. Он преобразовывает названия улиц в верхний регистр при
+добавлении или обновлении улицы.
+*/
+
+CREATE OR REPLACE FUNCTION Upper
+(
+)
+    RETURNS TRIGGER
+AS $$
+BEGIN
+    NEW.Streetnm := UPPER(NEW.Streetnm);
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+CREATE TRIGGER Upper
+    BEFORE INSERT OR UPDATE
+    ON Street
+    FOR EACH ROW
+EXECUTE FUNCTION Upper();
+
+/*
+Например:
+*/
+
+INSERT INTO Street
+VALUES (9, 'Новоселов Улица');
+
+select *
+from street;
+
+/*
+10. Триггеры часто используются для принудительного выполнения
+сложных авторизаций безопасности для табличных данных. Например,
+следующий триггер запрещает обновление данных в таблице платежей
+Paysumma в выходные дни и нерабочие часы.
+*/
+
+
+CREATE OR REPLACE FUNCTION Changes_paysumma
+(
+)
+    RETURNS TRIGGER
+AS $$
+BEGIN
+    -- Проверка выходного дня:
+    IF EXTRACT(ISODOW FROM NOW()) IN (6, 7)
+    THEN
+        RAISE EXCEPTION 'Информация о платежах не может изменяться
+                         в выходной день' USING ERRCODE = 'P0001';
+    END IF;
+    -- Проверка рабочего времени (с 9 до 18 часов):
+    IF EXTRACT(HOUR FROM NOW()) < 9 OR EXTRACT(HOUR FROM NOW()) > 18
+    THEN
+        RAISE EXCEPTION 'Информация о платежах не может изменяться
+                         в нерабочее время' USING ERRCODE = 'P0001';
+    END IF;
+    IF TG_OP = 'DELETE'
+    THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+CREATE TRIGGER Paysumma_changes
+    BEFORE INSERT OR DELETE OR UPDATE
+    ON Paysumma
+    FOR EACH ROW
+EXECUTE FUNCTION Changes_paysumma();
+
+/*
+Например, выполнение следующих запросов в выходной день или
+в нерабочее время приведет к ошибке:
+*/
+
+DELETE
+FROM Paysumma
+WHERE Payfactid = 1;
+UPDATE Paysumma
+SET Serviceid = 3
+WHERE Payfactid = 1;
+
+/*
+11. Реализуем автоматическое введение истории изменений лицевых счетов
+абонентов с помощью временной таблицы (Temporal Table). Это позволяет
+пользователям хранить и запрашивать данные, действительные
+на определенные моменты или интервалы времени.
+
+Temporal Tables — это особый тип таблиц, предоставляемый некоторыми
+СУБД, который позволяет отслеживать изменения данных с течением
+времени. Временные таблицы автоматически сохраняют старые версии
+строк и предоставляют возможность выполнять запросы к данным на основе
+времени, что очень полезно для ведения истории изменений, аудита
+и восстановления данных. Поддержку временной (исторической) таблицы
+можно было возложить на приложение, но тогда велика вероятность,
+что в каких-то случаях из-за ошибок история не будет сохраняться.
+
+PostgreSQL не имеет встроенной поддержки стандарта SQL:2011 Temporal
+Tables, но ее можно реализовать, например, с помощью
+триггеров. Историческую таблицу Abonent_history создаем как клон
+основной таблицы Abonent с дополнительными столбцами, хранящими
+начало и конец интервала действия. Столбец Start_d — начало интервала,
+столбец End_d — конец интервала, а столбец Action — тип операции
+(INSERT, UPDATE или DELETE):
+*/
+
+CREATE TABLE IF NOT EXISTS Abonent_history (
+                                               LIKE Abonent INCLUDING ALL
+);
+
+INSERT INTO Abonent_history
+SELECT * FROM Abonent;
+
+
+ALTER TABLE Abonent_history
+    ADD COLUMN Start_d TIMESTAMP,
+    ADD COLUMN End_d   TIMESTAMP,
+    ADD COLUMN Action  TEXT;
+
+/*
+Установим значение столбца Start_d равным текущему времени.
+Столбец End_d остается со значением NULL, поскольку текущая информация
+актуальна и ее конец периода актуальности пока что неизвестен:
+*/
+
+UPDATE Abonent_history
+SET Start_d = NOW();
+
+/*
+Создадим триггерную функцию, которая будет обрабатывать как INSERT,
+так и UPDATE, а также DELETE. Новая историческая строка будет
+добавляться с открытым интервалом действия (с текущего момента до
+бесконечности; в качестве бесконечности используется значение
+'INFINITY').
+*/
+
+CREATE OR REPLACE FUNCTION Manage_abonent_history
+(
+)
+    RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT'
+    THEN
+        -- Start_d устанавливается на NOW(), End_d на 'infinity'
+        INSERT INTO Abonent_history (Accountid, Streetid, Houseno, Flatno,
+                                     Fio, Phone, Start_d, End_d, Action)
+        VALUES (NEW.Accountid, NEW.Streetid, NEW.Houseno, NEW.Flatno,
+                NEW.Fio, NEW.Phone, NOW(), 'infinity', 'INSERT');
+        RETURN NEW;
+    ELSIF TG_OP = 'UPDATE'
+    THEN
+        -- Сохраняется старая строка в таблицу с текущими значениями
+        -- End_d и она закрывается
+        INSERT INTO Abonent_history (Accountid, Streetid, Houseno, Flatno,
+                                     Fio, Phone, Start_d, End_d, Action)
+        VALUES (OLD.Accountid, OLD.Streetid, OLD.Houseno, OLD.Flatno,
+                OLD.Fio, OLD.Phone, NOW(), NOW(), 'UPDATE');
+        -- Обновляется текущая строка
+        -- Добавляется новая строка в историю с новыми значениями
+        INSERT INTO Abonent_history (Accountid, Streetid, Houseno, Flatno,
+                                     Fio, Phone, Start_d, End_d, Action)
+        VALUES (NEW.Accountid, NEW.Streetid, NEW.Houseno, NEW.Flatno,
+                NEW.Fio, NEW.Phone, NOW(), 'infinity', 'INSERT');
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE'
+    THEN
+        -- Сохраняется строка, но устанавливается End_d на NOW()
+        INSERT INTO Abonent_history (Accountid, Streetid, Houseno, Flatno,
+                                     Fio, Phone, Start_d, End_d, Action)
+        VALUES (OLD.Accountid, OLD.Streetid, OLD.Houseno, OLD.Flatno,
+                OLD.Fio, OLD.Phone, NOW(), NOW(), 'DELETE');
+        RETURN OLD; -- Возвращается старая строка (так как это DELETE)
+    END IF;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Теперь создадим триггер, который будет вызывать вышеуказанную функцию
+при операциях INSERT, UPDATE и DELETE:
+*/
+
+CREATE TRIGGER Abonent_manage_history
+    AFTER INSERT OR UPDATE OR DELETE
+    ON Abonent
+    FOR EACH ROW
+EXECUTE FUNCTION Manage_abonent_history();
+
+
+ALTER TABLE abonent DISABLE TRIGGER two_abonent;
+
+/*
+Теперь можно вставлять и обновлять данные, и триггер будет корректно
+обрабатывать все операции. Например:
+*/
+
+SELECT conname
+FROM pg_constraint
+WHERE conrelid = 'Abonent_history'::regclass
+  AND contype = 'p';
+ALTER TABLE Abonent_history DROP CONSTRAINT abonent_history_pkey;
+ALTER TABLE Abonent_history ADD COLUMN id SERIAL PRIMARY KEY;
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('222222', 3, 4, 2, 'Петров П. П.', NULL);
+
+UPDATE Abonent
+SET Fio = 'Антонов А. В.'
+WHERE Accountid = '222222';
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('333333', 3, 4, 3, 'Сидоров С. С.', NULL);
+
+
+
+SELECT
+    proname AS function_name,
+    prosrc AS function_code
+FROM pg_proc
+WHERE prosrc LIKE '%Ошибка добавления нового абонента%';
+
+/*
+После выполнения этих запросов в таблицу Abonent будет добавлен абонент
+Иванов И. И. с номером лицевого счета '111111', абонент Антонов А. В.
+с номером лицевого счета '222222' и абонент Сидоров С. С. с номером
+лицевого счета '333333'. В таблице Abonent_history будет 17 строк.
+Три вновь добавленные строки содержат информацию об абонентах
+с ФИО Иванов И. И. (111111), Антонов А. В. (222222) и Сидоров С. С.
+(333333) с типом операции INSERT и открытым интервалом действия.
+Четвертая строка с ФИО Петров П. П. (222222) с открытым интервалом
+и типом операции INSERT, а пятая для того же абонента с закрытым
+интервалом действия и типом операции UPDATE.
+
+Удалим все данные о добавленных абонентах:
+*/
+
+DELETE
+FROM Abonent
+WHERE Accountid = '111111';
+DELETE
+FROM Abonent
+WHERE Accountid = '222222';
+DELETE
+FROM Abonent
+WHERE Accountid = '333333';
+
+/*
+Следующие запросы, использующие таблицу истории изменений,
+демонстрируют возможность соответственно отслеживания данных
+за заданный период, аудита изменений, восстановления данных
+на определенную дату и анализа количества операций каждого типа:
+*/
+
+SELECT *
+FROM Abonent_history
+WHERE Start_d >= '2025-05-02'
+  AND End_d <= '2026-04-27'
+ORDER BY Start_d;
+
+
+WITH LastValidRecords AS (
+                         SELECT *,
+                                ROW_NUMBER() OVER (PARTITION BY Accountid
+                                    ORDER BY Start_d DESC) AS Rn
+                         FROM Abonent_history
+                         WHERE Start_d <= '2026-04-27'
+                           AND (End_d > '2025-04-26' OR End_d IS NULL)
+                         )
+SELECT Accountid, Fio, Start_d, End_d, Action
+FROM LastValidRecords
+WHERE Rn = 1;
+
+SELECT Action, COUNT(*) AS Count
+FROM Abonent_history
+GROUP BY Action
+ORDER BY Action;
+
+/*
+12. Ограничение на изменение исполнителя в заявке.
+Бизнес-задача: если заявка уже погашена (Executed = TRUE),
+запрещать изменение исполнителя (Executorid).
+
+Определение триггерной функции:
+*/
+
+CREATE OR REPLACE FUNCTION Prevent_executor_change
+(
+)
+    RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.Executed = TRUE
+        AND OLD.Executorid IS DISTINCT FROM NEW.Executorid
+    THEN
+        RAISE EXCEPTION 'Изменение исполнителя запрещено
+                         для погашенной заявки';
+    END IF;
+    RETURN NEW;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Создание триггера:
+*/
+
+CREATE TRIGGER Trg_prevent_executor_change
+    BEFORE UPDATE
+    ON Request
+    FOR EACH ROW
+EXECUTE FUNCTION Prevent_executor_change();
+
+/*
+13. Обновление текущего остатка начислений через представление.
+Бизнес-задача: создать представление для отображения текущего остатка
+(Balance) абонентов. При добавлении или изменении строк в таблицах
+Nachislsumma и Paysumma через представление, триггеры должны обновлять
+базовые таблицы.
+
+Шаг 1: Создание представления. Создадим представление, которое будет
+агрегировать данные из таблиц Nachislsumma и Paysumma и рассчитывать
+остаток.
+*/
+
+CREATE OR REPLACE VIEW Abonent_view AS
+SELECT A.Accountid,
+       A.Fio,
+       COALESCE(SUM(N.Nachislsum), 0)                              AS Total_nachisl,
+       COALESCE(SUM(P.Paysum), 0)                                  AS Total_pay,
+       COALESCE(SUM(N.Nachislsum), 0) - COALESCE(SUM(P.Paysum), 0) AS Balance
+FROM Abonent                    A
+         LEFT JOIN Nachislsumma N USING (Accountid)
+         LEFT JOIN Paysumma     P USING (Accountid)
+GROUP BY A.Accountid, A.Fio;
+
+/*
+Представление отображает Accountid, Fio, сумму начислений (Total_nachisl),
+сумму оплат (Total_pay) и текущий остаток (Balance). Данные вычисляются
+динамически на основе таблиц Nachislsumma и Paysumma.
+
+Шаг 2: Создание триггеров INSTEAD OF для представления. Теперь мы создадим
+триггеры, которые будут обновлять базовые таблицы (Nachislsumma и Paysumma)
+при выполнении операций INSERT или UPDATE на представлении.
+
+Триггер для вставки будет обрабатывать вставку новых начислений или оплат
+через представление.
+
+Создадим триггерную функцию:
+*/
+
+CREATE SEQUENCE Nachisl_seq START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE FUNCTION Trg_insert_into_view
+(
+)
+    RETURNS TRIGGER AS $$
+BEGIN
+    -- Если указана сумма начисления, добавляем запись в Nachislsumma
+    IF NEW.Total_nachisl IS NOT NULL
+    THEN
+        INSERT INTO Nachislsumma (Nachislfactid, Accountid, Serviceid,
+                                  Nachislsum, Nachislmonth, Nachislyear)
+        VALUES (NEXTVAL('Nachisl_seq'), NEW.Accountid, 1,
+                NEW.Total_nachisl, EXTRACT(MONTH FROM CURRENT_DATE),
+                EXTRACT(YEAR FROM CURRENT_DATE));
+    END IF;
+    -- Если указана сумма платежа, добавляем запись в Paysumma
+    IF NEW.Total_pay IS NOT NULL
+    THEN
+        INSERT INTO Paysumma (Payfactid, Accountid, Serviceid,
+                              Paysum, Paydate, Paymonth, Payyear)
+        VALUES (NEXTVAL('Pay_seq'), NEW.Accountid, 1,
+                NEW.Total_pay, CURRENT_DATE,
+                EXTRACT(MONTH FROM CURRENT_DATE),
+                EXTRACT(YEAR FROM CURRENT_DATE));
+    END IF;
+    -- Операция перехвачена, данные не добавляются в представление
+    RETURN NULL;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Определим триггер:
+*/
+
+CREATE TRIGGER Trg_insert_view
+    INSTEAD OF INSERT
+    ON Abonent_view
+    FOR EACH ROW
+EXECUTE FUNCTION Trg_insert_into_view();
+
+/*
+Триггер для обновления будет обрабатывать обновления данных
+в представлении и изменять записи в базовых таблицах.
+
+Создадим триггерную функцию:
+*/
+
+CREATE OR REPLACE FUNCTION Trg_update_view
+(
+)
+    RETURNS TRIGGER AS $$
+BEGIN
+    -- Обновляем начисления, если указаны новые значения
+    IF NEW.Total_nachisl IS NOT NULL
+    THEN
+        UPDATE Nachislsumma
+        SET Nachislsum = NEW.Total_nachisl
+        WHERE Accountid = NEW.Accountid;
+    END IF;
+    -- Обновляем оплаты, если указаны новые значения
+    IF NEW.Total_pay IS NOT NULL
+    THEN
+        UPDATE Paysumma
+        SET Paysum = NEW.Total_pay
+        WHERE Accountid = NEW.Accountid;
+    END IF;
+    -- Операция перехвачена, данные не обновляются в представлении
+    RETURN NULL;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Определим триггер:
+*/
+
+CREATE TRIGGER Trg_update_view
+    INSTEAD OF UPDATE
+    ON Abonent_view
+    FOR EACH ROW
+EXECUTE FUNCTION Trg_update_view();
+
+/*
+Если нужно реализовать удаление записей через представление,
+создадим триггер для удаления.
+
+Создадим триггерную функцию:
+*/
+
+CREATE OR REPLACE FUNCTION Trg_delete_view
+(
+)
+    RETURNS TRIGGER AS $$
+BEGIN
+    -- Удаляем записи из таблиц начислений и оплат
+    DELETE FROM Nachislsumma WHERE Accountid = OLD.Accountid;
+    DELETE FROM Paysumma WHERE Accountid = OLD.Accountid;
+    -- Операция перехвачена, данные не удаляются из представления
+    RETURN NULL;
+END;
+$$
+    LANGUAGE PLPGSQL;
+
+/*
+Определим триггер:
+*/
+
+CREATE TRIGGER Trg_delete_view
+    INSTEAD OF DELETE
+    ON Abonent_view
+    FOR EACH ROW
+EXECUTE FUNCTION Trg_delete_view();
+
+/*
+Шаг 3: Проверка работы. В начале в таблицу Abonent добавим нового
+абонента:
+*/
+
+INSERT INTO Abonent (Accountid, Streetid, Houseno, Flatno, Fio, Phone)
+VALUES ('111111', 1, 2, 3, 'Тестов Т. Т.', NULL);
+
+/*
+Вставка данных о начислении и платеже через представление:
+*/
+
+INSERT INTO Abonent_view (Accountid, Total_nachisl, Total_pay)
+VALUES ('111111', 1500, 500);
+
+/*
+Обновление данных через представление:
+*/
+
+UPDATE Abonent_view
+SET Total_nachisl = 2000,
+    Total_pay     = 1000
+WHERE Accountid = '111111';
+
+/*
+Удаление данных через представление:
+*/
+
+DELETE
+FROM Abonent_view
+WHERE Accountid = '111111';
+
+/*
+Как это работает?
+INSTEAD OF INSERT:
+1) перехватывает операцию INSERT на представлении;
+2) добавляет соответствующие записи в таблицы Nachislsumma и Paysumma.
+
+INSTEAD OF UPDATE:
+1) перехватывает операцию UPDATE на представлении;
+2) обновляет данные в таблицах Nachislsumma и Paysumma.
+
+Рассмотренные примеры триггеров реализуют различные бизнес-правила
+и ограничения (Целостность и ограничения данных).
+Так, первый — шестой и девятый триггеры реализуют активацию операций;
+второй, третий, пятый — ограничения; седьмой, десятый — тринадцатый —
+ограничения; одиннадцатый — факты ведения истории изменений.
+*/
+
+
+/*
+Управление триггерами
+
+Триггер представляет собой весьма полезное средство, но в то же время
+триггеры необходимо очень тщательно отлаживать, так как неправильно
+написанные триггеры могут привести к серьезным проблемам. При неправильной
+логике работы триггеров можно легко уничтожить нужные данные и даже целую
+БД.
+
+Часто возникает необходимость модифицировать ранее созданный триггер DML.
+Причинами этого могут быть:
+
+1) исправление ошибок, допущенных в процессе разработки триггера
+   и нарушающих правильную логику работы системы;
+2) изменение функциональности уже созданного триггера;
+3) временное отключение триггера, полезное при разработке и отладке.
+
+Производить модификацию триггера можно в тексте SQL-сценария или путем
+выполнения отдельного запроса на модификацию, например в SQL-редакторе
+графической утилиты для работы с БД (DBeaver, pgAdmin и т. д.).
+
+В PostgreSQL для изменения определения созданного триггера DML необходимо
+использовать запросы ALTER TRIGGER и CREATE OR REPLACE TRIGGER.
+CREATE OR REPLACE имеет тот же синтаксис, что и CREATE TRIGGER,
+рассмотренный выше. Запрос ALTER TRIGGER имеет следующий синтаксис:
+*/
+
+ALTER TRIGGER name ON table_name RENAME TO new_name;
+
+/*
+В PostgreSQL с помощью ALTER TRIGGER можно изменить только его название,
+во всех остальных случаях необходимо использовать запрос CREATE OR REPLACE.
+
+Отключение конкретного табличного триггера производится следующим запросом:
+*/
+
+ALTER TABLE имя_таблицы DISABLE TRIGGER имя_триггера;
+
+/*
+а отключение всех триггеров таблицы таким:
+*/
+
+ALTER TABLE имя_таблицы DISABLE TRIGGER ALL;
+
+/*
+Включить конкретный триггер можно так:
+*/
+
+ALTER TABLE имя_таблицы ENABLE TRIGGER имя_триггера;
+
+/*
+а включить все триггеры таблицы так:
+*/
+
+ALTER TABLE имя_таблицы ENABLE TRIGGER ALL;
+
+/*
+Для удаления триггера используется запрос DROP TRIGGER. Запрос имеет формат:
+*/
+
+DROP TRIGGER [IF EXISTS] имя_триггера ON имя_таблицы [CASCADE | RESTRICT]
+
+/*
+В отличие от других СУБД, в PostgreSQL недостаточно указать имя триггера,
+чтобы его удалить, нужно также указать имя таблицы или представления,
+на котором он определен.
+
+Триггеры автоматически удаляются при удалении таблицы, с которой они связаны.
+Например, чтобы удалить триггер Str_Delete таблицы Street и правило
+ссылочной целостности, которое связано с этим триггером, необходимо
+применить запрос:
+*/
+
+DROP TRIGGER Str_Delete ON Street;
+
+/*
+Описание всех имеющихся в БД триггеров (как системных, так и пользовательских)
+обычно можно получить по информации системы таблиц СУБД. Для получения
+информации о триггерах в PostgreSQL можно использовать следующие запросы:
+
+- вывод полной информации о системных и пользовательских триггерах:
+*/
+
+SELECT * FROM pg_catalog.pg_trigger;
+
+/*
+- вывод имен системных и пользовательских триггеров:
+*/
+
+SELECT tgname FROM pg_trigger;
+
+/*
+- вывод полной информации о пользовательских триггерах:
+*/
+
+SELECT * FROM information_schema.triggers;
+
+/*
+- вывод имен системных и пользовательских триггеров к определенной таблице:
+*/
+
+SELECT tgname
+FROM pg_trigger, pg_class
+WHERE tgrelid = pg_class.oid AND relname = 'таблица';
+
+/*
+Информацию о триггерах также можно получить при использовании утилиты DBeaver.
+Все пользовательские события триггеров отображаются в окне инспектора
+объектов БД. А триггеры, связанные с таблицей, отображаются в окне
+просмотра определения соответствующей таблицы.
+*/
 
 
 
 
 
-/*644 - Процедурное программирование*/
+/*679 - Триггеры*/
 
