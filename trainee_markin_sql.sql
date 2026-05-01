@@ -36707,5 +36707,511 @@ RESET ROLE;
 
 
 
-/*739 - Триггеры*/
+
+
+-- 5. Заберем привилегии на использование Disrepair у пользователя petrov
+--    и переданные им привилегии у пользователя ivanov:
+
+REVOKE ALL ON Disrepair FROM petrov CASCADE;
+
+-- 6. Ранее мы от лица petrov создавали таблицу Ab_fio. Следовательно,
+--    необходимо переназначить владение Ab_fio на роль tmrrole:
+
+REASSIGN OWNED BY petrov TO tmrrole;
+
+-- 7. Получим список привилегий пользователя petrov с помощью следующего
+--    запроса (рис. 8.4):
+
+SELECT grantor, grantee, table_catalog,
+       table_schema, table_name, privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee IN ('petrov', 'petrovrole');
+
+/*
+   Рис. 11.4. Список привилегий, которыми обладают пользователь petrov
+   и роль petrovrole
+*/
+
+-- 8. Проведем изъятие всех выданных другими пользователями привилегий:
+
+REVOKE ALL ON Abonent FROM petrov;
+REVOKE ALL ON Request FROM petrovrole;
+REVOKE ALL ON Abonent FROM petrovrole;
+REVOKE ALL ON Paysumma FROM petrovrole;
+SET ROLE slonov;
+REVOKE ALL ON Request FROM petrov;
+RESET ROLE;
+
+-- 9. Изъятие привилегий роли можно также выполнить через один запрос
+
+REVOKE ALL PRIVILEGES ON имя_таблицы1, имя_таблицы2, ...
+    FROM удаляемая_роль;
+
+-- Например:
+
+REVOKE ALL PRIVILEGES ON Abonent, Request, Paysumma FROM petrovrole;
+
+-- 10. Снимем доступ к схеме:
+
+REVOKE ALL ON SCHEMA public FROM petrov;
+REVOKE ALL ON SCHEMA public FROM petrovrole;
+
+-- 11. Снимем доступ к БД:
+
+REVOKE ALL ON DATABASE postgres FROM petrov;
+REVOKE ALL ON DATABASE postgres FROM petrovrole;
+
+-- 12. Удалим роль:
+
+DROP USER petrov;
+DROP ROLE petrovrole;
+
+/*
+В PostgreSQL нельзя использовать триггеры для автоматического
+предоставления и ограничения привилегий пользователям (ролям),
+поскольку триггеры работают на уровне данных (таблицы, представления)
+и не могут отслеживать события, связанные с созданием пользователей
+(ролей).
+
+Рассмотрим пример автоматизации предоставления и ограничения
+привилегий на основе таблицы безопасности, которая фиксирует
+пользователей и их привилегии. При внесении каких-либо изменений
+в эту таблицу автоматически должны происходить в БД корректировки
+привилегий соответствующих пользователей.
+*/
+
+-- 1. Создание таблицы безопасности.
+--    Создадим таблицу Security_rules для хранения индивидуальных прав
+--    каждого пользователя на конкретные объекты базы данных:
+
+CREATE TABLE Security_rules
+(
+    id SERIAL PRIMARY KEY,
+    role_name TEXT NOT NULL,
+    object_type TEXT NOT NULL CHECK (object_type IN ('TABLE', 'SEQUENCE',
+                                                     'FUNCTION', 'SCHEMA')),
+    object_name TEXT NOT NULL,
+    privilege TEXT NOT NULL CHECK (privilege IN ('SELECT', 'INSERT',
+                                                 'UPDATE', 'DELETE', 'USAGE', 'EXECUTE'))
+);
+
+/*
+   Изменение данных в Security_rules будет инициировать предоставление
+   или ограничение привилегий пользователю.
+*/
+
+-- 2. Создание таблицы логов назначения привилегий пользователям.
+--    Чтобы отслеживать, какие привилегии были выданы пользователю,
+--    добавим таблицу логов Privilege_log:
+
+CREATE TABLE Privilege_log
+(
+    id SERIAL PRIMARY KEY,
+    username TEXT NOT NULL,
+    object_type TEXT NOT NULL,
+    object_name TEXT NOT NULL,
+    privilege TEXT NOT NULL,
+    granted_at TIMESTAMP DEFAULT now()
+);
+
+/*
+   Эта таблица позволит отслеживать, какие привилегии кому выдавались
+   и когда.
+*/
+
+-- 3. Функция автоматического назначения привилегий с логированием.
+--    Создадим триггерную функцию Grant_privileges_from_security_rules,
+--    которая будет выдавать или ограничивать привилегии пользователю
+--    на основе данных из таблицы Security_rules:
+
+CREATE OR REPLACE FUNCTION grant_privileges_from_security_rules()
+    RETURNS TRIGGER AS $$
+DECLARE
+    v_role_name TEXT;
+    v_obj_type TEXT;
+    v_obj_name TEXT;
+    v_privilege TEXT;
+BEGIN
+    v_role_name := COALESCE(NEW.role_name, OLD.role_name);
+    v_obj_type := COALESCE(NEW.object_type, OLD.object_type);
+    v_obj_name := COALESCE(NEW.object_name, OLD.object_name);
+    v_privilege := COALESCE(NEW.privilege, OLD.privilege);
+
+    -- Удаление привилегий, если запись удалена из security_rules
+    IF TG_OP = 'DELETE' THEN
+        EXECUTE format('REVOKE %s ON %I FROM %I',
+                       v_privilege, v_obj_name, v_role_name);
+        DELETE FROM privilege_log
+        WHERE username = v_role_name AND object_name = v_obj_name
+          AND privilege = v_privilege;
+        RETURN OLD;
+    END IF;
+
+    -- Если привилегия уже есть, обновляем
+    IF EXISTS (SELECT 1 FROM privilege_log
+               WHERE username = v_role_name AND object_name = v_obj_name
+                 AND privilege = v_privilege)
+    THEN
+        UPDATE privilege_log SET granted_at = now()
+        WHERE username = v_role_name AND object_name = v_obj_name
+          AND privilege = v_privilege;
+    ELSE
+        -- Если привилегии нет, добавляем новую
+        INSERT INTO privilege_log (username, object_type, object_name, privilege)
+        VALUES (v_role_name, v_obj_type, v_obj_name, v_privilege);
+    END IF;
+
+    -- Назначаем привилегию (повторно, если уже есть – PostgreSQL сам разберется)
+    EXECUTE format('GRANT %s ON %I TO %I',
+                   v_privilege, v_obj_name, v_role_name);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+/*
+   Функция запускается от имени владельца (обычно администратора)
+   и выполняет GRANT или REVOKE через динамический SQL.
+*/
+
+-- Просмотр таблицы логов:
+
+SELECT * FROM Privilege_log;
+
+/*
+   6. Добавление нового пользователя и автоматическое назначение прав.
+      Создание нового пользователя (роли) в системе:
+*/
+
+CREATE ROLE user3 LOGIN PASSWORD '3';
+
+-- Предоставляемые ему привилегии:
+
+INSERT INTO Security_rules (role_name, object_type, object_name, privilege)
+VALUES ('user3', 'TABLE', 'services', 'SELECT');
+
+/*
+   После этого триггер назначает пользователю user3 привилегии
+   из Security_rules:
+*/
+
+GRANT SELECT ON Services TO user3;
+
+-- Просмотр таблицы привилегий пользователей:
+
+SELECT * FROM Security_rules;
+
+/*
+   7. Поддержка системы безопасности.
+      Добавление привилегий для существующего пользователя.
+
+   В БД есть пользователь user3, которому ранее была дана только
+   привилегия SELECT на таблицу Services. Добавим ему новую
+   привилегию (INSERT) в Security_rules:
+*/
+
+INSERT INTO Security_rules (role_name, object_type, object_name, privilege)
+VALUES ('user3', 'TABLE', 'services', 'INSERT');
+
+/*
+   Что произойдет? Триггер Security_rules_trigger вызовет функцию
+   Grant_privileges_from_security_rules() и система выполнит:
+*/
+
+GRANT INSERT ON Services TO user3;
+
+
+
+/*
+   В Privilege_log добавится новая строка.
+   Просмотр таблицы привилегий пользователей:
+*/
+
+SELECT * FROM security_rules;
+
+/*
+   Отмена привилегии у существующего пользователя.
+   Допустим, необходимо отозвать (REVOKE) привилегию SELECT
+   у user1 на Executor:
+*/
+
+DELETE FROM Security_rules
+WHERE role_name = 'user1'
+  AND object_name = 'executor'
+  AND privilege = 'SELECT';
+
+/*
+   Система выполнит:
+*/
+
+REVOKE SELECT ON Executor FROM user1;
+
+-- Просмотр таблицы привилегий пользователей:
+
+SELECT * FROM Security_rules;
+
+/*
+   Обновление привилегии.
+   Допустим, user2 больше не должен обновлять (UPDATE),
+   а должен вставлять (INSERT) данные в Disrepair.
+
+   Обновляем Security_rules:
+*/
+
+UPDATE Security_rules SET privilege = 'INSERT'
+WHERE role_name = 'user2'
+  AND object_name = 'disrepair'
+  AND privilege = 'UPDATE';
+
+/*
+   Система выполнит:
+*/
+
+REVOKE UPDATE ON Disrepair FROM user2;
+GRANT INSERT ON Disrepair TO user2;
+
+/*
+   В Security_rules строка с UPDATE заменится на INSERT.
+   Просмотр таблицы привилегий пользователей:
+*/
+
+SELECT * FROM Security_rules;
+
+/*
+   Удаление пользователя.
+   Допустим, user1 больше не должен иметь никаких привилегий,
+   и мы удаляем его из Security_rules:
+*/
+
+DELETE FROM Security_rules WHERE role_name = 'user1';
+
+-- Просмотр результатов:
+
+SELECT * FROM Security_rules;
+
+/*
+   Рекомендации по раздельному использованию ролей
+
+   В PostgreSQL понятия «пользователь» и «роль» объединены
+   в единую сущность — роль. Рассмотрим практические варианты
+   раздельного использования пользователей и ролей.
+
+   1. Роли с правом и без права входа.
+      Любая роль может обладать правами на вход в систему
+      (атрибут LOGIN), что делает ее аналогом пользователя,
+      или не обладать такими правами, функционируя как группа
+      привилегий. Это позволяет гибко управлять доступом
+      и правами в базе данных.
+
+      Роли с правом входа — «пользователи», которым присвоен
+      атрибут LOGIN, могут аутентифицироваться и устанавливать
+      соединение с БД.
+
+      Создавать такие роли нужно для каждого индивидуального
+      пользователя или приложения, которым необходим прямой доступ
+      к базе данных. Это обеспечивает возможность детального аудита
+      и контроля действий каждого пользователя.
+
+      Пример создания роли с правом входа:
+*/
+
+CREATE ROLE username WITH LOGIN PASSWORD 'secure_password';
+
+/*
+      Роли без права входа — «группы», без атрибута LOGIN не могут
+      напрямую подключаться к БД.
+
+      Использовать такие роли нужно для объединения привилегий,
+      которые затем можно назначать нескольким пользователям.
+      Это упрощает управление правами доступа, позволяя изменять
+      привилегии для группы пользователей централизованно.
+
+      Пример создания роли без права входа:
+*/
+
+CREATE ROLE readonly;
+
+-- Назначение привилегий роли:
+
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
+
+-- Добавление пользователя в роль:
+
+GRANT readonly TO username;
+
+/*
+      Преимуществами такого подхода являются:
+      1) упрощение управления привилегиями. Вместо назначения прав
+         каждому пользователю отдельно можно управлять доступом
+         на уровне ролей-групп. Это особенно полезно в крупных
+         проектах с большим количеством пользователей;
+      2) гибкость и масштабируемость. Добавление нового пользователя
+         с определенным набором прав сводится к созданию роли
+         с атрибутом LOGIN и назначению ее в соответствующие
+         роли-группы;
+      3) прозрачность и контроль. Четкое разделение ролей-пользователей
+         и ролей-групп позволяет легко отслеживать, какие привилегии
+         имеют пользователи и через какие группы они получены.
+
+      Таким образом, комбинируя роли с правом входа и без него,
+      можно эффективно и удобно управлять доступом и привилегиями
+      в БД PostgreSQL.
+
+   2. Создание специализированных ролей для различных уровней доступа.
+
+      Роли только для чтения (READONLY) предоставляют права только
+      на чтение данных. Полезны для аналитиков или отчетных систем,
+      которым не требуется изменять данные.
+*/
+
+-- Создаем роль readonly без права входа
+CREATE ROLE readonly;
+
+-- Предоставляем роли readonly права на чтение
+-- всех существующих таблиц в схеме public
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
+
+-- Настраиваем привилегии по умолчанию:
+-- все новые таблицы в схеме public будут
+-- автоматически предоставлять права на чтение роли readonly
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT ON TABLES TO readonly;
+
+/*
+      Роли для записи (READWRITE) включают права на чтение и запись,
+      позволяя пользователям изменять существующие данные. Подходят
+      для сотрудников, работающих с обновлением информации.
+*/
+
+-- Создаем роль readwrite без права входа
+CREATE ROLE readwrite;
+
+-- Предоставляем роли readwrite права на чтение и запись
+-- всех существующих таблиц в схеме public
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES
+    IN SCHEMA public TO readwrite;
+
+-- Настраиваем привилегии по умолчанию
+-- для новых таблиц в схеме public
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO readwrite;
+
+/*
+      Роли администратора (ADMIN) обладают расширенными правами,
+      включая управление структурами таблиц и другими объектами
+      базы данных. Предназначены для технического персонала,
+      ответственного за поддержку и развитие базы данных.
+*/
+
+-- Создаем роль admin без права входа
+CREATE ROLE admin;
+
+-- Предоставляем роли admin все права
+-- на все существующие таблицы в схеме public
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO admin;
+
+-- Предоставляем роли admin права на создание
+-- новых объектов в схеме public
+GRANT CREATE ON SCHEMA public TO admin;
+
+-- Настраиваем привилегии по умолчанию
+-- для новых таблиц в схеме public
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL PRIVILEGES ON TABLES TO admin;
+
+/*
+   3. Назначение ролей пользователям в зависимости от их функций.
+
+      Для индивидуальных пользователей рекомендуется создавать роли
+      с атрибутом LOGIN для каждого пользователя и назначать им
+      соответствующие роли-группы в зависимости от их обязанностей.
+      Это обеспечивает точный контроль доступа и облегчает аудит
+      действий.
+*/
+
+-- Создаем пользователя user_readonly с правом входа
+CREATE ROLE user_readonly WITH LOGIN PASSWORD 'secure_password';
+
+-- Назначаем пользователю user_readonly роль readonly
+GRANT readonly TO user_readonly;
+
+/*
+      Теперь пользователь user_readonly сможет подключаться к базе
+      данных и будет иметь права только на чтение.
+
+      Для системных аккаунтов, например приложений или сервисов,
+      которые взаимодействуют с базой данных, лучше создавать
+      отдельные роли с необходимыми привилегиями. Это позволяет
+      изолировать доступ и минимизировать риски безопасности.
+*/
+
+-- Создаем роль app_user с правом входа
+CREATE ROLE app_user WITH LOGIN PASSWORD 'app_password';
+
+-- Назначаем роли app_user необходимые привилегии
+-- напрямую или через роли
+GRANT readwrite TO app_user;
+
+/*
+      Этот аккаунт можно использовать в настройках подключения
+      приложения.
+
+   4. Использование наследования ролей для упрощения управления.
+
+      Роли в PostgreSQL могут наследовать привилегии других ролей.
+      Создавать иерархию ролей рекомендуется там, где более
+      специализированные роли наследуют права от общих ролей.
+      Например, роль DATA_SCIENTIST может наследовать права от роли
+      READONLY, добавляя при этом дополнительные привилегии,
+      специфичные для работы с данными. Например, создание иерархии
+      ролей:
+*/
+
+-- Создаем базовую роль base_role без права входа
+CREATE ROLE base_role;
+
+-- Создаем роль advanced_role, наследующую привилегии base_role
+CREATE ROLE advanced_role;
+
+-- Настраиваем наследование привилегий
+GRANT base_role TO advanced_role;
+
+/*
+      Теперь все пользователи, которым назначена роль advanced_role,
+      будут автоматически обладать привилегиями роли base_role.
+
+   5. Регулярный аудит и ревизия ролей и привилегий.
+
+      Необходимо периодически проверять существующие роли и их
+      привилегии, чтобы убедиться, что они соответствуют текущим
+      требованиям безопасности и бизнес-процессам. Удалять или
+      изменять роли, которые больше не используются или имеют
+      избыточные права.
+
+   6. Использование предопределенных ролей для специальных задач.
+
+      PostgreSQL предоставляет предопределенные роли, такие как
+      pg_read_all_data и pg_write_all_data, которые могут быть
+      использованы для предоставления универсальных прав на чтение
+      или запись всех таблиц в БД. Это упрощает настройку доступа
+      для пользователей, которым необходимы такие привилегии.
+      Например, предоставляем зарегистрированному пользователю
+      Analyst предопределенную роль для чтения всех данных:
+*/
+
+GRANT pg_read_all_data TO Analyst;
+
+/*
+      Роль pg_read_all_data предоставляет права на чтение
+      во всех схемах базы данных.
+
+      Следуя этим рекомендациям, можно управлять доступом к базе
+      данных и создать новые таблицы, которые могут быть использованы
+      для проектирования и реализации системы управления данными.
+*/
+
+
+
+
+
+/*757 - Триггеры*/
 
