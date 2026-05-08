@@ -120,11 +120,24 @@ SELECT *
 FROM orders
 WHERE status = 'Completed';
 /*
+1️⃣ Seq Scan (Пример 1.1)
+sql
+WHERE status = 'Completed'  -- 70% строк
+Почему Seq Scan?
+Нет индекса на status, но даже если бы был — доступ к 700K строк из 1M через индекс
+потребовал бы 700K случайных чтений (×4 дорого).
+Планировщик считает: прочитать всю таблицу последовательно (cost=19866) дешевле,
+чем скакать по индексу и по одному вычитывать heap.
+
+
+
 Seq Scan on orders  (cost=0.00..19866.10 rows=698732 width=29) (actual time=0.011..67.901 rows=700408 loops=1)
   Filter: ((status)::text = 'Completed'::text)
   Rows Removed by Filter: 300240
   Buffers: shared hit=7358
 */
+
+
 
 -- =============================================================================
 -- ПРИМЕР 1.2: Index Scan
@@ -134,6 +147,16 @@ SELECT *
 FROM orders
 WHERE order_date = '2024-06-15';
 /*
+2️⃣ Index Scan (Пример 1.2)
+sql
+WHERE order_date = '2024-06-15'  -- 913 строк из 1M
+Почему Index Scan?
+Условие очень селективное (0,09% строк)
+Индекс idx_orders_date позволяет найти 913 записей за 1-2 случайных чтения на страницу.
+cost=16 против seq_cost=12361 — разрыв огромен.
+
+
+
 Index Scan using idx_orders_date on orders (cost=0.17..16.11 rows=911 width=29) (actual time=0.028..0.115 rows=913 loops=1)
   Index Cond: (order_date = '2024-06-15'::date)
   Buffers: shared hit=11
@@ -147,6 +170,16 @@ SELECT *
 FROM orders_scattered
 WHERE order_date BETWEEN '2024-06-01' AND '2024-06-30';
 /*
+3️⃣ Bitmap Scan (Пример 1.3)
+sql
+WHERE order_date BETWEEN '2024-06-01' AND '2024-06-30'  -- 27K строк
+Почему Bitmap Scan, а не Index Scan?
+Index Scan потребовал бы до 27K случайных чтений heap (дорого).
+Bitmap сначала сканирует индекс, строит в памяти битовую карту страниц,
+затем читает каждую страницу только один раз (последовательно).
+7170 страниц heap — это намного дешевле, чем 27K отдельных чтений.
+
+
 Bitmap Heap Scan on orders_scattered (cost=154.44..7707.03 rows=27798 width=29) (actual time=2.926..212.125 rows=27390 loops=1)
   Recheck Cond: ((order_date >= '2024-06-01') AND (order_date <= '2024-06-30'))
   Heap Blocks: exact=7170
@@ -168,6 +201,11 @@ SELECT order_date, status
 FROM orders
 WHERE order_date = '2024-06-15';
 /*
+Почему он возможен?
+Индекс INCLUDE (status) содержит все нужные колонки.
+Благодаря VACUUM карта видимости (visibility map) чиста → можно не ходить в heap.
+Heap Fetches: 0 — подтверждение.
+
 Index Only Scan using idx_orders_date_cover on orders  (cost=0.17..12.31 rows=911 width=13) (actual time=0.261..0.361 rows=913 loops=1)
   Index Cond: (order_date = '2024-06-15'::date)
   Heap Fetches: 0
@@ -202,6 +240,15 @@ SELECT *
 FROM customers_small c
          JOIN orders o ON c.customer_id = o.customer_id;
 /*
+5️⃣ Nested Loop + Memoize (Пример 2.1)
+customers_small (10 строк) JOIN orders (1M)
+Почему Nested Loop?
+Левая таблица очень мала (10 строк).
+Для каждой строки customers_small делаем Index Scan по customer_id.
+Memoize (PG 14+) кэширует результаты повторяющихся подзапросов —
+здесь не проявился, т.к. все ключи уникальны.
+
+
 Nested Loop  (cost=0.17..8630.78 rows=20909 width=373) (actual time=0.029..1.364 rows=950 loops=1)
   Buffers: shared hit=977
   ->  Seq Scan on customers_small c  (cost=0.00..11.05 rows=210 width=344) (actual time=0.013..0.015 rows=10 loops=1)
@@ -224,6 +271,14 @@ SELECT o.order_id, p.name, p.category
 FROM orders            o
          JOIN products p ON o.product_id = p.product_id;
 /*
+6️⃣ Hash Join (Пример 2.2)
+orders (1M) JOIN products (100)
+Почему Hash Join?
+Правая таблица (products) маленькая (100 строк) → строится хеш-таблица в памяти за 0.02 ms.
+Затем проход по orders (1M) с проверкой по хешу.
+Merge Join был бы медленнее (нужна сортировка 1M строк), Nested Loop — 100×1M операций.
+
+
 Hash Join  (cost=2.10..13468.55 rows=1000648 width=23) (actual time=0.038..143.968 rows=1000648 loops=1)
   Hash Cond: (o.product_id = p.product_id)
   Buffers: shared hit=7359
@@ -249,6 +304,17 @@ FROM customers       c
          JOIN orders o ON c.customer_id = o.customer_id
 ORDER BY c.customer_id;
 /*
+7️⃣ Merge Join (Пример 2.3)
+sql
+customers JOIN orders ORDER BY customer_id
+Почему Merge Join?
+Обе таблицы уже отсортированы по ключу соединения:
+customers — по первичному ключу (индекс).
+orders — по индексу idx_orders_cust.
+Merge Join читает оба индекса параллельно, как застёжку-молнию.
+Cost выше Hash Join, но результат уже отсортирован (нужно для внешнего ORDER BY).
+
+
 Merge Join  (cost=0.28..22757.35 rows=1000648 width=61) (actual time=0.017..677.259 rows=1000648 loops=1)
   Merge Cond: (c.customer_id = o.customer_id)
   Buffers: shared hit=994882
@@ -276,6 +342,16 @@ WHERE EXISTS
       WHERE o.customer_id = c.customer_id
       );
 /*
+8️⃣ Hash Semi Join / Anti Join (2.4, 2.5)
+sql
+EXISTS / NOT EXISTS
+Почему не Nested Loop?
+Планировщик преобразовал EXISTS в Hash Semi Join
+(хотя в EXPLAIN видно Nested Loop — возможно, из-за small table?).
+При больших таблицах Hash Semi Join строит хеш от подзапроса и проверяет за O(1).
+NOT EXISTS -> Hash Anti Join.
+
+
 Nested Loop Semi Join  (cost=0.17..2126.60 rows=10050 width=32) (actual time=0.017..10.344 rows=10050 loops=1)
   Buffers: shared hit=30228 read=2
   ->  Seq Scan on customers c  (cost=0.00..129.25 rows=10050 width=32) (actual time=0.008..0.434 rows=10050 loops=1)
@@ -304,6 +380,16 @@ WHERE NOT EXISTS
       WHERE o.customer_id = c.customer_id
       );
 /*
+8️⃣ Hash Semi Join / Anti Join (2.4, 2.5)
+sql
+EXISTS / NOT EXISTS
+Почему не Nested Loop?
+Планировщик преобразовал EXISTS в Hash Semi Join
+(хотя в EXPLAIN видно Nested Loop — возможно, из-за small table?).
+При больших таблицах Hash Semi Join строит хеш от подзапроса и проверяет за O(1).
+NOT EXISTS -> Hash Anti Join.
+
+
 Nested Loop Anti Join  (cost=0.17..2126.60 rows=1 width=32) (actual time=9.130..9.131 rows=0 loops=1)
   Buffers: shared hit=30230
   ->  Seq Scan on customers c  (cost=0.00..129.25 rows=10050 width=32) (actual time=0.009..0.412 rows=10050 loops=1)
@@ -335,6 +421,16 @@ SELECT status, COUNT(*)
 FROM orders
 GROUP BY status;
 /*
+9️⃣ GroupAggregate (3.2)
+GROUP BY order_date WHERE BETWEEN ...
+Почему GroupAggregate, а не HashAggregate?
+Данные уже идут отсортированными из Index Scan по order_date.
+GroupAggregate просто накапливает группы по мере чтения.
+HashAggregate потребовал бы дополнительной хеш-таблицы
+на 27K строк (но мог бы быть выбран при большем work_mem).
+
+
+
 HashAggregate  (cost=13746.83..13746.84 rows=2 width=17) (actual time=172.744..172.744 rows=2 loops=1)
   Group Key: status
   Batches: 1  Memory Usage: 24kB
@@ -370,6 +466,18 @@ FROM products
 ORDER BY price DESC
 LIMIT 10;
 /*
+Пример 3.3: Index Scan Backward
+sql
+SELECT * FROM products ORDER BY price DESC LIMIT 10;
+Почему Backward?
+Индекс idx_products_price по умолчанию создается ASC (возрастание)
+Запрос требует ORDER BY price DESC (убывание).
+PostgreSQL может пройти тот же индекс в обратном направлении — это так же быстро, как и forward.
+Если бы индекса не было, пришлось бы сортировать (Top-N Heapsort, как в примере 3.4).
+Важно: Index Scan Backward недоступен для некоторых типов индексов (например, hash)
+и может быть медленнее forward на 10-20% из-за особенностей prefetching.
+
+
 Limit  (cost=0.06..0.46 rows=10 width=29) (actual time=0.020..0.023 rows=10 loops=1)
   ->  Index Scan Backward using idx_products_price on products  (cost=0.06..4.11 rows=100 width=29) (actual time=0.019..0.021 rows=10 loops=1)
 Planning Time: 0.291 ms
@@ -387,6 +495,14 @@ FROM products
 ORDER BY price DESC
 LIMIT 10;
 /*
+🔟 Top-N Heapsort (3.4)
+ORDER BY price DESC LIMIT 10
+Почему без индекса — Top-N Heapsort?
+Планировщик видит LIMIT 10. Вместо полной сортировки (QuickSort) всех 100 строк,
+он использует heap (кучу), держа в памяти только 10 лучших строк.
+Memory: 26Кб vs полная сортировка требовала бы больше.
+
+
 Limit  (cost=2.36..2.37 rows=10 width=29) (actual time=0.074..0.076 rows=10 loops=1)
   ->  Sort  (cost=2.36..2.46 rows=100 width=29) (actual time=0.069..0.069 rows=10 loops=1)
         Sort Key: price DESC
@@ -405,6 +521,15 @@ EXPLAIN (ANALYZE, BUFFERS)
 SELECT DISTINCT customer_id
 FROM orders;
 /*
+Пример 3.5: DISTINCT через Unique + Sort (пакетная обработка)
+SELECT DISTINCT customer_id FROM orders;
+Почему Unique?
+Index Only Scan на idx_orders_cust уже выдает строки отсортированными по customer_id.
+Unique просто убирает дубликаты на лету (сравнивает текущую строку с предыдущей).
+Альтернатива — HashAggregate (потребовал бы хеш-таблицу на 10050 уникальных значений, что больше 24kB).
+
+
+
 Unique  (cost=0.17..9462.68 rows=10050 width=4) (actual time=0.024..71.614 rows=10050 loops=1)
   Buffers: shared hit=867
   ->  Index Only Scan using idx_orders_cust on orders  (cost=0.17..8462.03 rows=1000648 width=4) (actual time=0.023..40.689 rows=1000648 loops=1)
@@ -428,6 +553,25 @@ SELECT customer_id,
 FROM orders
 WHERE customer_id BETWEEN 1 AND 10;
 /*
+Пример 3.6: Оконные функции (WindowAgg)
+SUM(amount) OVER (PARTITION BY customer_id ORDER BY order_date)
+Разбор плана:
+
+WindowAgg                    ← вычисляет сумму в окне
+  ↑
+Sort (customer_id, order_date) ← обязательная сортировка для `ORDER BY` в окне
+  ↑
+Bitmap Heap Scan (customer_id BETWEEN 1 AND 10)
+
+Почему такой план?
+Bitmap Index Scan находит 950 строк для customer_id 1-10.
+Sort упорядочивает их по (customer_id, order_date) — необходимо для ROWS BETWEEN UNBOUNDED
+PRECEDING AND CURRENT ROW (стандартное поведение OVER (... ORDER BY ...)).
+WindowAgg пробегает по сортированным данным и вычисляет нарастающий итог.
+
+
+
+
 WindowAgg  (cost=932.27..940.35 rows=898 width=20) (actual time=1.355..1.607 rows=950 loops=1)
   Buffers: shared hit=897
   ->  Sort  (cost=932.27..933.17 rows=898 width=12) (actual time=1.347..1.371 rows=950 loops=1)
@@ -464,14 +608,21 @@ SELECT *
 FROM top_customers
 WHERE cnt > 1000;
 /*
-Планировщик увидел CTE.
-Решил: "CTE используется 1 раз, материализовать невыгодно — просто встрою как подзапрос".
-Превратил запрос в эквивалент:
-SELECT customer_id, COUNT(*) AS cnt
+CTE без MATERIALIZED (неявное встраивание)
+WITH top_customers AS (...)  -- без MATERIALIZED
+SELECT * FROM top_customers WHERE cnt > 1000;
+Почему CTE был материализован?
+НЕТ! Планировщик решил НЕ материализовать CTE, потому что:
+CTE используется один раз.
+Он встроил (inline) CTE в основной запрос как подзапрос.
+Фактически получился запрос:
+SELECT customer_id, COUNT(*)
 FROM orders
-WHERE order_date BETWEEN '2024-01-01' AND '2024-12-31'
+WHERE ...
 GROUP BY customer_id
-HAVING COUNT(*) > 1000;
+HAVING COUNT(*) > 1000
+
+
 
 HashAggregate  (cost=6628.42..6688.72 rows=3350 width=12) (actual time=55.174..55.175 rows=0 loops=1)
   Group Key: orders.customer_id
@@ -501,6 +652,21 @@ WITH top_customers AS MATERIALIZED (
 SELECT * FROM top_customers WHERE cnt > 1000;
 
 /*
+Пример 3.7 (второй): CTE с MATERIALIZED (явная материализация)
+sql
+WITH top_customers AS MATERIALIZED (...)
+Что изменилось?
+CTE принудительно выполнен и сохранен во временную таблицу.
+Потом CTE Scan читает эту таблицу.
+
+Плюсы:
+Можно использовать CTE много раз без пересчета.
+Если CTE дорогой (например, сложная агрегация), лучше посчитать один раз.
+Минусы:
+Дополнительные затраты на запись временной таблицы (если CTE маленький — не нужно).
+
+
+
 CTE Scan on top_customers  (cost=6678.67..6789.22 rows=3350 width=12) (actual time=55.963..55.964 rows=0 loops=1)
   Filter: (cnt > 1000)
   Rows Removed by Filter: 10050
