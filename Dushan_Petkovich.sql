@@ -1,9 +1,5 @@
 
 
-
-
-
-
 USE sample
 
 SELECT emp_fname, emp_lname
