@@ -51,8 +51,6 @@ CREATE DATABASE "abonent" WITH OWNER "postgres" ENCODING 'UTF8';
 CREATE SCHEMA IF NOT EXISTS abonent;
 /******************************************************************************/
 /*** Domains ***/
-
-
 /******************************************************************************/
 CREATE DOMAIN Currency AS
     NUMERIC(15, 2);
