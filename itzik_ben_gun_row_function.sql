@@ -157,13 +157,12 @@ from T1;
 
 ---при правильном индексировании масштабированность
 ---решения будет линейной.
-with c as (
-Select col1,
-       ---разница постоянна и уникальная
-       col1 - row_number() over (order by col1) as grp
-from T1)
+with c as (Select col1,
+                  ---разница постоянна и уникальная
+                  col1 - row_number() over (order by col1) as grp
+           from T1)
 
 select min(col1) as startrange,
        max(col1) as endrange
-    from c
+from c
 group by grp;
