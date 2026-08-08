@@ -225,3 +225,9 @@ LAST_VALUE.
 задают опции исключения.
 */
 
+select empid,
+       ordermonth,
+       qty,
+       sum(qty) over (partition by empid order by ordermonth rows between unbounded preceding and current row) as runqty
+from sales.EmpOrders
+
